@@ -63,6 +63,8 @@ export interface Player {
   armor: string | null;
   skipTurns: number;
   rollCap: number | null;
+  forcedRoll: number | null;
+  skipNextFight: boolean;
   bonusDice: number;
   prank: { alias: string; untilRound: number } | null;
   banditCards: BanditCardId[];
@@ -78,7 +80,7 @@ export interface Combatant {
   hp: number;
   stats: Stats;
   secretUsed: boolean;
-  buffs: { ironSkin: boolean; poison: boolean; halveNext: boolean };
+  buffs: { ironSkin: boolean; poison: boolean; halveNext: boolean; rage?: boolean };
 }
 export interface BattleState {
   context: 'monster' | 'town' | 'pvp';
@@ -148,6 +150,7 @@ export interface GameState {
   worldRule: string;
   board: Board;
   towns: Town[];
+  traps: Record<number, number>; // spaceId -> placer seat
   players: Player[];
   phase: Phase;
   bounty: { target: number; untilRound: number } | null;

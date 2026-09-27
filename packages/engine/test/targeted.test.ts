@@ -1,7 +1,33 @@
 import { describe, it, expect } from 'vitest';
 import { createGame, step, legalActions } from '../src/index';
-import { type GameConfig, type GameEvent } from '../src/types';
+import { type Action, type GameConfig, type GameEvent, type GameState } from '../src/types';
 import { assertInvariants } from './invariants';
+
+function nextAction(state: GameState): Action {
+  if (state.phase.kind === 'battle') {
+    const battle = state.phase.battle;
+    const side =
+      battle.pending.attack === null
+        ? battle.attackerSide
+        : battle.attackerSide === 'a'
+          ? 'b'
+          : 'a';
+    const actor = side === 'a' ? battle.a : battle.b;
+    return actor.kind === 'player'
+      ? legalActions(state, actor.seat!)[0]!
+      : { type: 'battlePick', side, pick: 'attack' };
+  }
+  return legalActions(state, state.turnSeat)[0]!;
+}
+
+function finishTurn(state: GameState): GameState {
+  let current = state;
+  const seat = state.turnSeat;
+  for (let i = 0; i < 100 && current.phase.kind !== 'gameOver' && current.turnSeat === seat; i++) {
+    current = step(current, nextAction(current)).state;
+  }
+  return current;
+}
 
 const cfg = (seed = 't1'): GameConfig => ({
   seed,
@@ -53,24 +79,23 @@ describe('targeted flow', () => {
     const r2 = step(r.state, { type: 'duel', target: null });
     expect(r2.events.some((e) => e.type === 'DuelDeclined')).toBe(true);
     expect(r2.state.players[0]!.pos).toBe(3); // kept moving, did not stay on B's space
-    expect(r2.state.phase.kind).toBe('awaitRoll'); // turn ended via the stub resolver
+    expect(r2.events.some((e) => e.type === 'BattleStarted')).toBe(true);
+    expect(r2.state.phase.kind).toBe('battle'); // landing resolves the monster space
     assertInvariants(r2.state);
   });
 
   it('a seat with skipTurns: 1 is skipped once with TurnSkipped', () => {
     const s = createGame(cfg('skip'));
     s.players[0]!.skipTurns = 1;
-    const r = step(s, { type: 'roll' }); // A rolls; stub ends their turn
-    expect(r.state.turnSeat).toBe(1); // B's turn now
-    // Drive B's turn: roll, then answer any mid-move duelOffer (passing A) or
-    // fork with the first legal action, until the turn wraps back to awaitRoll.
-    let st = r.state;
+    let st = finishTurn(step(s, { type: 'roll' }).state);
+    expect(st.turnSeat).toBe(1); // B's turn now
+    // Drive B's turn: roll, then answer any mid-move duelOffer or battle until the turn wraps.
     const events: GameEvent[] = [];
     let rn = step(st, { type: 'roll' });
     events.push(...rn.events);
     st = rn.state;
     for (let i = 0; i < 30 && st.phase.kind !== 'awaitRoll' && st.phase.kind !== 'gameOver'; i++) {
-      rn = step(st, legalActions(st, st.turnSeat)[0]!);
+      rn = step(st, nextAction(st));
       events.push(...rn.events);
       st = rn.state;
     }
@@ -83,21 +108,20 @@ describe('targeted flow', () => {
   it('after the last seat of the final round ends, phase is gameOver with seat order', () => {
     const s = createGame(cfg('end'));
     s.round = 12;
-    // A rolls and lands (stub resolver ends turn), then B rolls and ends: game over.
     const r = step(s, { type: 'roll' });
-    expect(r.state.phase.kind).not.toBe('gameOver');
-    const r2 = step(r.state, { type: 'roll' });
-    expect(r2.state.phase.kind).toBe('gameOver');
-    if (r2.state.phase.kind === 'gameOver') expect(r2.state.phase.ranking).toEqual([0, 1]);
-    assertInvariants(r2.state);
+    const afterA = finishTurn(r.state);
+    expect(afterA.phase.kind).not.toBe('gameOver');
+    const r2 = step(afterA, { type: 'roll' });
+    const final = finishTurn(r2.state);
+    expect(final.phase).toMatchObject({ kind: 'gameOver', ranking: [0, 1] });
+    assertInvariants(final);
   });
 
-  it('stub resolveSpace ends the turn after landing', () => {
+  it('resolveSpace processes the landed space instead of silently ending the turn', () => {
     const s = createGame(cfg('t1'));
     assertInvariants(s);
-    // after A's single roll the turn must pass to seat 1 via the stub
     const r2 = step(createGame(cfg('t1')), { type: 'roll' });
-    expect(r2.state.turnSeat).toBe(1);
-    expect(r2.state.phase.kind).toBe('awaitRoll');
+    expect(r2.events.some((event) => event.type === 'Moved')).toBe(true);
+    expect(['moving', 'chooseBranch', 'duelOffer']).not.toContain(r2.state.phase.kind);
   });
 });

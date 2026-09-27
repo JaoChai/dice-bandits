@@ -1,7 +1,8 @@
 import type { AttackPick, Combatant, DefensePick, GameEvent, GameState } from '../types';
 import { IllegalActionError } from '../types';
 import { nextFloat } from '../rng';
-import { BALANCE, CLASSES, MONSTERS } from '../data/index';
+import { BALANCE, CLASSES, ITEM_BY_ID, MONSTERS } from '../data/index';
+import * as leveling from './leveling';
 import { endTurn, type RuleResult } from './movement';
 
 export interface HalfDamage {
@@ -63,13 +64,14 @@ export function resolveHalf(
   let toDefender = 0;
   let toAttacker = 0;
   const strikeMult = BALANCE.strikeMult;
+  const attack =
+    attacker.stats.atk * (attacker.buffs.rage ? Number(ITEM_BY_ID.rage!.effect.attackMult) : 1);
 
   if (atkPick === 'strike' && defPick === 'counter') {
-    // the attacker runs onto the counter: it takes its own Strike ×1.0, defender unharmed
-    toAttacker = damage(attacker.stats.atk, defender.stats.def, strikeMult, variance);
+    toAttacker = damage(attack, defender.stats.def, strikeMult, variance);
   } else {
     const mult = atkPick === 'strike' ? strikeMult : BALANCE.attackMult;
-    toDefender = damage(attacker.stats.atk, defender.stats.def, mult, variance);
+    toDefender = damage(attack, defender.stats.def, mult, variance);
     if (atkPick === 'attack' && defPick === 'defend') {
       toDefender = Math.max(1, Math.round(toDefender * BALANCE.defendMult));
     }
@@ -85,8 +87,17 @@ export function resolveHalf(
 }
 
 /** Consume halveNext flags that existed before this half, then apply damage. */
-function takeDamage(c: Combatant, amount: number): void {
-  if (amount > 0) c.hp = Math.max(0, c.hp - amount);
+function takeDamage(c: Combatant, amount: number, state?: GameState, source?: Combatant): void {
+  if (amount <= 0) return;
+  if (
+    state &&
+    source?.kind === 'monster' &&
+    c.kind === 'player' &&
+    state.players[c.seat!]!.perks.includes('thickSkin')
+  ) {
+    amount = Math.max(1, Math.floor(amount * 0.85));
+  }
+  c.hp = Math.max(0, c.hp - amount);
 }
 
 /**
@@ -268,15 +279,32 @@ function resolvePendingHalf(state: GameState, events: GameEvent[]): RuleResult {
   } else {
     const variance = varianceDraw(state);
     const dmg = resolveHalf(attacker, defender, atkPick, defPick, variance);
+    if (defender.buffs.ironSkin && dmg.toDefender > 0)
+      dmg.toDefender = Math.max(1, Math.floor(dmg.toDefender / 2));
+    if (attacker.buffs.ironSkin && dmg.toAttacker > 0)
+      dmg.toAttacker = Math.max(1, Math.floor(dmg.toAttacker / 2));
     if (defHalved && dmg.toDefender > 0)
       dmg.toDefender = Math.max(1, Math.floor(dmg.toDefender / 2));
     if (atkHalved && dmg.toAttacker > 0)
       dmg.toAttacker = Math.max(1, Math.floor(dmg.toAttacker / 2));
-    takeDamage(attacker, dmg.toAttacker);
-    takeDamage(defender, dmg.toDefender);
+    takeDamage(attacker, dmg.toAttacker, state, defender);
+    takeDamage(defender, dmg.toDefender, state, attacker);
     events.push(damageEvent(bt, attacker, defender, dmg));
   }
 
+  if (bt.half === 2) {
+    const poisonPct = Number(ITEM_BY_ID.poisonBlade!.effect.poisonPct);
+    for (const poisoned of [bt.a, bt.b]) {
+      if (!poisoned.buffs.poison) continue;
+      const amount = Math.max(1, Math.ceil((poisoned.stats.maxHp * poisonPct) / 100));
+      takeDamage(poisoned, amount);
+      events.push({
+        type: 'PoisonDamage',
+        seat: seatOf(poisoned),
+        params: { amount, exchange: bt.exchange },
+      });
+    }
+  }
   const koSide = bt.a.hp <= 0 ? 'a' : bt.b.hp <= 0 ? 'b' : null;
   if (koSide) {
     syncPlayers(state, bt);
@@ -363,7 +391,7 @@ function applySecretHalf(
     const variance = varianceDraw(state);
     const incoming = damage(attacker.stats.atk, defender.stats.def, BALANCE.attackMult, variance);
     const reflect = Math.max(1, Math.round(incoming * 0.5));
-    takeDamage(attacker, reflect); // the knight takes 0 this half
+    takeDamage(attacker, reflect, state, defender); // the knight takes 0 this half
     events.push(secretEvent(seatOf(defender), def, 'bulwark', { reflected: reflect }));
     return { toAttacker: reflect, toDefender: 0 };
   }
@@ -375,7 +403,7 @@ function applySecretHalf(
   if (defSecret === 'firestorm') {
     const variance = varianceDraw(state);
     const dealt = magicDamage(defender.stats.mag, attacker.stats.def, variance);
-    takeDamage(attacker, dealt); // ignores the attacker's pick entirely
+    takeDamage(attacker, dealt, state, defender); // ignores the attacker's pick entirely
     events.push(secretEvent(seatOf(defender), def, 'firestorm', { damage: dealt }));
     return { toAttacker: dealt, toDefender: 0 };
   }
@@ -391,8 +419,8 @@ function applySecretHalf(
       'counter',
       variance,
     );
-    takeDamage(attacker, dmg.toAttacker);
-    takeDamage(defender, dmg.toDefender);
+    takeDamage(attacker, dmg.toAttacker, state, defender);
+    takeDamage(defender, dmg.toDefender, state, attacker);
     events.push(damageEvent(bt, attacker, defender, dmg));
     return dmg;
   }
@@ -403,14 +431,14 @@ function applySecretHalf(
     const variance = varianceDraw(state);
     const incoming = damage(attacker.stats.atk, defender.stats.def, BALANCE.attackMult, variance);
     const reflect = Math.max(1, Math.round(incoming * 0.5));
-    takeDamage(defender, reflect);
+    takeDamage(defender, reflect, state, attacker);
     events.push(secretEvent(seatOf(attacker), atk, 'bulwark', { reflected: reflect }));
     return { toAttacker: 0, toDefender: reflect };
   }
   if (atkSecret === 'firestorm') {
     const variance = varianceDraw(state);
     const dealt = magicDamage(attacker.stats.mag, defender.stats.def, variance);
-    takeDamage(defender, dealt); // ignores the defender's pick
+    takeDamage(defender, dealt, state, attacker); // ignores the defender's pick
     events.push(secretEvent(seatOf(attacker), atk, 'firestorm', { damage: dealt }));
     return { toAttacker: 0, toDefender: dealt };
   }
@@ -419,8 +447,8 @@ function applySecretHalf(
     events.push(secretEvent(seatOf(attacker), atk, 'pickpocket', { stolen }));
     const variance = varianceDraw(state);
     const dmg = resolveHalf(attacker, defender, 'attack', 'counter', variance);
-    takeDamage(attacker, dmg.toAttacker);
-    takeDamage(defender, dmg.toDefender);
+    takeDamage(attacker, dmg.toAttacker, state, defender);
+    takeDamage(defender, dmg.toDefender, state, attacker);
     events.push(damageEvent(bt, attacker, defender, dmg));
     return dmg;
   }
@@ -462,12 +490,13 @@ function endBattle(
   const loser = result === 'aWin' ? bt.b : result === 'bWin' ? bt.a : null;
   if (winner && loser) onBattleEnd(state, bt, winner, loser, events);
   events.push({ type: 'BattleEnded', seat: winner ? seatOf(winner) : null, params: { result } });
+  if (state.phase.kind === 'levelUp') return { state, events };
   return endTurn(state, events);
 }
 
 /**
- * Battle-end hook. This task: monster rewards + KO penalty only. Task 6 (town
- * guardian flips, levelUp phase) and Task 7 (pvp rewards) extend here.
+ * Battle-end hook for town ownership, monster rewards, leveling, and KO penalties.
+ * Task 7 adds PvP reward handling.
  */
 function onBattleEnd(
   state: GameState,
@@ -476,20 +505,32 @@ function onBattleEnd(
   loser: Combatant,
   events: GameEvent[],
 ): void {
-  void bt;
-  // monster/town rewards: the player winner gains the monster's xp + gold
+  if (bt.context === 'town' && winner.kind === 'player') {
+    const town = state.towns.find((item) => item.spaceId === bt.spaceId);
+    if (town) {
+      const previous = town.owner;
+      town.owner = winner.seat;
+      events.push({
+        type: previous === null ? 'TownClaimed' : 'TownFlipped',
+        seat: winner.seat,
+        params: { spaceId: bt.spaceId, previousOwner: previous ?? -1 },
+      });
+      if (previous !== null && previous !== winner.seat)
+        state.stats.townFlips[bt.spaceId] = (state.stats.townFlips[bt.spaceId] ?? 0) + 1;
+    }
+  }
   if (winner.kind === 'player' && loser.kind === 'monster' && loser.monsterId) {
     const def = MONSTERS[loser.monsterId];
     if (def) {
       const p = state.players[winner.seat!]!;
-      p.xp += def.xp;
       p.gold += def.gold;
-      events.push({ type: 'XpGained', seat: p.seat, params: { amount: def.xp } });
+      const { grantXp } = leveling;
+      const gained = grantXp(state, p.seat, def.xp, 'endTurn');
+      events.push(...gained.events);
       events.push({ type: 'GoldGained', seat: p.seat, params: { amount: def.gold } });
-      // Task 6: check xpToLevel here and enter the levelUp phase
     }
   }
-  // Task 7: pvp rewards (rob/loot/seize/prank) hang off the pvpReward phase
+  // PvP rewards are added by Task 7.
 
   // KO penalty applies to any KO'd player regardless of context
   if (loser.kind === 'player') applyKoPenalty(state, loser.seat!, events);
@@ -509,5 +550,5 @@ export function applyKoPenalty(state: GameState, seat: number, events: GameEvent
     seat,
     params: { goldLost: lost, pos: state.board.castleId, skipTurns: p.skipTurns },
   });
-  // Task 6/7 extension points: town guardian flips (6), pvp respawn flavor (7)
+  // This task owns town flips and monster rewards; Task 7 adds PvP respawn flavor.
 }

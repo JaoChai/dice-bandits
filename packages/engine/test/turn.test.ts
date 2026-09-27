@@ -1,7 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { createGame, step, legalActions } from '../src/index';
-import { IllegalActionError, type GameConfig } from '../src/types';
+import { type Action, IllegalActionError, type GameConfig, type GameState } from '../src/types';
 import { assertInvariants } from './invariants';
+
+function nextAction(state: GameState): Action {
+  if (state.phase.kind === 'battle') {
+    const battle = state.phase.battle;
+    const side =
+      battle.pending.attack === null
+        ? battle.attackerSide
+        : battle.attackerSide === 'a'
+          ? 'b'
+          : 'a';
+    const actor = side === 'a' ? battle.a : battle.b;
+    return actor.kind === 'player'
+      ? legalActions(state, actor.seat!)[0]!
+      : { type: 'battlePick', side, pick: 'attack' };
+  }
+  return legalActions(state, state.turnSeat)[0]!;
+}
 
 const cfg = (seed = 't1'): GameConfig => ({
   seed,
@@ -37,8 +54,7 @@ describe('turn flow', () => {
   it('same seed + same actions ⇒ identical state', () => {
     const run = () => {
       let s = createGame(cfg('det'));
-      for (let i = 0; i < 40 && s.phase.kind !== 'gameOver'; i++)
-        s = step(s, legalActions(s, s.turnSeat)[0]!).state;
+      for (let i = 0; i < 40 && s.phase.kind !== 'gameOver'; i++) s = step(s, nextAction(s)).state;
       return s;
     };
     expect(run()).toEqual(run());
@@ -49,6 +65,19 @@ describe('turn flow', () => {
     step(s, { type: 'roll' });
     expect(s).toEqual(snap);
   });
+  it('quickFeet adds one movement space when the roll is exactly one', () => {
+    const s = createGame(cfg());
+    const start = s.board.castleId;
+    const first = s.board.spaces[start]!.next[0]!;
+    const second = s.board.spaces[first]!.next[0]!;
+    s.players[0]!.pos = start;
+    s.players[0]!.forcedRoll = 1;
+    s.players[0]!.perks.push('quickFeet');
+    const result = step(s, { type: 'roll' });
+    expect(result.events.find((entry) => entry.type === 'DiceRolled')!.params.value).toBe(1);
+    expect(result.state.players[0]!.pos).toBe(second);
+  });
+
   it('state.rng advances after a roll', () => {
     const s0 = createGame(cfg('det'));
     const before = s0.rng;
@@ -59,7 +88,7 @@ describe('turn flow', () => {
     let s = createGame(cfg('det'));
     const values: number[] = [];
     for (let i = 0; i < 60 && s.phase.kind !== 'gameOver'; i++) {
-      const r = step(s, legalActions(s, s.turnSeat)[0]!);
+      const r = step(s, nextAction(s));
       for (const e of r.events) if (e.type === 'DiceRolled') values.push(Number(e.params.value));
       s = r.state;
     }

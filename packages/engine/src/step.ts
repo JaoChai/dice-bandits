@@ -3,6 +3,9 @@ import { IllegalActionError } from './types';
 import { legalActions } from './legal';
 import { applyRoll, applyChooseBranch, applyDuelAnswer, endTurn } from './rules/movement';
 import { applyBattlePick } from './rules/battle';
+import { useItem, shopBuy, shopSell } from './rules/items';
+import { pickPerk } from './rules/leveling';
+import { invest, startTownChallenge } from './rules/towns';
 
 /**
  * Apply `action` to a state, returning a fresh state + events. The input is
@@ -28,12 +31,34 @@ export function step(state: GameState, action: Action): StepResult {
       return applyDuelAnswer(next, action.target);
     case 'battlePick':
       return applyBattlePick(next, action.side, action.pick);
+    case 'useItem': {
+      const r = useItem(next, seat, action.item, action.target);
+      return r.state.phase.kind === 'endOfTurn' ? endTurn(r.state, r.events) : r;
+    }
+    case 'pickPerk':
+      return pickPerk(next, seat, action.perk);
+    case 'shopBuy':
+      return shopBuy(next, seat, action.item);
+    case 'shopSell':
+      return shopSell(next, seat, action.item);
+    case 'invest': {
+      if (next.phase.kind !== 'townManage')
+        throw new IllegalActionError('invest outside townManage');
+      const r = invest(next, seat, next.phase.spaceId);
+      r.state.phase = { kind: 'endOfTurn' };
+      return endTurn(r.state, r.events);
+    }
+    case 'attackTown': {
+      if (next.phase.kind !== 'townChallenge')
+        throw new IllegalActionError('attackTown outside townChallenge');
+      return startTownChallenge(next, seat, next.phase.spaceId);
+    }
+    case 'leave':
+      return endTurn(next, []);
     case 'endTurn':
       return endTurn(next, []);
     default:
-      // remaining action types become legal in Tasks 5–7; none are enumerated
-      // as legal yet, so reaching here means an unimplementable action slipped
-      // through the exemption (battlePick) or a future legalActions gap
+      // Only Task 7 PvP reward actions remain unimplemented.
       throw new IllegalActionError(`action ${action.type} not implemented yet`);
   }
 }

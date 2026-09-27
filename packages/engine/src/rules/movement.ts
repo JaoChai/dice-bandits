@@ -1,17 +1,15 @@
 import type { GameEvent, GameState } from '../types';
 import { nextInt } from '../rng';
+import { resolveSpace as resolveLanding } from './spaces';
+import { collectTaxes } from './towns';
 
 export interface RuleResult {
   state: GameState;
   events: GameEvent[];
 }
 
-/**
- * Task-4 stub for the landing-space resolver (replaced by rules/spaces.ts in
- * Task 6): landing ends the turn.
- */
-export function resolveSpace(state: GameState): RuleResult {
-  return endTurn(state, []);
+export function resolveSpace(state: GameState, seat = state.turnSeat): RuleResult {
+  return resolveLanding(state, seat);
 }
 
 /** True when any *other* non-KO player stands on `spaceId`. */
@@ -59,9 +57,12 @@ function moveSingle(state: GameState, to: number, events: GameEvent[]): RuleResu
     return advanceOne(state, events);
   }
 
-  // final space of the roll — the (Task-4 stub) resolver ends the turn
+  // Resolve the landing; interactive spaces retain their phase, ordinary ones end the turn.
   state.phase = { kind: 'endOfTurn' };
-  return endTurn(state, events);
+  const landed = resolveSpace(state, player.seat);
+  events.push(...landed.events);
+  if (landed.state.phase.kind === 'endOfTurn') return endTurn(landed.state, events);
+  return { state: landed.state, events };
 }
 
 /** Roll dice then start walking. */
@@ -69,12 +70,13 @@ export function applyRoll(state: GameState): RuleResult {
   const player = state.players[state.turnSeat]!;
   const events: GameEvent[] = [];
   let rng = state.rng;
-  let total = 0;
+  let total = player.forcedRoll ?? 0;
 
-  const dice = 1 + player.bonusDice;
+  const dice = player.forcedRoll === null ? 1 + player.bonusDice : 1;
+  const rollCount = player.forcedRoll === null ? dice : 0;
   const cap = player.rollCap ?? 6;
   const sides = cap <= 3 ? 3 : 6; // Cursed Legs caps to 1d3
-  for (let i = 0; i < dice; i++) {
+  for (let i = 0; i < rollCount; i++) {
     const [v, n] = nextInt(rng, 1, sides);
     total += v;
     rng = n;
@@ -83,12 +85,15 @@ export function applyRoll(state: GameState): RuleResult {
   // bonus dice reset after the roll; rollCap only ever capped one roll (Cursed Legs)
   player.bonusDice = 0;
   player.rollCap = null;
+  player.forcedRoll = null;
 
   events.push({
     type: 'DiceRolled',
     seat: player.seat,
     params: { value: total, dice, sides },
   });
+
+  if (player.perks.includes('quickFeet') && total === 1) total += 1;
 
   // Slippery Roads: +1 extra space when the first step's destination is snow
   if (state.worldRule === 'slipperyRoads') {
@@ -122,6 +127,8 @@ export function endTurn(state: GameState, events: GameEvent[]): RuleResult {
       state.round += 1;
     }
     const p = state.players[seat]!;
+    const taxes = collectTaxes(state, seat);
+    events.push(...taxes.events);
     if (p.skipTurns > 0) {
       p.skipTurns -= 1;
       events.push({ type: 'TurnSkipped', seat, params: { skipTurns: p.skipTurns } });
