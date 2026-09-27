@@ -1,6 +1,6 @@
 import type { GameEvent, GameState, StepResult } from '../types';
 import { BALANCE, ITEMS, MONSTERS } from '../data/index';
-import { nextFloat, nextInt, pick, shuffle } from '../rng';
+import { nextFloat, nextInt, pick } from '../rng';
 import { startBattle } from './battle';
 import { receiveItem } from './items';
 
@@ -18,12 +18,23 @@ export function shopStock(state: GameState, spaceId: number): string[] {
     (item) => item.kind !== 'equipment' || tierForPrice(item.price) <= tier,
   );
   let rng = state.rng;
-  const [shuffled, next] = shuffle(
-    rng,
-    pool.map((item) => item.id),
-  );
-  rng = next;
-  const stock = shuffled.slice(0, 6);
+  const remaining = pool.map((item) => item.id);
+  const stock: string[] = [];
+  while (stock.length < 6 && remaining.length > 0) {
+    const weights = remaining.map((id) => {
+      const item = ITEMS.find((candidate) => candidate.id === id)!;
+      return tierForPrice(item.price) === tier ? 3 : 1;
+    });
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    const [draw, next] = nextInt(rng, 1, totalWeight);
+    rng = next;
+    let cursor = draw;
+    const index = weights.findIndex((weight) => {
+      cursor -= weight;
+      return cursor <= 0;
+    });
+    stock.push(remaining.splice(index, 1)[0]!);
+  }
   if (state.worldRule === 'blackMarket') {
     const rare = ITEMS.filter(
       (item) =>
@@ -41,6 +52,19 @@ function tierForPrice(price: number): number {
 }
 
 export function resolveSpace(state: GameState, seat = state.turnSeat): StepResult {
+  const player = state.players[seat]!;
+  const space = state.board.spaces[player.pos]!;
+  const placedTrap = state.traps?.[space.id];
+  if (space.kind !== 'trap' && placedTrap !== undefined && placedTrap !== seat) {
+    delete state.traps[space.id];
+    const trapped = triggerTrap(state, seat, space.id);
+    const landed = resolveSpaceBehavior(state, seat);
+    return { state: landed.state, events: [...trapped.events, ...landed.events] };
+  }
+  return resolveSpaceBehavior(state, seat);
+}
+
+function resolveSpaceBehavior(state: GameState, seat: number): StepResult {
   const player = state.players[seat]!;
   const space = state.board.spaces[player.pos]!;
   switch (space.kind) {
