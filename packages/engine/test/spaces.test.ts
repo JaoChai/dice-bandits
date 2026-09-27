@@ -95,8 +95,7 @@ describe('Task 6 spaces and towns', () => {
       buffs: { ironSkin: false, poison: false, halveNext: false },
     };
     startBattle(s, { context: 'town', spaceId: town.spaceId, opponent });
-    const first = step(s, { type: 'battlePick', side: 'a', pick: 'attack' });
-    const won = step(first.state, { type: 'battlePick', side: 'b', pick: 'attack' });
+    const won = step(s, { type: 'battlePick', side: 'a', pick: 'attack' });
     expect(won.state.towns[0]!.owner).toBe(0);
     expect(won.state.stats.townFlips[town.spaceId]).toBe(1);
     expect(won.events.some((entry) => entry.type === 'TownFlipped')).toBe(true);

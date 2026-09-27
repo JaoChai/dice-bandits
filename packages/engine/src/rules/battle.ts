@@ -132,6 +132,7 @@ export function startBattle(state: GameState, ctx: BattleStartCtx): RuleResult {
       pending: { attack: null, defense: null },
     },
   };
+  drawPendingMonsterPick(state, state.phase.battle);
   return {
     state,
     events: [
@@ -210,6 +211,16 @@ function drawMonsterPick(state: GameState, role: 'attack' | 'defense'): AttackPi
   return f < 0.5 ? 'defend' : 'counter';
 }
 
+function drawPendingMonsterPick(state: GameState, bt: BattleData): void {
+  const side = pendingSide(bt);
+  const actor = combatantOf(bt, side);
+  if (actor.kind !== 'monster') return;
+  const role: 'attack' | 'defense' = side === bt.attackerSide ? 'attack' : 'defense';
+  const pick = drawMonsterPick(state, role);
+  if (role === 'attack') bt.pending.attack = pick as AttackPick;
+  else bt.pending.defense = pick as DefensePick;
+}
+
 /** Pickpocket: steal 15% of a player target's gold (0 vs monsters), credited to the thief. */
 function stealFrom(state: GameState, thief: Combatant, target: Combatant): number {
   let stolen = 0;
@@ -235,13 +246,14 @@ export function applyBattlePick(
   const role: 'attack' | 'defense' = side === bt.attackerSide ? 'attack' : 'defense';
   const actor = combatantOf(bt, side);
   if (actor.kind === 'monster') {
-    // monsters pick inside the engine: draw from rng (state written back),
-    // 60/40 attack/strike when attacking, 50/50 defend/counter when defending
+    // Direct rule callers may request an unfilled monster pick; normal game flow
+    // has already drawn it through drawPendingMonsterPick.
     pick = drawMonsterPick(state, role);
   }
   if (pick === 'secret') actor.secretUsed = true;
   if (role === 'attack') bt.pending.attack = pick as AttackPick;
   else bt.pending.defense = pick as DefensePick;
+  drawPendingMonsterPick(state, bt);
   const events: GameEvent[] = [
     {
       type: 'BattlePick',
@@ -266,6 +278,16 @@ function resolvePendingHalf(state: GameState, events: GameEvent[]): RuleResult {
   const defender = combatantOf(bt, def);
   const atkPick = bt.pending.attack!;
   const defPick = bt.pending.defense!;
+  for (const side of ['a', 'b'] as const) {
+    const actor = combatantOf(bt, side);
+    if (actor.kind !== 'monster') continue;
+    const role: 'attack' | 'defense' = side === atk ? 'attack' : 'defense';
+    events.push({
+      type: 'BattlePick',
+      seat: null,
+      params: { side, pick: role === 'attack' ? atkPick : defPick, role },
+    });
+  }
   bt.pending = { attack: null, defense: null };
 
   // pre-existing halveNext protects this half and is consumed by it
@@ -323,6 +345,7 @@ function resolvePendingHalf(state: GameState, events: GameEvent[]): RuleResult {
     syncPlayers(state, bt);
     return endBattle(state, bt, 'draw', events);
   }
+  drawPendingMonsterPick(state, bt);
   syncPlayers(state, bt);
   return { state, events };
 }

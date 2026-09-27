@@ -96,11 +96,8 @@ describe('Task 6 items and shop', () => {
         },
       });
       const hp = player.hp;
-      const attacked = step(s, { type: 'battlePick', side: 'b', pick: 'attack' });
-      const defense = legalActions(attacked.state, 0).find(
-        (action) => action.type === 'battlePick',
-      )!;
-      const resolved = step(attacked.state, defense);
+      const defense = legalActions(s, 0).find((action) => action.type === 'battlePick')!;
+      const resolved = step(s, defense);
       return hp - resolved.state.players[0]!.hp;
     };
     expect(incomingLoss(true)).toBeLessThan(incomingLoss(false));

@@ -252,14 +252,14 @@ describe('startBattle', () => {
 });
 
 describe('battle picks and legal actions', () => {
-  it('legalActions offers attack/strike/secret to the picking side and nothing while a monster picks', () => {
+  it('offers actions to the player while monster picks are engine-drawn', () => {
     const s = fixture({ opponent: mkMonster('goldSlime') }); // knight 6 > slime 4 → a picks first
     const picks = (st: GameState, seat: number) =>
       legalActions(st, seat).map((a) => (a.type === 'battlePick' ? a.pick : null));
     expect(picks(s, 0)).toEqual(['attack', 'strike', 'secret']);
     const r = step(s, { type: 'battlePick', side: 'a', pick: 'attack' });
-    expect(battleOf(r.state).pending.attack).toBe('attack');
-    expect(legalActions(r.state, 0)).toEqual([]); // monster defender picks next (engine-drawn)
+    expect(['attack', 'strike']).toContain(battleOf(r.state).pending.attack); // monster opens half 2 with a pre-drawn pick
+    expect(picks(r.state, 0)).toEqual(['defend', 'counter', 'secret']); // player can immediately defend
     expect(picks(r.state, 1)).toEqual([]); // seat 1 is not in this battle
     expect(() => step(r.state, { type: 'battlePick', side: 'a', pick: 'strike' })).toThrow(
       IllegalActionError,
@@ -274,8 +274,7 @@ describe('battle picks and legal actions', () => {
   });
   it('a used secret is neither offered nor accepted again', () => {
     const s = fixture({ opponent: mkMonster('shadowImp') }); // imp picks first
-    const r1 = applyBattlePick(s, 'b', 'attack'); // engine-drawn monster pick
-    const r2 = step(r1.state, { type: 'battlePick', side: 'a', pick: 'secret' }); // bulwark
+    const r2 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' }); // bulwark resolves against pre-drawn attack
     expect(battleOf(r2.state).a.secretUsed).toBe(true);
     // half 2: the knight is now the attacker; secret must not be offered
     const offered = legalActions(r2.state, 0).map((a) => (a.type === 'battlePick' ? a.pick : null));
@@ -298,7 +297,7 @@ describe('secrets', () => {
     const golem0 = battleOf(s).b.hp;
     const mage0 = battleOf(s).a.hp;
     const r1 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' }); // firestorm
-    const r2 = applyBattlePick(r1.state, 'b', 'defend'); // engine-drawn pick, ignored
+    const r2 = r1; // the faster mage's pick resolves against the pre-drawn defense
     const bt2 = battleOf(r2.state);
     const [lo, hi] = dmgRange(bt2.a.stats.mag, bt2.b.stats.def, 2);
     expect(golem0 - bt2.b.hp).toBeGreaterThanOrEqual(lo);
@@ -310,8 +309,7 @@ describe('secrets', () => {
     const s = fixture({ opponent: mkMonster('shadowImp') }); // imp 10 > knight 6
     const knight0 = battleOf(s).a.hp;
     const imp0 = battleOf(s).b.hp;
-    const r1 = applyBattlePick(s, 'b', 'attack'); // engine-drawn pick, skipped
-    const r2 = step(r1.state, { type: 'battlePick', side: 'a', pick: 'secret' }); // bulwark
+    const r2 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' }); // bulwark resolves against pre-drawn attack
     const bt2 = battleOf(r2.state);
     expect(bt2.a.hp).toBe(knight0); // takes 0 this half
     const [lo, hi] = dmgRange(bt2.b.stats.atk, bt2.a.stats.def, BALANCE.attackMult);
@@ -325,7 +323,7 @@ describe('secrets', () => {
     const s = fixture({ classA: 'thief', opponent: mkMonster('goldSlime') }); // thief 13 > slime 4
     const slime0 = battleOf(s).b.hp;
     const r1 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' }); // pickpocket
-    const r2 = applyBattlePick(r1.state, 'b', 'defend');
+    const r2 = r1; // the faster thief's pick resolves against the pre-drawn defense
     const bt2 = battleOf(r2.state);
     expect(r2.state.players[0]!.gold).toBe(300); // monsters carry no gold
     const [lo, hi] = dmgRange(bt2.a.stats.atk, bt2.b.stats.def, BALANCE.attackMult);
@@ -351,15 +349,14 @@ describe('secrets', () => {
     const s = fixture({ classA: 'cleric', opponent: mkMonster('goldSlime'), hp: 20 }); // cleric 8 > slime 4
     const slime0 = battleOf(s).b.hp;
     const r1 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' }); // sanctuary
-    const r2 = applyBattlePick(r1.state, 'b', 'defend'); // matrix skipped: no damage at all
+    const r2 = r1; // the faster cleric's pick resolves against the pre-drawn defense
     const bt2 = battleOf(r2.state);
     const heal = Math.min(Math.round(bt2.a.stats.maxHp * 0.4), bt2.a.stats.maxHp - 20);
     expect(bt2.a.hp).toBe(20 + heal);
     expect(bt2.a.buffs.halveNext).toBe(true);
     expect(bt2.b.hp).toBe(slime0);
     // half 2: slime attacks the halved cleric — any pick, damage strictly under the unhalved band
-    const r3 = applyBattlePick(r2.state, 'b', 'attack');
-    const r4 = step(r3.state, { type: 'battlePick', side: 'a', pick: 'defend' });
+    const r4 = step(r2.state, { type: 'battlePick', side: 'a', pick: 'defend' });
     const bt4 = battleOf(r4.state);
     expect(bt4.a.buffs.halveNext).toBe(false); // consumed
     const loss = 20 + heal - bt4.a.hp;
@@ -447,19 +444,22 @@ describe('battle end', () => {
 });
 
 describe('rng discipline', () => {
-  it('every monster pick and variance draw advances state.rng', () => {
-    const s = fixture({ opponent: mkMonster('shadowImp') }); // imp 10 > knight 6 → b first
-    const rng0 = s.rng;
-    const r1 = applyBattlePick(s, 'b', 'attack'); // monster attack pick: drawn from rng
-    expect(r1.state.rng).not.toEqual(rng0);
-    const r2 = step(r1.state, { type: 'battlePick', side: 'a', pick: 'defend' }); // resolves: variance draw
-    expect(r2.state.rng).not.toEqual(r1.state.rng);
-    // half 2: the knight (a) now attacks first; a plain human pick draws nothing
+  it('monster picks are drawn at battle start and variance draws advance state.rng', () => {
+    const s = createGame(cfg('knight', 'monster-rng'));
+    const rng0 = structuredClone(s.rng);
+    startBattle(s, {
+      context: 'monster',
+      spaceId: 0,
+      opponent: mkMonster('shadowImp'),
+    }); // imp attacks first
+    const rng1 = structuredClone(s.rng);
+    expect(rng1).not.toEqual(rng0); // opening monster pick is drawn before player defense
+
+    const r2 = step(s, { type: 'battlePick', side: 'a', pick: 'defend' });
+    expect(r2.state.rng).not.toEqual(rng1); // pick resolution draws damage variance
+    const rng2 = structuredClone(r2.state.rng);
     const r3 = step(r2.state, { type: 'battlePick', side: 'a', pick: 'attack' });
-    expect(r3.state.rng).toEqual(r2.state.rng);
-    const rng3 = r3.state.rng; // snapshot: applyBattlePick mutates its argument in place
-    const r4 = applyBattlePick(r3.state, 'b', 'defend'); // monster defense draw + variance
-    expect(r4.state.rng).not.toEqual(rng3);
+    expect(r3.state.rng).not.toEqual(rng2); // next monster pick plus variance are drawn
   });
   it('monster picks are engine-drawn, role-appropriate, and never secret', () => {
     for (let i = 0; i < 20; i++) {
