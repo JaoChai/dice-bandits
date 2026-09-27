@@ -106,7 +106,7 @@ export function startBattle(state: GameState, ctx: BattleStartCtx): RuleResult {
     secretUsed: false,
     buffs: { ironSkin: false, poison: false, halveNext: false },
   };
-  const b: Combatant = { ...ctx.opponent, secretUsed: false };
+  const b: Combatant = { ...structuredClone(ctx.opponent), secretUsed: false };
   const attackerSide: 'a' | 'b' = b.stats.spd > a.stats.spd ? 'b' : 'a';
   state.phase = {
     kind: 'battle',
@@ -356,6 +356,7 @@ function applySecretHalf(
 ): HalfDamage {
   const atkSecret = atkPick === 'secret' ? secretOf(state, attacker) : null;
   const defSecret = defPick === 'secret' ? secretOf(state, defender) : null;
+  if (atkSecret && defPick === 'secret') attacker.secretUsed = false;
 
   // --- defender secrets replace the defense ---
   if (defSecret === 'bulwark') {
@@ -429,8 +430,7 @@ function applySecretHalf(
     return { toAttacker: 0, toDefender: 0 };
   }
 
-  // both sides picked secret (defender non-class secret): everything is spent
-  events.push(secretEvent(seatOf(attacker), atk, atkSecret ?? '', {}));
+  // both sides picked secret (defender non-class secret): the attacker's secret is refunded
   events.push(secretEvent(seatOf(defender), def, defSecret ?? '', {}));
   return { toAttacker: 0, toDefender: 0 };
 }

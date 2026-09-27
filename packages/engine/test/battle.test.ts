@@ -202,6 +202,41 @@ describe('startBattle', () => {
     expect(battleOf(fixture({ opponent: mkMonster('shadowImp') })).attackerSide).toBe('b'); // 10 > 6
     expect(battleOf(fixture({ opponent: mkMonster('mimic') })).attackerSide).toBe('a'); // 6 == 6
   });
+  it('does not mutate the opponent passed to startBattle during combat', () => {
+    const s = createGame(cfg('knight'));
+    s.players[1]!.classId = 'cleric';
+    const opponent = mkPlayer(1, s.players[1]!.stats, { hp: 20 });
+    const original = structuredClone(opponent);
+    startBattle(s, { context: 'pvp', spaceId: 0, opponent });
+    applyBattlePick(s, 'a', 'attack');
+    applyBattlePick(s, 'b', 'secret');
+    expect(opponent).toEqual(original);
+  });
+  it('refunds the attacker secret when both pvp sides pick secret in one half', () => {
+    const s = createGame(cfg('knight', 'clashing-secrets'));
+    startBattle(s, {
+      context: 'pvp',
+      spaceId: 0,
+      opponent: mkPlayer(1, s.players[1]!.stats),
+    });
+    const r1 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' });
+    const r2 = step(r1.state, { type: 'battlePick', side: 'b', pick: 'secret' });
+    const bt = battleOf(r2.state);
+    expect(bt.a.secretUsed).toBe(false);
+    expect(bt.b.secretUsed).toBe(true);
+    expect(r2.events.filter((event) => event.type === 'SecretUsed')).toEqual([
+      expect.objectContaining({
+        seat: 1,
+        params: expect.objectContaining({ side: 'b', secret: 'bulwark' }),
+      }),
+    ]);
+    const r3 = step(r2.state, { type: 'battlePick', side: 'b', pick: 'attack' });
+    expect(
+      legalActions(r3.state, 0).map((action) =>
+        action.type === 'battlePick' ? action.pick : null,
+      ),
+    ).toEqual(['defend', 'counter', 'secret']);
+  });
   it('supports pvp context (Task 7 wires the entry point)', () => {
     const s = createGame(cfg('knight', 'pvp'));
     const r = startBattle(s, {
