@@ -105,13 +105,11 @@ export type Phase =
   | { kind: 'townManage'; spaceId: number } // own town: invest or leave
   | { kind: 'townChallenge'; spaceId: number } // enemy town: attack or leave
   | { kind: 'endOfTurn' }
-  | { kind: 'gameOver'; ranking: number[]; highlights: Highlight[] };
+  | { kind: 'gameOver'; ranking: number[]; winners: number[]; highlights: Highlight[] };
 
-export interface Highlight {
-  key: string;
-  seat: number;
-  value: number;
-}
+export type Highlight =
+  | { key: 'biggestRobbery' | 'mostKod'; seat: number; value: number }
+  | { key: 'hotTown'; spaceId: number | null; flips: number };
 
 export type Action =
   | { type: 'roll' }

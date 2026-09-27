@@ -25,7 +25,7 @@ describe('endgame and frenzy', () => {
       highlights: [
         { key: 'biggestRobbery', seat: 1, value: 40 },
         { key: 'mostKod', seat: 1, value: 3 },
-        { key: 'hotTown', seat: 0, value: 2 },
+        { key: 'hotTown', spaceId: 4, flips: 2 },
       ],
     });
   });
@@ -38,6 +38,75 @@ describe('endgame and frenzy', () => {
     expect(finishGame(state).state.phase).toMatchObject({ kind: 'gameOver', ranking: [1, 0] });
     state.players[1]!.level = state.players[0]!.level;
     expect(finishGame(state).state.phase).toMatchObject({ kind: 'gameOver', ranking: [0, 1] });
+  });
+
+  it('reports all seats tied for the top result as shared winners', () => {
+    const state = createGame(cfg);
+    const result = finishGame(state);
+    expect(result.state.phase).toMatchObject({
+      kind: 'gameOver',
+      ranking: [0, 1],
+      winners: [0, 1],
+    });
+    expect(result.events[0]).toMatchObject({
+      type: 'GameEnded',
+      seat: 0,
+      params: { winner: 0, winners: '0,1' },
+    });
+  });
+
+  it('reports a sole winner for clear net-worth, town-count, or level leads', () => {
+    const state = createGame(cfg);
+    state.players[1]!.gold += 1;
+    expect(finishGame(state).state.phase).toMatchObject({ kind: 'gameOver', winners: [1] });
+
+    state.players[1]!.gold -= 1;
+    state.towns[0]!.owner = 1;
+    expect(finishGame(state).state.phase).toMatchObject({ kind: 'gameOver', winners: [1] });
+
+    state.towns[0]!.owner = null;
+    state.players[1]!.level += 1;
+    expect(finishGame(state).state.phase).toMatchObject({ kind: 'gameOver', winners: [1] });
+  });
+
+  it('uses town count, then level, then shared seat-order ranking to break net-worth ties', () => {
+    const state = createGame(cfg);
+    state.towns[0]!.owner = 1;
+    expect(finishGame(state).state.phase).toMatchObject({
+      kind: 'gameOver',
+      ranking: [1, 0],
+      winners: [1],
+    });
+    state.towns[0]!.owner = null;
+    state.players[1]!.level += 1;
+    expect(finishGame(state).state.phase).toMatchObject({
+      kind: 'gameOver',
+      ranking: [1, 0],
+      winners: [1],
+    });
+    state.players[1]!.level = state.players[0]!.level;
+    expect(finishGame(state).state.phase).toMatchObject({
+      kind: 'gameOver',
+      ranking: [0, 1],
+      winners: [0, 1],
+    });
+  });
+
+  it('highlights the most-flipped town by space id, breaking flip ties by lower id', () => {
+    const state = createGame(cfg);
+    state.stats.townFlips = { 8: 4, 4: 4, 2: 1 };
+    expect(finishGame(state).state.phase).toMatchObject({
+      kind: 'gameOver',
+      highlights: expect.arrayContaining([{ key: 'hotTown', spaceId: 4, flips: 4 }]),
+    });
+  });
+
+  it('uses a null hot-town highlight when no town has flipped', () => {
+    const state = createGame(cfg);
+    expect(finishGame(state).state.phase).toMatchObject({
+      kind: 'gameOver',
+      highlights: expect.arrayContaining([{ key: 'hotTown', spaceId: null, flips: 0 }]),
+    });
   });
 
   it('starts round transitions with FrenzyStarted and doubles tax in rounds 10-12', () => {
