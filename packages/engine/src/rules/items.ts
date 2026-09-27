@@ -37,7 +37,12 @@ export function useItem(
   const events: GameEvent[] = [];
   const effect = def.effect;
   if (effect.bonusDice) player.bonusDice += Number(effect.bonusDice);
-  if (effect.gold) player.gold += Number(effect.gold);
+  if (effect.gold) {
+    const amount =
+      Number(effect.gold) * (state.round >= BALANCE.frenzyFromRound ? BALANCE.frenzyMultiplier : 1);
+    player.gold += amount;
+    events.push({ type: 'GoldGained', seat, params: { amount } });
+  }
   if (effect.warpTo === 'castle') player.pos = state.board.castleId;
   if (effect.placeTrap === 'currentSpace') state.traps[player.pos] = seat;
   if (effect.skipNextFight) player.skipNextFight = true;

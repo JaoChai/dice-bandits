@@ -3,6 +3,8 @@ import { IllegalActionError } from './types';
 import { legalActions } from './legal';
 import { applyRoll, applyChooseBranch, applyDuelAnswer, endTurn } from './rules/movement';
 import { applyBattlePick } from './rules/battle';
+import { applyPvpReward, leader } from './rules/pvp';
+import { BALANCE } from './data/index';
 import { useItem, shopBuy, shopSell } from './rules/items';
 import { pickPerk } from './rules/leveling';
 import { invest, startTownChallenge } from './rules/towns';
@@ -14,7 +16,7 @@ import { invest, startTownChallenge } from './rules/towns';
  */
 export function step(state: GameState, action: Action): StepResult {
   const next = structuredClone(state);
-  const seat = next.turnSeat;
+  const seat = next.phase.kind === 'pvpReward' ? next.phase.winner : next.turnSeat;
 
   const isBattlePick = action.type === 'battlePick';
   const legal = legalActions(next, seat).some((a) => actionsEq(a, action));
@@ -34,6 +36,38 @@ export function step(state: GameState, action: Action): StepResult {
     case 'useItem': {
       const r = useItem(next, seat, action.item, action.target);
       return r.state.phase.kind === 'endOfTurn' ? endTurn(r.state, r.events) : r;
+    }
+    case 'useBanditCard': {
+      const player = next.players[seat]!;
+      const targetSeat = leader(next);
+      const target = next.players[targetSeat]!;
+      if (player.banditCards.indexOf(action.card) < 0)
+        throw new IllegalActionError('bandit card unavailable');
+      player.banditCards.splice(player.banditCards.indexOf(action.card), 1);
+      const events = [];
+      if (action.card === 'pickpocketFar') {
+        const amount = Math.floor((target.gold * BALANCE.pickpocketFarPct) / 100);
+        target.gold -= amount;
+        player.gold += amount;
+        next.stats.robbedGold[seat] = (next.stats.robbedGold[seat] ?? 0) + amount;
+        target.grudges[seat] = (target.grudges[seat] ?? 0) + amount;
+        events.push({ type: 'GoldStolen', seat, params: { amount } });
+      } else if (action.card === 'cursedLegs') {
+        target.rollCap = 3;
+        events.push({ type: 'CursedLegs', seat, params: { target: targetSeat } });
+      } else {
+        next.bounty = { target: targetSeat, untilRound: next.round + BALANCE.bountyRounds };
+        events.push({
+          type: 'BountyPlaced',
+          seat,
+          params: { target: targetSeat, untilRound: next.bounty.untilRound },
+        });
+      }
+      return { state: next, events };
+    }
+    case 'pvpReward': {
+      const r = applyPvpReward(next, action);
+      return endTurn(r.state, r.events);
     }
     case 'pickPerk':
       return pickPerk(next, seat, action.perk);
@@ -58,8 +92,7 @@ export function step(state: GameState, action: Action): StepResult {
     case 'endTurn':
       return endTurn(next, []);
     default:
-      // Only Task 7 PvP reward actions remain unimplemented.
-      throw new IllegalActionError(`action ${action.type} not implemented yet`);
+      throw new Error('unreachable action branch');
   }
 }
 

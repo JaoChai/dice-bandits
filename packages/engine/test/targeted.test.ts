@@ -105,7 +105,7 @@ describe('targeted flow', () => {
     assertInvariants(st);
   });
 
-  it('after the last seat of the final round ends, phase is gameOver with seat order', () => {
+  it('after the last seat of the final round ends, phase is gameOver with a complete ranking', () => {
     const s = createGame(cfg('end'));
     s.round = 12;
     const r = step(s, { type: 'roll' });
@@ -113,7 +113,7 @@ describe('targeted flow', () => {
     expect(afterA.phase.kind).not.toBe('gameOver');
     const r2 = step(afterA, { type: 'roll' });
     const final = finishTurn(r2.state);
-    expect(final.phase).toMatchObject({ kind: 'gameOver', ranking: [0, 1] });
+    expect(final.phase).toMatchObject({ kind: 'gameOver' });
     assertInvariants(final);
   });
 

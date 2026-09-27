@@ -7,6 +7,8 @@
   "xpToLevel": [0, 30, 70, 120, 180, 250, 330, 420, 520, 630, 750, 880, 1020, 1170, 1330],
   "deathGoldLossPct": 20,
   "robPct": 30,
+  "looterRobPct": 40,
+  "grudgeHolderDamagePct": 15,
   "prankRounds": 3,
   "inventoryMax": 6,
   "banditCardsMax": 2,

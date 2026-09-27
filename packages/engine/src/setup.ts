@@ -2,6 +2,7 @@ import type { GameConfig, GameState, Player } from './types';
 import { generateBoard } from './board';
 import { pick, seedRng } from './rng';
 import { BALANCE, CLASSES, WORLD_RULES } from './data/index';
+import { startOfRound } from './rules/underdog';
 
 /**
  * Create a fresh GameState from a config: players at the castle with starting
@@ -42,7 +43,7 @@ export function createGame(config: GameConfig): GameState {
       perks: [],
     };
   });
-  return {
+  const state: GameState = {
     version: 1,
     config,
     rng: seedRng(`${config.seed}:game`),
@@ -64,4 +65,7 @@ export function createGame(config: GameConfig): GameState {
     bounty: null,
     stats: { robbedGold: config.seats.map(() => 0), townFlips: {}, kos: config.seats.map(() => 0) },
   };
+  // Round 1 has no outward event channel, but its stateful underdog draw still applies.
+  startOfRound(state);
+  return state;
 }

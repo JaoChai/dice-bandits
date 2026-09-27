@@ -4,6 +4,7 @@ import { nextFloat } from '../rng';
 import { BALANCE, CLASSES, ITEM_BY_ID, MONSTERS } from '../data/index';
 import * as leveling from './leveling';
 import { endTurn, type RuleResult } from './movement';
+import { leader } from './pvp';
 
 export interface HalfDamage {
   toAttacker: number;
@@ -118,6 +119,13 @@ export function startBattle(state: GameState, ctx: BattleStartCtx): RuleResult {
     buffs: { ironSkin: false, poison: false, halveNext: false },
   };
   const b: Combatant = { ...structuredClone(ctx.opponent), secretUsed: false };
+  if (a.kind === 'player' && b.kind === 'player') {
+    const crowned = leader(state);
+    if (state.players[a.seat!]!.perks.includes('grudgeHolder') && b.seat === crowned)
+      a.stats.atk *= 1 + BALANCE.grudgeHolderDamagePct / 100;
+    if (state.players[b.seat!]!.perks.includes('grudgeHolder') && a.seat === crowned)
+      b.stats.atk *= 1 + BALANCE.grudgeHolderDamagePct / 100;
+  }
   const attackerSide: 'a' | 'b' = b.stats.spd > a.stats.spd ? 'b' : 'a';
   state.phase = {
     kind: 'battle',
@@ -513,7 +521,7 @@ function endBattle(
   const loser = result === 'aWin' ? bt.b : result === 'bWin' ? bt.a : null;
   if (winner && loser) onBattleEnd(state, bt, winner, loser, events);
   events.push({ type: 'BattleEnded', seat: winner ? seatOf(winner) : null, params: { result } });
-  if (state.phase.kind === 'levelUp') return { state, events };
+  if (state.phase.kind === 'levelUp' || state.phase.kind === 'pvpReward') return { state, events };
   return endTurn(state, events);
 }
 
@@ -546,14 +554,31 @@ function onBattleEnd(
     const def = MONSTERS[loser.monsterId];
     if (def) {
       const p = state.players[winner.seat!]!;
-      p.gold += def.gold;
+      const gold =
+        def.gold * (state.round >= BALANCE.frenzyFromRound ? BALANCE.frenzyMultiplier : 1);
+      p.gold += gold;
       const { grantXp } = leveling;
       const gained = grantXp(state, p.seat, def.xp, 'endTurn');
       events.push(...gained.events);
-      events.push({ type: 'GoldGained', seat: p.seat, params: { amount: def.gold } });
+      events.push({ type: 'GoldGained', seat: p.seat, params: { amount: gold } });
     }
   }
-  // PvP rewards are added by Task 7.
+  if (bt.context === 'pvp' && winner.kind === 'player' && loser.kind === 'player') {
+    state.phase = { kind: 'pvpReward', winner: winner.seat!, loser: loser.seat! };
+    if (state.bounty?.target === loser.seat && state.round <= state.bounty.untilRound) {
+      const bountyGold =
+        BALANCE.bountyGold *
+        (state.round >= BALANCE.frenzyFromRound ? BALANCE.frenzyMultiplier : 1);
+      const hunter = state.players[winner.seat!]!;
+      hunter.gold += bountyGold;
+      events.push({
+        type: 'BountyClaimed',
+        seat: winner.seat!,
+        params: { amount: bountyGold, target: loser.seat! },
+      });
+      state.bounty = null;
+    }
+  }
 
   // KO penalty applies to any KO'd player regardless of context
   if (loser.kind === 'player') applyKoPenalty(state, loser.seat!, events);

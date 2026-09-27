@@ -421,7 +421,7 @@ describe('battle end', () => {
     expect(state.turnSeat).toBe(1);
     assertInvariants(state);
   });
-  it('pvp KO applies the penalty, counts stats.kos, and defers pvp rewards to Task 7', () => {
+  it('pvp KO applies the penalty, counts stats.kos, and opens PvP reward selection', () => {
     const s = createGame(cfg('knight', 'pvp4'));
     s.players[0]!.stats.atk = 40; // a KOs b by exchange 3 at the latest
     startBattle(s, { context: 'pvp', spaceId: 0, opponent: mkPlayer(1, s.players[1]!.stats) });
@@ -432,12 +432,12 @@ describe('battle end', () => {
     expect(loser.gold).toBe(240);
     expect(loser.pos).toBe(state.board.castleId);
     expect(loser.hp).toBe(loser.stats.maxHp);
-    expect(loser.skipTurns).toBe(0); // consumed by the immediate wrap past seat 1
+    expect(state.phase.kind).toBe('pvpReward');
+    expect(loser.skipTurns).toBe(1);
     expect(state.stats.kos[1]).toBe(1); // b was KO'd once
     expect(state.stats.kos[0]).toBe(0);
-    expect(state.players[0]!.gold).toBe(300); // no rob/loot/seize/prank in this task
-    expect(events.some((e) => e.type === 'TurnSkipped')).toBe(true);
-    expect(state.phase.kind).toBe('awaitRoll');
+    expect(state.players[0]!.gold).toBe(300); // reward is selected in the pvpReward phase
+    expect(events.some((e) => e.type === 'TurnSkipped')).toBe(false);
     expect(state.turnSeat).toBe(0);
     assertInvariants(state);
   });

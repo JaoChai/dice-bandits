@@ -1,5 +1,6 @@
 import type { Action, AttackPick, DefensePick, GameState } from './types';
-import { BALANCE, ITEM_BY_ID } from './data/index';
+import { BALANCE, ITEM_BY_ID, PRANK_ALIASES } from './data/index';
+import { leader } from './rules/pvp';
 
 /**
  * Full enumeration of the actions `seat` may legally take right now.
@@ -7,7 +8,8 @@ import { BALANCE, ITEM_BY_ID } from './data/index';
  */
 export function legalActions(state: GameState, seat: number): Action[] {
   if (state.phase.kind === 'gameOver') return [];
-  if (state.phase.kind !== 'battle' && seat !== state.turnSeat) return [];
+  if (state.phase.kind !== 'battle' && state.phase.kind !== 'pvpReward' && seat !== state.turnSeat)
+    return [];
   switch (state.phase.kind) {
     case 'awaitRoll': {
       const p = state.players[seat]!;
@@ -17,7 +19,11 @@ export function legalActions(state: GameState, seat: number): Action[] {
           for (let target = 1; target <= 6; target++) items.push({ type: 'useItem', item, target });
         } else items.push({ type: 'useItem', item, target: null });
       }
-      return [{ type: 'roll' }, ...items];
+      const cards: Action[] =
+        p.seat === leader(state)
+          ? []
+          : p.banditCards.map((card) => ({ type: 'useBanditCard', card }));
+      return [{ type: 'roll' }, ...items, ...cards];
     }
     case 'levelUp':
       return state.phase.seat === seat
@@ -57,9 +63,43 @@ export function legalActions(state: GameState, seat: number): Action[] {
     case 'chooseBranch':
       return state.phase.options.map((to) => ({ type: 'chooseBranch', to }));
     case 'duelOffer':
-      // duel *initiation* (target !== null) arrives with Task 7's pvp battle;
-      // until then declining is the only executable answer
-      return [{ type: 'duel', target: null }];
+      return [
+        { type: 'duel', target: null },
+        ...state.phase.targets
+          .filter((target) => state.players[target]!.hp > 0)
+          .map((target) => ({ type: 'duel' as const, target })),
+      ];
+    case 'pvpReward': {
+      if (seat !== state.phase.winner) return [];
+      const { loser } = state.phase;
+      const target = state.players[loser]!;
+      return [
+        { type: 'pvpReward', reward: 'rob', item: null, townId: null, alias: null },
+        ...target.items.map((item) => ({
+          type: 'pvpReward' as const,
+          reward: 'loot' as const,
+          item,
+          townId: null,
+          alias: null,
+        })),
+        ...state.towns
+          .filter((town) => town.owner === loser)
+          .map((town) => ({
+            type: 'pvpReward' as const,
+            reward: 'seize' as const,
+            item: null,
+            townId: town.spaceId,
+            alias: null,
+          })),
+        ...PRANK_ALIASES.map((alias) => ({
+          type: 'pvpReward' as const,
+          reward: 'prank' as const,
+          item: null,
+          townId: null,
+          alias,
+        })),
+      ];
+    }
     case 'endOfTurn':
       return [{ type: 'endTurn' }];
     case 'battle': {

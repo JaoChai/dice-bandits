@@ -182,7 +182,9 @@ function chest(state: GameState, seat: number): StepResult {
     const [gold, r2] = nextInt(rng, lo, hi);
     rng = r2;
     const multiplier =
-      (state.worldRule === 'goldRush' ? 2 : 1) * (p.perks.includes('scavenger') ? 1.5 : 1);
+      (state.worldRule === 'goldRush' ? 2 : 1) *
+      (state.round >= BALANCE.frenzyFromRound ? BALANCE.frenzyMultiplier : 1) *
+      (p.perks.includes('scavenger') ? 1.5 : 1);
     const gained = Math.floor(gold * multiplier);
     p.gold += gained;
     events.push(event('GoldGained', seat, { amount: gained }));
@@ -200,8 +202,10 @@ function randomEvent(state: GameState, seat: number): StepResult {
   if (n === 0) {
     const [g, r] = nextInt(rng, 50, 150);
     rng = r;
-    p.gold += g;
-    events.push(event('GoldGained', seat, { amount: g }));
+    const multiplier = state.round >= BALANCE.frenzyFromRound ? BALANCE.frenzyMultiplier : 1;
+    const gained = g * multiplier;
+    p.gold += gained;
+    events.push(event('GoldGained', seat, { amount: gained }));
   } else if (n === 1) {
     const loss = Math.floor(p.gold * 0.1);
     p.gold -= loss;

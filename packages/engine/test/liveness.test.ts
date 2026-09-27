@@ -22,6 +22,11 @@ function nextLegalAction(state: GameState): Action {
   const seats = [state.turnSeat, ...state.players.map((player) => player.seat)];
   for (const seat of [...new Set(seats)]) {
     const actions = legalActions(state, seat);
+    const preferred =
+      actions.find((a) => a.type === 'duel' && a.target !== null) ??
+      actions.find((a) => a.type === 'useBanditCard') ??
+      actions.find((a) => a.type === 'pvpReward' && a.reward === 'rob');
+    if (preferred) return preferred;
     if (actions.length > 0) return actions[0]!;
   }
   throw new Error(`No legal actions in phase ${state.phase.kind}`);

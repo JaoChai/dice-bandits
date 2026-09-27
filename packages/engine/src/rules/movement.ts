@@ -2,6 +2,9 @@ import type { GameEvent, GameState } from '../types';
 import { nextInt } from '../rng';
 import { resolveSpace as resolveLanding } from './spaces';
 import { collectTaxes } from './towns';
+import { startBattle } from './battle';
+import { finishGame } from './endgame';
+import { startOfRound } from './underdog';
 
 export interface RuleResult {
   state: GameState;
@@ -117,14 +120,12 @@ export function endTurn(state: GameState, events: GameEvent[]): RuleResult {
     seat = (seat + 1) % state.players.length;
     if (seat === 0) {
       if (state.round >= state.config.rounds) {
-        state.phase = {
-          kind: 'gameOver',
-          ranking: state.players.map((p) => p.seat),
-          highlights: [],
-        };
-        return { state, events };
+        const final = finishGame(state);
+        return { state: final.state, events: [...events, ...final.events] };
       }
       state.round += 1;
+      const roundStart = startOfRound(state);
+      events.push(...roundStart.events);
     }
     const p = state.players[seat]!;
     const taxes = collectTaxes(state, seat);
@@ -154,7 +155,7 @@ export function applyChooseBranch(state: GameState, to: number): RuleResult {
   return moveSingle(state, to, events);
 }
 
-/** Duel offer answer: null keeps moving; real duels arrive with Task 5. */
+/** Duel offer answer: null keeps moving; target starts a PvP battle. */
 export function applyDuelAnswer(state: GameState, target: number | null): RuleResult {
   if (state.phase.kind !== 'duelOffer') throw new Error('applyDuelAnswer outside duelOffer');
   const { remaining, targets } = state.phase;
@@ -166,7 +167,22 @@ export function applyDuelAnswer(state: GameState, target: number | null): RuleRe
     const events: GameEvent[] = [{ type: 'DuelDeclined', seat: state.turnSeat, params: {} }];
     return advanceOne(state, events);
   }
-  // duel initiation is Task 5; for now declining is the only sensible answer
-  state.phase = { kind: 'moving', remaining };
-  return advanceOne(state, [{ type: 'DuelDeclined', seat: state.turnSeat, params: {} }]);
+  const opponent = state.players[target]!;
+  const combatant = {
+    kind: 'player' as const,
+    seat: target,
+    monsterId: null,
+    level: opponent.level,
+    hp: opponent.hp,
+    stats: { ...opponent.stats },
+    secretUsed: false,
+    buffs: { ironSkin: false, poison: false, halveNext: false },
+  };
+  const result = startBattle(state, {
+    context: 'pvp',
+    spaceId: state.players[state.turnSeat]!.pos,
+    opponent: combatant,
+  });
+  result.events.unshift({ type: 'DuelAccepted', seat: state.turnSeat, params: { target } });
+  return result;
 }

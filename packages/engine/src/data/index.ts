@@ -59,6 +59,8 @@ export const BALANCE = balanceJson as {
   xpToLevel: number[];
   deathGoldLossPct: number;
   robPct: number;
+  looterRobPct: number;
+  grudgeHolderDamagePct: number;
   prankRounds: number;
   inventoryMax: number;
   banditCardsMax: number;
