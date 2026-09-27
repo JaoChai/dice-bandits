@@ -10,13 +10,13 @@
     "secret": "pickpocket"
   },
   "mage": {
-    "base": { "maxHp": 34, "atk": 6, "def": 6, "spd": 9, "mag": 11 },
-    "growth": { "maxHp": 4, "atk": 1, "def": 1, "spd": 1, "mag": 2 },
+    "base": { "maxHp": 34, "atk": 6, "def": 6, "spd": 9, "mag": 8 },
+    "growth": { "maxHp": 4, "atk": 1, "def": 1, "spd": 1, "mag": 1 },
     "secret": "firestorm"
   },
   "cleric": {
-    "base": { "maxHp": 42, "atk": 9, "def": 9, "spd": 8, "mag": 10 },
-    "growth": { "maxHp": 5, "atk": 1, "def": 2, "spd": 1, "mag": 2 },
+    "base": { "maxHp": 50, "atk": 12, "def": 9, "spd": 8, "mag": 13 },
+    "growth": { "maxHp": 6, "atk": 2, "def": 2, "spd": 1, "mag": 3 },
     "secret": "sanctuary"
   }
 }

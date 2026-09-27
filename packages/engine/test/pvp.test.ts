@@ -69,7 +69,7 @@ describe('PvP and worth', () => {
       current = step(current, { type: 'battlePick', side, pick }).state;
     }
     expect(current.phase.kind).toBe('pvpReward');
-    expect(current.players[0]!.gold).toBe(500);
+    expect(current.players[0]!.gold).toBe(300 + BALANCE.bountyGold);
     expect(current.bounty).toBeNull();
     expect(
       legalActions(current, current.turnSeat).some(

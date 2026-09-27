@@ -43,12 +43,22 @@ describe('underdog and round start', () => {
     expect(legalActions(state, 1).filter((action) => action.type === 'useBanditCard')).toHaveLength(
       0,
     );
+    const stolenAmount = Math.floor((900 * BALANCE.pickpocketFarPct) / 100);
     const stolen = step(state, { type: 'useBanditCard', card: 'pickpocketFar' });
-    expect(stolen.state.players[0]!.gold).toBe(90);
-    expect(stolen.state.players[1]!.gold).toBe(810);
-    const cursed = step(stolen.state, { type: 'useBanditCard', card: 'cursedLegs' });
+    expect(stolen.state.players[0]!.gold).toBe(stolenAmount);
+    expect(stolen.state.players[1]!.gold).toBe(900 - stolenAmount);
+    const cursedState = createGame(config);
+    cursedState.players[0]!.gold = 0;
+    cursedState.players[1]!.gold = 900;
+    cursedState.players[0]!.banditCards = ['cursedLegs'];
+    const cursed = step(cursedState, { type: 'useBanditCard', card: 'cursedLegs' });
     expect(cursed.state.players[1]!.rollCap).toBe(3);
-    const bounty = step(cursed.state, { type: 'useBanditCard', card: 'bounty' });
+
+    const bountyState = createGame(config);
+    bountyState.players[0]!.gold = 0;
+    bountyState.players[1]!.gold = 900;
+    bountyState.players[0]!.banditCards = ['bounty'];
+    const bounty = step(bountyState, { type: 'useBanditCard', card: 'bounty' });
     expect(bounty.state.bounty).toEqual({ target: 1, untilRound: 1 + BALANCE.bountyRounds });
     bounty.state.phase = { kind: 'shop', stock: [] };
     expect(

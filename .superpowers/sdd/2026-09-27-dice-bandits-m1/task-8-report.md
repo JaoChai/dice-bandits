@@ -100,3 +100,10 @@ Command: `npm run sim -- --games 1000 --players 4`
 ```
 
 - Commit: `253ac91 fix(engine): sharpen bot personalities and their tests` (implementation and tests; report appended afterward).
+
+## Leveling retune (owner ruling)
+
+- XP distribution measured from the original thresholds over 1,000 deterministic 4-player games (4,000 player-game samples): mean 23.46875 XP; median 0; p75 30; p90 75; maximum 280; 2,375/4,000 players (59.4%) earned no XP.
+- Final cumulative `xpToLevel`: `[0, 10, 11, 12, 13, 14, 15, 20, 30, 45, 65, 90, 120, 155, 195]` (15 entries, starts at zero, strictly increasing).
+- Six leveling-retune iterations were simulated. Trial 1 used XP thresholds only; subsequent iterations adjusted monster/class data and underdog economy after thresholds alone missed the target and class/comeback guardrails.
+- Final `npm run sim -- --games 1000 --players 4` report: 0 crashes, 0 stuck, average final level 4.05575; class win rates Knight .246, Thief .237, Mage .215, Cleric .302; comeback rate .128. Full run-by-run reports are in `docs/balance-log.md`.

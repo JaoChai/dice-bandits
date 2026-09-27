@@ -4,7 +4,7 @@
   "frenzyFromRound": 10,
   "frenzyMultiplier": 2,
   "levelCap": 15,
-  "xpToLevel": [0, 30, 70, 120, 180, 250, 330, 420, 520, 630, 750, 880, 1020, 1170, 1330],
+  "xpToLevel": [0, 10, 11, 12, 13, 14, 15, 20, 30, 45, 65, 90, 120, 155, 195],
   "deathGoldLossPct": 20,
   "robPct": 30,
   "looterRobPct": 40,
@@ -23,8 +23,8 @@
   "attackMult": 1,
   "strikeMult": 1.5,
   "defendMult": 0.5,
-  "pickpocketFarPct": 10,
-  "bountyGold": 200,
-  "bountyRounds": 2,
+  "pickpocketFarPct": 50,
+  "bountyGold": 600,
+  "bountyRounds": 3,
   "resaleRatio": 0.5
 }
