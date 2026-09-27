@@ -2,6 +2,7 @@ import type { Action, GameState, StepResult } from './types';
 import { IllegalActionError } from './types';
 import { legalActions } from './legal';
 import { applyRoll, applyChooseBranch, applyDuelAnswer, endTurn } from './rules/movement';
+import { applyBattlePick } from './rules/battle';
 
 /**
  * Apply `action` to a state, returning a fresh state + events. The input is
@@ -25,6 +26,8 @@ export function step(state: GameState, action: Action): StepResult {
       return applyChooseBranch(next, action.to);
     case 'duel':
       return applyDuelAnswer(next, action.target);
+    case 'battlePick':
+      return applyBattlePick(next, action.side, action.pick);
     case 'endTurn':
       return endTurn(next, []);
     default:
