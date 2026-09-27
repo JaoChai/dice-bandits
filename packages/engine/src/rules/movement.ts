@@ -79,6 +79,7 @@ export function applyRoll(state: GameState): RuleResult {
     total += v;
     rng = n;
   }
+  state.rng = rng;
   // bonus dice reset after the roll; rollCap only ever capped one roll (Cursed Legs)
   player.bonusDice = 0;
   player.rollCap = null;

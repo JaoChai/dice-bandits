@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createGame, step, legalActions } from '../src/index';
-import { type GameConfig } from '../src/types';
+import { type GameConfig, type GameEvent } from '../src/types';
 import { assertInvariants } from './invariants';
 
 const cfg = (seed = 't1'): GameConfig => ({
@@ -42,20 +42,19 @@ describe('targeted flow', () => {
   });
 
   it('passing an occupied space offers a duel; duel:null keeps moving', () => {
+    // seed 'fork' deterministically rolls 3 for A: spaces 1, 2 (B stands there →
+    // pass-over duelOffer with 2 remaining), 3.
     const s = createGame(cfg('fork'));
-    // A rolls first; put B 2 ahead so A passes them mid-move (not on final space, ideally).
     s.players[1]!.pos = 2;
     const r = step(s, { type: 'roll' });
-    if (r.state.phase.kind === 'duelOffer') {
-      expect(legalActions(r.state, r.state.turnSeat).map((a) => a.type)).toContain('duel');
-      const r2 = step(r.state, { type: 'duel', target: null });
-      expect(r2.events.some((e) => e.type === 'DuelDeclined')).toBe(true);
-      expect(r2.state.players[0]!.pos).not.toBe(2); // kept moving
-      assertInvariants(r2.state);
-    } else {
-      // roll was 1: landed directly on B — no pass, acceptable, retry with another seed
-      expect(r.state.players[0]!.pos).toBe(2);
-    }
+    expect(r.state.phase.kind).toBe('duelOffer');
+    expect(r.state.players[0]!.pos).toBe(2); // paused on the passed space
+    expect(legalActions(r.state, r.state.turnSeat).map((a) => a.type)).toContain('duel');
+    const r2 = step(r.state, { type: 'duel', target: null });
+    expect(r2.events.some((e) => e.type === 'DuelDeclined')).toBe(true);
+    expect(r2.state.players[0]!.pos).toBe(3); // kept moving, did not stay on B's space
+    expect(r2.state.phase.kind).toBe('awaitRoll'); // turn ended via the stub resolver
+    assertInvariants(r2.state);
   });
 
   it('a seat with skipTurns: 1 is skipped once with TurnSkipped', () => {
@@ -63,12 +62,22 @@ describe('targeted flow', () => {
     s.players[0]!.skipTurns = 1;
     const r = step(s, { type: 'roll' }); // A rolls; stub ends their turn
     expect(r.state.turnSeat).toBe(1); // B's turn now
-    // B rolls; when the turn wraps back to A they are skipped -> B again.
-    const r2 = step(r.state, { type: 'roll' });
-    expect(r2.state.turnSeat).toBe(1); // A skipped, B rolls again
-    expect(r2.events.some((e) => e.type === 'TurnSkipped')).toBe(true);
-    expect(r2.state.players[0]!.skipTurns).toBe(0);
-    assertInvariants(r2.state);
+    // Drive B's turn: roll, then answer any mid-move duelOffer (passing A) or
+    // fork with the first legal action, until the turn wraps back to awaitRoll.
+    let st = r.state;
+    const events: GameEvent[] = [];
+    let rn = step(st, { type: 'roll' });
+    events.push(...rn.events);
+    st = rn.state;
+    for (let i = 0; i < 30 && st.phase.kind !== 'awaitRoll' && st.phase.kind !== 'gameOver'; i++) {
+      rn = step(st, legalActions(st, st.turnSeat)[0]!);
+      events.push(...rn.events);
+      st = rn.state;
+    }
+    expect(st.turnSeat).toBe(1); // wrapped: A skipped, B rolls again
+    expect(events.some((e) => e.type === 'TurnSkipped')).toBe(true);
+    expect(st.players[0]!.skipTurns).toBe(0);
+    assertInvariants(st);
   });
 
   it('after the last seat of the final round ends, phase is gameOver with seat order', () => {

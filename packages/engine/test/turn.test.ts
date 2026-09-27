@@ -49,4 +49,21 @@ describe('turn flow', () => {
     step(s, { type: 'roll' });
     expect(s).toEqual(snap);
   });
+  it('state.rng advances after a roll', () => {
+    const s0 = createGame(cfg('det'));
+    const before = s0.rng;
+    const { state } = step(s0, { type: 'roll' });
+    expect(state.rng).not.toEqual(before);
+  });
+  it('dice stream produces varied values across a game', () => {
+    let s = createGame(cfg('det'));
+    const values: number[] = [];
+    for (let i = 0; i < 60 && s.phase.kind !== 'gameOver'; i++) {
+      const r = step(s, legalActions(s, s.turnSeat)[0]!);
+      for (const e of r.events) if (e.type === 'DiceRolled') values.push(Number(e.params.value));
+      s = r.state;
+    }
+    expect(values.length).toBeGreaterThanOrEqual(8);
+    expect(new Set(values).size).toBeGreaterThanOrEqual(3);
+  });
 });
