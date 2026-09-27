@@ -73,6 +73,14 @@ function edge(draft: Draft, from: number, to: number): void {
   if (from !== to) draft.nodes[from]!.next.add(to);
 }
 
+/**
+ * Authored chunk kinds must never introduce a second castle: only the
+ * generator-created root space (id 0) is `castle` (see `buildWith`).
+ */
+function authoredKind(s: ChunkSpace): SpaceKind {
+  return s.kind === 'castle' ? 'event' : s.kind;
+}
+
 /** Evenly distribute `n` tile coordinates inside `avail` slots. */
 function tileRun(avail: number, n: number): number[] {
   const lead = Math.floor((avail - n) / 2);
@@ -99,7 +107,7 @@ function placeChunk(
     throw new Error(`position count mismatch for chunk ${chunk.id}`);
   const ids = line.map((ci, k) => {
     const s: ChunkSpace = chunk.spaces[ci]!;
-    return addNode(draft, s.kind, chunk.region, positions[k]!.x, positions[k]!.y);
+    return addNode(draft, authoredKind(s), chunk.region, positions[k]!.x, positions[k]!.y);
   });
   const forkPos = line.indexOf(sec.forkAt);
   for (let k = 0; k + 1 < ids.length; k++) {
@@ -116,7 +124,7 @@ function placeChunk(
         // travel is -x on the bottom band, so local +x mirrors to -x
         return addNode(
           draft,
-          s.kind,
+          authoredKind(s),
           chunk.region,
           positions[forkPos]!.x - (s.x - fs.x),
           positions[forkPos]!.y + (s.y - fs.y),

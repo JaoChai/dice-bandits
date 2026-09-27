@@ -12,6 +12,8 @@ describe('generateBoard', () => {
       expect(b.spaces.length).toBeGreaterThanOrEqual(36);
       expect(b.spaces.length).toBeLessThanOrEqual(44);
       expect(b.spaces[b.castleId]?.kind).toBe('castle');
+      expect(b.spaces.filter((s) => s.kind === 'castle').length).toBe(1);
+      expect(b.spaces.filter((s) => s.kind === 'castle')[0]?.id).toBe(b.castleId);
       for (const r of ['meadow', 'desert', 'snow', 'volcano'] as const) {
         const inR = b.spaces.filter((s) => s.region === r);
         expect(inR.filter((s) => s.kind === 'town').length).toBeGreaterThanOrEqual(2);
