@@ -10,8 +10,8 @@
     "secret": "pickpocket"
   },
   "mage": {
-    "base": { "maxHp": 34, "atk": 6, "def": 6, "spd": 9, "mag": 15 },
-    "growth": { "maxHp": 4, "atk": 1, "def": 1, "spd": 1, "mag": 3 },
+    "base": { "maxHp": 34, "atk": 6, "def": 6, "spd": 9, "mag": 11 },
+    "growth": { "maxHp": 4, "atk": 1, "def": 1, "spd": 1, "mag": 2 },
     "secret": "firestorm"
   },
   "cleric": {

@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "test": "npm run test --workspaces --if-present",
-    "sim": "npm run sim -w @dice-bandits/engine",
+    "sim": "npm run sim -w @dice-bandits/engine --",
     "build": "npm run build --workspaces --if-present",
     "e2e": "npm run e2e -w @dice-bandits/client",
     "deploy": "npm run deploy -w @dice-bandits/client"
