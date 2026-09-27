@@ -1,0 +1,7 @@
+docs/concepts
+docs/superpowers
+package-lock.json
+apps/client/public
+dist
+.wrangler
+.superpowers
