@@ -116,6 +116,71 @@ describe('pixelize outputs', () => {
     }
   });
 
+  it('renders at least ten percent of volcano pixels as hot lava', async () => {
+    const { data, info } = await sharp(join(firstOut, 'tiles-volcano.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    let opaque = 0;
+    let hot = 0;
+    for (let index = 0; index < data.length; index += info.channels) {
+      if (data[index + 3] === 0) continue;
+      opaque++;
+      const [r, g, b] = [data[index], data[index + 1], data[index + 2]];
+      if (r > 180 && r > g + 60 && b < 80) hot++;
+    }
+    expect(hot / opaque).toBeGreaterThanOrEqual(0.1);
+  });
+
+  it('renders the skull with two separate dark eye sockets in its upper half', async () => {
+    const { data, info } = await sharp(join(firstOut, 'icons.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const originX = (5 % 4) * 16;
+    const originY = 1 * 16;
+    const dark = new Uint8Array(16 * 8);
+    for (let y = 0; y < 8; y++) {
+      for (let x = 0; x < 16; x++) {
+        const offset = ((originY + y) * info.width + originX + x) * info.channels;
+        if (data[offset + 3] === 0) continue;
+        if (data[offset] < 80 && data[offset + 1] < 80 && data[offset + 2] < 80) {
+          dark[y * 16 + x] = 1;
+        }
+      }
+    }
+    for (const y of [5, 6]) {
+      for (const x of [5, 6, 9, 10]) expect(dark[y * 16 + x]).toBe(1);
+      for (const x of [7, 8]) expect(dark[y * 16 + x]).toBe(0);
+    }
+    const componentSizes: number[] = [];
+    const visited = new Uint8Array(dark.length);
+    for (let start = 0; start < dark.length; start++) {
+      if (!dark[start] || visited[start]) continue;
+      let size = 0;
+      const queue = [start];
+      visited[start] = 1;
+      while (queue.length > 0) {
+        const pixel = queue.pop()!;
+        size++;
+        const x = pixel % 16;
+        const y = Math.floor(pixel / 16);
+        for (const next of [
+          ...(x > 0 ? [pixel - 1] : []),
+          ...(x < 15 ? [pixel + 1] : []),
+          ...(y > 0 ? [pixel - 16] : []),
+          ...(y < 7 ? [pixel + 16] : []),
+        ]) {
+          if (!dark[next] || visited[next]) continue;
+          visited[next] = 1;
+          queue.push(next);
+        }
+      }
+      componentSizes.push(size);
+    }
+    expect(componentSizes.filter((size) => size >= 4).length).toBeGreaterThanOrEqual(2);
+  });
+
   it('keeps every icon inset from its cell edges with at least 30 opaque pixels', async () => {
     const { data } = await sharp(join(firstOut, 'icons.png'))
       .ensureAlpha()

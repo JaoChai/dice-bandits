@@ -37,3 +37,10 @@
 - Added unconditional regressions for terrain color families, icon inset/opaque pixel counts, and a red-dominant heart. Pixelize suite passes 6/6; full verification passes: `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm test` (engine 113/113, pixelize 6/6).
 - Inspected 10× nearest-neighbor previews at `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/icons_x10.png` and `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/volcano_x10.png`. Icons read conventionally; the town, trap and sword are simplified but clear. Volcano reads as dark basalt with branching lava cracks and no blue water/ice.
 - Regenerated `apps/client/public/sprites/` and `tools/pixelize/contact-sheet.png` from the updated pipeline.
+
+## Fix: visual polish
+- Reworked the trap into opposing open steel jaws with bright teeth and a small central base; rebuilt the skull with a bone-white cranium, separated eye sockets, a triangular nose, and teeth; replaced the green hat with a purple bent-tip wizard hat and broad yellow brim.
+- Changed the volcano fissures to a four-layer ramp using existing palette colors only: charred brown edge (`#412b28`), orange (`#e5a150`), hot red (`#e84142`), and yellow core (`#fac42f`). Palette unchanged.
+- Added unconditional tests for the volcano hot-pixel ratio and separate skull sockets; regenerated sprites and 10× nearest-neighbor previews in the Hermes scratch directory.
+- Visual review: skull and purple wizard hat read clearly; trap reads as an open pincer with jaws/base, with teeth still simplified at 16×16; lava clearly reads as a branching molten fissure with a yellow core and red-orange band against dark rock.
+- Verification: `npm run typecheck && npm run lint && npm run format:check && npm test` passes; engine 113/113 tests and pixelize 8/8 tests passed.

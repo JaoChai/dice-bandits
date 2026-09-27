@@ -274,9 +274,10 @@ async function makeVolcanoTile(
     [24, 24],
     [28, 27],
   ];
-  for (const flow of [mainFlow, branchLeft, branchRight]) paintLine(flow, palette[3], 3);
-  for (const flow of [mainFlow, branchLeft, branchRight]) paintLine(flow, palette[26], 2);
-  for (const flow of [mainFlow, branchLeft, branchRight]) paintLine(flow, palette[25], 1);
+  for (const flow of [mainFlow, branchLeft, branchRight]) paintLine(flow, palette[9], 4);
+  for (const flow of [mainFlow, branchLeft, branchRight]) paintLine(flow, palette[26], 3);
+  for (const flow of [mainFlow, branchLeft, branchRight]) paintLine(flow, palette[27], 2);
+  for (const flow of [mainFlow, branchLeft, branchRight]) paintLine(flow, palette[30], 1);
   return sharp(pixels, { raw: { width, height, channels: 4 } })
     .png()
     .toBuffer();
