@@ -178,7 +178,7 @@
       "region": "volcano",
       "source": {
         "file": "../../docs/concepts/style_16bit.png",
-        "rect": { "left": 1285, "top": 890, "width": 32, "height": 32 }
+        "rect": { "left": 1192, "top": 840, "width": 32, "height": 32 }
       }
     }
   ]

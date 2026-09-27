@@ -213,6 +213,75 @@ async function processCrop(
     .toBuffer();
 }
 
+async function makeVolcanoTile(
+  width: number,
+  height: number,
+  palette: number[][],
+): Promise<Buffer> {
+  const pixels = Buffer.alloc(width * height * 4);
+  const basalt = palette[3];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4;
+      const ridge = (x * 7 + y * 11) % 29 === 0 || (x * 13 + y * 5) % 41 === 0;
+      const color = ridge ? palette[17] : basalt;
+      pixels[offset] = color[0];
+      pixels[offset + 1] = color[1];
+      pixels[offset + 2] = color[2];
+      pixels[offset + 3] = 255;
+    }
+  }
+  const paintLine = (points: Array<[number, number]>, color: number[], radius: number): void => {
+    for (let index = 1; index < points.length; index++) {
+      const [x0, y0] = points[index - 1];
+      const [x1, y1] = points[index];
+      const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+      for (let step = 0; step <= steps; step++) {
+        const x = Math.round(x0 + ((x1 - x0) * step) / Math.max(steps, 1));
+        const y = Math.round(y0 + ((y1 - y0) * step) / Math.max(steps, 1));
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            if (dx * dx + dy * dy > radius * radius + 1) continue;
+            if (x + dx < 0 || y + dy < 0 || x + dx >= width || y + dy >= height) continue;
+            const offset = ((y + dy) * width + x + dx) * 4;
+            pixels[offset] = color[0];
+            pixels[offset + 1] = color[1];
+            pixels[offset + 2] = color[2];
+            pixels[offset + 3] = 255;
+          }
+        }
+      }
+    }
+  };
+  const mainFlow: Array<[number, number]> = [
+    [17, 1],
+    [16, 6],
+    [18, 10],
+    [17, 15],
+    [19, 20],
+    [18, 26],
+    [20, 31],
+  ];
+  const branchLeft: Array<[number, number]> = [
+    [16, 10],
+    [11, 13],
+    [10, 18],
+    [7, 22],
+  ];
+  const branchRight: Array<[number, number]> = [
+    [18, 16],
+    [23, 19],
+    [24, 24],
+    [28, 27],
+  ];
+  for (const flow of [mainFlow, branchLeft, branchRight]) paintLine(flow, palette[3], 3);
+  for (const flow of [mainFlow, branchLeft, branchRight]) paintLine(flow, palette[26], 2);
+  for (const flow of [mainFlow, branchLeft, branchRight]) paintLine(flow, palette[25], 1);
+  return sharp(pixels, { raw: { width, height, channels: 4 } })
+    .png()
+    .toBuffer();
+}
+
 async function processIcon(icon: string, palette: number[][]): Promise<Buffer> {
   const matrixPath = join(toolDir, 'icons', `${icon}.txt`);
   const rows = (await readFile(matrixPath, 'utf8')).trimEnd().split(/\r?\n/);
@@ -348,9 +417,12 @@ export async function buildSprites({
   await mkdir(outDir, { recursive: true });
   const sprites = parsed.sprites;
   for (const sprite of sprites) {
-    const bytes = sprite.icon
-      ? await processIcon(sprite.icon, palette)
-      : await processCrop(sprite, configPath, palette);
+    const bytes =
+      sprite.region === 'volcano'
+        ? await makeVolcanoTile(sprite.width, sprite.height, palette)
+        : sprite.icon
+          ? await processIcon(sprite.icon, palette)
+          : await processCrop(sprite, configPath, palette);
     await writeFile(join(outDir, sprite.output), bytes);
   }
   await makeIconAtlas(parsed, outDir, palette);

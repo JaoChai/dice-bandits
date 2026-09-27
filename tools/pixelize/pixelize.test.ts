@@ -94,6 +94,73 @@ describe('pixelize outputs', () => {
     }
   });
 
+  it('keeps terrain tiles within their expected color families', async () => {
+    for (const [name, matches] of [
+      ['tiles-volcano.png', (r: number, g: number, b: number) => !(b > r + 30 && b > g + 30)],
+      ['tiles-meadow.png', (r: number, g: number, b: number) => g > r && g > b],
+      ['tiles-desert.png', (r: number, _g: number, b: number) => r > b],
+    ] as const) {
+      const { data, info } = await sharp(join(firstOut, name))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      let opaque = 0;
+      let matching = 0;
+      for (let index = 0; index < data.length; index += info.channels) {
+        if (data[index + 3] === 0) continue;
+        opaque++;
+        if (matches(data[index], data[index + 1], data[index + 2])) matching++;
+      }
+      expect(opaque).toBeGreaterThan(0);
+      expect(matching / opaque).toBeGreaterThan(name === 'tiles-volcano.png' ? 0.999 : 0.5);
+    }
+  });
+
+  it('keeps every icon inset from its cell edges with at least 30 opaque pixels', async () => {
+    const { data } = await sharp(join(firstOut, 'icons.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    for (let icon = 0; icon < config.icons.length; icon++) {
+      const originX = (icon % 4) * 16;
+      const originY = Math.floor(icon / 4) * 16;
+      let opaque = 0;
+      for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+          const offset = ((originY + y) * 64 + originX + x) * 4;
+          if (data[offset + 3] === 0) continue;
+          opaque++;
+          expect(x).toBeGreaterThan(0);
+          expect(x).toBeLessThan(15);
+          expect(y).toBeGreaterThan(0);
+          expect(y).toBeLessThan(15);
+        }
+      }
+      expect(opaque, config.icons[icon]).toBeGreaterThanOrEqual(30);
+    }
+  });
+
+  it('renders the heart with a majority of red-dominant non-outline pixels', async () => {
+    const { data } = await sharp(join(firstOut, 'icons.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    let colored = 0;
+    let red = 0;
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const offset = (y * 64 + 4 * 16 + x) * 4;
+        if (data[offset + 3] === 0) continue;
+        const [r, g, b] = [data[offset], data[offset + 1], data[offset + 2]];
+        if (r < 60 && g < 60 && b < 60) continue;
+        colored++;
+        if (r > g && r > b) red++;
+      }
+    }
+    expect(colored).toBeGreaterThan(0);
+    expect(red / colored).toBeGreaterThan(0.5);
+  });
+
   it('produces byte-identical outputs across repeated pipeline runs', async () => {
     for (const sprite of outputs) {
       const first = await readFile(join(firstOut, sprite.output));
