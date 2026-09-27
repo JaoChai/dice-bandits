@@ -12,9 +12,9 @@ export function legalActions(state: GameState, seat: number): Action[] {
     case 'chooseBranch':
       return state.phase.options.map((to) => ({ type: 'chooseBranch', to }));
     case 'duelOffer':
-      return state.phase.targets
-        .map((target) => ({ type: 'duel', target }) as Action)
-        .concat([{ type: 'duel', target: null }]);
+      // duel *initiation* (target !== null) arrives with Task 5's battle system;
+      // until then declining is the only executable answer
+      return [{ type: 'duel', target: null }];
     case 'endOfTurn':
       return [{ type: 'endTurn' }];
     default:
