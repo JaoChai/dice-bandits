@@ -1,0 +1,131 @@
+[
+  { "id": "dash", "kind": "field", "price": 80, "slot": null, "effect": { "bonusDice": 1 } },
+  { "id": "warp", "kind": "field", "price": 120, "slot": null, "effect": { "warpTo": "castle" } },
+  {
+    "id": "trapCard",
+    "kind": "field",
+    "price": 100,
+    "slot": null,
+    "effect": { "placeTrap": "currentSpace" }
+  },
+  {
+    "id": "smokeBomb",
+    "kind": "field",
+    "price": 130,
+    "slot": null,
+    "effect": { "skipNextFight": true }
+  },
+  { "id": "luckyCoin", "kind": "field", "price": 100, "slot": null, "effect": { "gold": 100 } },
+  {
+    "id": "mapScroll",
+    "kind": "field",
+    "price": 110,
+    "slot": null,
+    "effect": { "chooseRoll": [1, 6] }
+  },
+
+  { "id": "potion", "kind": "battle", "price": 80, "slot": null, "effect": { "healPct": 30 } },
+  { "id": "hiPotion", "kind": "battle", "price": 150, "slot": null, "effect": { "healPct": 60 } },
+  {
+    "id": "ironSkin",
+    "kind": "battle",
+    "price": 120,
+    "slot": null,
+    "effect": { "ironSkin": true }
+  },
+  {
+    "id": "poisonBlade",
+    "kind": "battle",
+    "price": 160,
+    "slot": null,
+    "effect": { "poisonPct": 10 }
+  },
+  { "id": "escapeRope", "kind": "battle", "price": 70, "slot": null, "effect": { "escape": true } },
+  { "id": "rage", "kind": "battle", "price": 140, "slot": null, "effect": { "attackMult": 1.3 } },
+
+  {
+    "id": "bronzeSword",
+    "kind": "equipment",
+    "price": 150,
+    "slot": "weapon",
+    "effect": { "atk": 2 }
+  },
+  {
+    "id": "steelSword",
+    "kind": "equipment",
+    "price": 400,
+    "slot": "weapon",
+    "effect": { "atk": 4 }
+  },
+  {
+    "id": "flameSword",
+    "kind": "equipment",
+    "price": 900,
+    "slot": "weapon",
+    "effect": { "atk": 7 }
+  },
+  {
+    "id": "bronzeBow",
+    "kind": "equipment",
+    "price": 150,
+    "slot": "weapon",
+    "effect": { "spd": 2 }
+  },
+  { "id": "steelBow", "kind": "equipment", "price": 400, "slot": "weapon", "effect": { "spd": 4 } },
+  { "id": "stormBow", "kind": "equipment", "price": 900, "slot": "weapon", "effect": { "spd": 7 } },
+  { "id": "oakWand", "kind": "equipment", "price": 150, "slot": "weapon", "effect": { "mag": 2 } },
+  {
+    "id": "crystalWand",
+    "kind": "equipment",
+    "price": 400,
+    "slot": "weapon",
+    "effect": { "mag": 4 }
+  },
+  {
+    "id": "arcaneStaff",
+    "kind": "equipment",
+    "price": 900,
+    "slot": "weapon",
+    "effect": { "mag": 7 }
+  },
+
+  {
+    "id": "leatherArmor",
+    "kind": "equipment",
+    "price": 150,
+    "slot": "armor",
+    "effect": { "def": 2 }
+  },
+  { "id": "chainmail", "kind": "equipment", "price": 400, "slot": "armor", "effect": { "def": 4 } },
+  {
+    "id": "plateArmor",
+    "kind": "equipment",
+    "price": 900,
+    "slot": "armor",
+    "effect": { "def": 7 }
+  },
+  { "id": "bracers", "kind": "equipment", "price": 150, "slot": "armor", "effect": { "spd": 2 } },
+  {
+    "id": "swiftGreaves",
+    "kind": "equipment",
+    "price": 400,
+    "slot": "armor",
+    "effect": { "spd": 4 }
+  },
+  { "id": "windBoots", "kind": "equipment", "price": 900, "slot": "armor", "effect": { "spd": 7 } },
+  { "id": "silkRobe", "kind": "equipment", "price": 150, "slot": "armor", "effect": { "mag": 2 } },
+  {
+    "id": "mysticRobe",
+    "kind": "equipment",
+    "price": 400,
+    "slot": "armor",
+    "effect": { "mag": 4 }
+  },
+  {
+    "id": "archmageRobe",
+    "kind": "equipment",
+    "price": 900,
+    "slot": "armor",
+    "effect": { "mag": 7 }
+  }
+]

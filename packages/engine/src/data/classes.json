@@ -1,0 +1,22 @@
+{
+  "knight": {
+    "base": { "maxHp": 48, "atk": 12, "def": 12, "spd": 6, "mag": 4 },
+    "growth": { "maxHp": 6, "atk": 2, "def": 2, "spd": 1, "mag": 0 },
+    "secret": "bulwark"
+  },
+  "thief": {
+    "base": { "maxHp": 38, "atk": 11, "def": 7, "spd": 13, "mag": 5 },
+    "growth": { "maxHp": 4, "atk": 2, "def": 1, "spd": 2, "mag": 1 },
+    "secret": "pickpocket"
+  },
+  "mage": {
+    "base": { "maxHp": 34, "atk": 6, "def": 6, "spd": 9, "mag": 15 },
+    "growth": { "maxHp": 4, "atk": 1, "def": 1, "spd": 1, "mag": 3 },
+    "secret": "firestorm"
+  },
+  "cleric": {
+    "base": { "maxHp": 42, "atk": 9, "def": 9, "spd": 8, "mag": 10 },
+    "growth": { "maxHp": 5, "atk": 1, "def": 2, "spd": 1, "mag": 2 },
+    "secret": "sanctuary"
+  }
+}

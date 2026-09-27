@@ -1,0 +1,44 @@
+{
+  "goldSlime": {
+    "base": { "maxHp": 30, "atk": 8, "def": 6, "spd": 4, "mag": 2 },
+    "growth": { "maxHp": 5, "atk": 1, "def": 1, "spd": 1, "mag": 0 },
+    "xp": 20,
+    "gold": 40,
+    "regions": ["meadow"]
+  },
+  "mushroomBandit": {
+    "base": { "maxHp": 34, "atk": 9, "def": 5, "spd": 7, "mag": 3 },
+    "growth": { "maxHp": 5, "atk": 2, "def": 1, "spd": 1, "mag": 1 },
+    "xp": 25,
+    "gold": 60,
+    "regions": ["meadow", "desert"]
+  },
+  "lanternGhost": {
+    "base": { "maxHp": 26, "atk": 8, "def": 5, "spd": 9, "mag": 8 },
+    "growth": { "maxHp": 4, "atk": 1, "def": 1, "spd": 1, "mag": 2 },
+    "xp": 30,
+    "gold": 50,
+    "regions": ["desert", "snow"]
+  },
+  "mimic": {
+    "base": { "maxHp": 30, "atk": 10, "def": 6, "spd": 6, "mag": 4 },
+    "growth": { "maxHp": 5, "atk": 2, "def": 1, "spd": 1, "mag": 1 },
+    "xp": 35,
+    "gold": 150,
+    "regions": ["desert"]
+  },
+  "rockGolem": {
+    "base": { "maxHp": 38, "atk": 9, "def": 9, "spd": 3, "mag": 2 },
+    "growth": { "maxHp": 6, "atk": 1, "def": 2, "spd": 0, "mag": 0 },
+    "xp": 45,
+    "gold": 90,
+    "regions": ["snow", "volcano"]
+  },
+  "shadowImp": {
+    "base": { "maxHp": 26, "atk": 11, "def": 5, "spd": 10, "mag": 6 },
+    "growth": { "maxHp": 4, "atk": 2, "def": 1, "spd": 2, "mag": 1 },
+    "xp": 60,
+    "gold": 120,
+    "regions": ["volcano"]
+  }
+}
