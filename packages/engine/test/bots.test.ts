@@ -50,13 +50,63 @@ describe('rule-based bots', () => {
     expect(samples).toBe(200);
   });
 
-  it('personalities choose differently in a crafted duel offer', () => {
-    const state = createGame(config('bot-personality', 3));
+  it('greedy chooses rob over a low-value town seize while vengeful chooses seize', () => {
+    const state = createGame(config('bot-greedy-reward', 2));
+    state.phase = { kind: 'pvpReward', winner: 0, loser: 1 };
+    state.towns[0]!.owner = 1;
+    state.towns[0]!.value = 1;
+    const actions = legalActions(state, 0);
+    const greedy = actions.find(
+      (action) => action.type === 'pvpReward' && action.reward === 'rob',
+    )!;
+    const seize = actions.find(
+      (action) => action.type === 'pvpReward' && action.reward === 'seize',
+    )!;
+
+    state.players[0]!.personality = 'greedy';
+    expect(chooseAction(state, 0)).toEqual(greedy);
+    state.players[0]!.personality = 'vengeful';
+    expect(chooseAction(state, 0)).toEqual(seize);
+  });
+
+  it('vengeful duels its top-grudge target while greedy chooses the other target', () => {
+    const state = createGame(config('bot-vengeful-target', 3));
+    state.phase = { kind: 'duelOffer', remaining: 2, targets: [1, 2] };
+    state.players[0]!.level = 5;
+    state.players[0]!.grudges[2] = 10;
+    state.players[1]!.level = 1;
+    state.players[2]!.level = 1;
+    state.players[1]!.gold = 100;
+    state.players[2]!.gold = 100;
+
+    state.players[0]!.personality = 'vengeful';
+    expect(chooseAction(state, 0)).toEqual({ type: 'duel', target: 2 });
+    state.players[0]!.personality = 'greedy';
+    expect(chooseAction(state, 0)).toEqual({ type: 'duel', target: 1 });
+  });
+
+  it('cowardly declines a dangerous duel that greedy accepts', () => {
+    const state = createGame(config('bot-cowardly-duel', 2));
     state.phase = { kind: 'duelOffer', remaining: 2, targets: [1] };
-    const decisions = personalities.map((personality) => {
-      state.players[0]!.personality = personality;
-      return chooseAction(state, 0);
-    });
-    expect(decisions.some((action) => !equalAction(action, decisions[0]!))).toBe(true);
+    state.players[1]!.level = state.players[0]!.level + 1;
+
+    state.players[0]!.personality = 'cowardly';
+    expect(chooseAction(state, 0)).toEqual({ type: 'duel', target: null });
+    state.players[0]!.personality = 'greedy';
+    expect(chooseAction(state, 0)).toEqual({ type: 'duel', target: 1 });
+  });
+
+  it('greedy avoids danger when rich but not while poor', () => {
+    const state = createGame(config('bot-greedy-danger', 2));
+    const [safe, danger] = state.board.spaces.slice(1, 3);
+    safe!.kind = 'event';
+    danger!.kind = 'monster';
+    state.phase = { kind: 'chooseBranch', remaining: 1, options: [danger!.id, safe!.id] };
+    state.players[0]!.personality = 'greedy';
+    state.players[0]!.gold = 600;
+    expect(chooseAction(state, 0)).toEqual({ type: 'chooseBranch', to: safe!.id });
+    state.players[0]!.gold = 0;
+    state.players[1]!.gold = 1_000;
+    expect(chooseAction(state, 0)).toEqual({ type: 'chooseBranch', to: danger!.id });
   });
 });

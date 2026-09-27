@@ -1,4 +1,5 @@
 import { legalActions } from '../legal';
+import { BALANCE } from '../data';
 import { leader, netWorth } from '../rules/pvp';
 import { nextFloat, seedRng } from '../rng';
 import type { Action, GameState, Personality } from '../types';
@@ -42,7 +43,9 @@ function scoreAction(
     const destination = state.board.spaces[action.to]!;
     score += destination.kind === 'chest' ? (weights.chest ?? 0) : 0;
     score += destination.kind === 'town' ? (weights.town ?? 0) : 0;
-    score += destination.kind === 'monster' ? (weights.strongMonster ?? 0) : 0;
+    const greedyIsRich =
+      personality !== 'greedy' || leader(state) === seat || player.gold >= 2 * BALANCE.startGold;
+    score += destination.kind === 'monster' && greedyIsRich ? (weights.strongMonster ?? 0) : 0;
   }
   if (action.type === 'duel' && action.target !== null) {
     const target = state.players[action.target]!;
