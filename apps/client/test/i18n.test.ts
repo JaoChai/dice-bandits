@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createGame, data, legalActions, step } from '@dice-bandits/engine';
-import { getLang, setLang, t } from '../src/i18n';
+import { getLang, onLangChange, setLang, t } from '../src/i18n';
 import th from '../src/i18n/th.json';
 import en from '../src/i18n/en.json';
 
@@ -43,6 +43,20 @@ describe('i18n', () => {
     expect(t('title.welcome', { name: 'Mali' })).toContain('Mali');
     setLang('th');
     expect(getLang()).toBe('th');
+  });
+
+  it('updates open tabs when another tab changes the persisted language', () => {
+    setLang('en');
+    const listener = vi.fn();
+    const unsubscribe = onLangChange(listener);
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: 'lang', newValue: 'th', storageArea: localStorage }),
+    );
+    expect(getLang()).toBe('th');
+    expect(document.documentElement.lang).toBe('th');
+    expect(t('title.newGame')).toBe('เริ่มเกมใหม่');
+    expect(listener).toHaveBeenCalledWith('th');
+    unsubscribe();
   });
 
   it('falls back to the default language and keeps language changes in memory when storage throws', async () => {

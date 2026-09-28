@@ -2,7 +2,7 @@ import type { ClientMsg, ServerMsg } from '@dice-bandits/room';
 import type { RoomSession } from './session';
 import { clearSession, loadSession, saveSession } from './session';
 import { RoomSocket, type RoomSocketOptions, type RoomSocketHandlers } from './socket';
-import { getLang, setLang, t } from '../i18n';
+import { getLang, onLangChange, setLang, t } from '../i18n';
 
 export interface OnlineSocket {
   send(message: ClientMsg): void;
@@ -43,14 +43,21 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
   let code = (options.initialCode ?? '').toUpperCase();
   let name = '';
   let seat = 0;
+  let unsubscribeLanguage = (): void => undefined;
+  const bindCurrentLanguage = (element: HTMLElement, rerender: () => void): void => {
+    unsubscribeLanguage();
+    unsubscribeLanguage = onLangChange(rerender);
+    bindLanguage(element, rerender);
+  };
   const showTitle = (): void => {
+    unsubscribeLanguage();
     socket?.close();
     socket = null;
     root.dispatchEvent(new CustomEvent('dice-bandits:home'));
   };
   const errorView = (): void => {
     root.innerHTML = `<main class="screen online-screen" data-testid="screen-online-error"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><p class="error" role="alert" data-testid="online-error">${escapeHtml(t(errorKey || 'online.error.server'))}</p></main>`;
-    bindLanguage(root, errorView);
+    bindCurrentLanguage(root, errorView);
     root.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', showTitle);
   };
   const renderClaim = (): void => {
@@ -58,7 +65,7 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
       (item) => item.kind === 'human' && item.controller === 'botTakeover',
     );
     root.innerHTML = `<main class="screen online-screen" data-testid="screen-claim"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><h1 class="pixel">${t('online.claim.title')}</h1><p>${t('online.claim.instructions')}</p><div class="online-list">${candidates.map((item) => `<button class="secondary" data-testid="claim-seat-${item.seat}" data-seat="${item.seat}">${escapeHtml(item.name)} · ${t(`class.${item.classId}`)}</button>`).join('')}</div>${candidates.length ? '' : `<p data-testid="online-claim-none">${t('online.claim.none')}</p>`}</main>`;
-    bindLanguage(root, renderClaim);
+    bindCurrentLanguage(root, renderClaim);
     root.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', showTitle);
     root.querySelectorAll<HTMLButtonElement>('[data-seat]').forEach((button) =>
       button.addEventListener('click', () => {
@@ -68,9 +75,14 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
   };
   const renderLobby = (): void => {
     if (!lobby || !session) return;
+    const focusedClass = document.activeElement
+      ?.getAttribute('data-testid')
+      ?.startsWith('lobby-class-')
+      ? document.activeElement.getAttribute('data-testid')
+      : null;
     const own = lobby.seats.find((item) => item.seat === session!.seat);
     root.innerHTML = `<main class="screen online-screen" data-testid="screen-lobby"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><h1 class="pixel">${t('online.lobby.title')}</h1><div class="room-code"><strong>${escapeHtml(lobby.code)}</strong>&nbsp;&nbsp;<button class="secondary" data-testid="online-copy-link">${t('online.lobby.copyLink')}</button></div><ul class="online-list">${lobby.seats.map((item) => `<li data-testid="lobby-seat-${item.seat}"><strong>${escapeHtml(item.name)}</strong><span>${t(`class.${item.classId}`)}</span>${item.seat === lobby!.host ? `<span class="host-badge">${t('online.lobby.host')}</span>` : ''}</li>`).join('')}</ul><div class="class-picker" aria-label="${t('online.lobby.chooseClass')}">${classes.map((classId) => `<button type="button" class="secondary ${own?.classId === classId ? 'selected' : ''}" data-testid="lobby-class-${classId}" aria-pressed="${own?.classId === classId}">${t(`class.${classId}`)}</button>`).join('')}</div>${lobby.host === session.seat ? `<button class="primary pixel" data-testid="lobby-start">${t('online.lobby.start')}</button>` : ''}</main>`;
-    bindLanguage(root, renderLobby);
+    bindCurrentLanguage(root, renderLobby);
     root.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', showTitle);
     root
       .querySelector<HTMLButtonElement>('[data-testid="online-copy-link"]')
@@ -85,6 +97,7 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
     root
       .querySelector('[data-testid="lobby-start"]')
       ?.addEventListener('click', () => socket?.send({ type: 'start' }));
+    if (focusedClass) root.querySelector<HTMLElement>(`[data-testid="${focusedClass}"]`)?.focus();
   };
   const render = (): void => {
     if (errorKey) return errorView();
@@ -164,14 +177,14 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
   function renderForm(): void {
     if (mode === 'claim') {
       mount.innerHTML = `<main class="screen online-screen" data-testid="screen-claim"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><h1 class="pixel">${t('online.claim.title')}</h1><p>${t('online.claim.connecting')}</p></main>`;
-      bindLanguage(mount, render);
+      bindCurrentLanguage(mount, render);
       mount
         .querySelector('[data-testid="online-back-title"]')
         ?.addEventListener('click', showTitle);
       return;
     }
     mount.innerHTML = `<main class="screen online-screen" data-testid="screen-online"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><h1 class="pixel">${t('online.title')}</h1><form data-testid="online-form"><label>${t('online.name')}<input data-testid="online-name" name="name" maxlength="16" autocomplete="name" required value="${escapeHtml(name)}"></label>${mode === 'join' ? `<label>${t('online.code')}<input data-testid="online-code" name="code" maxlength="5" autocomplete="off" required value="${escapeHtml(code)}"></label>` : ''}<p class="error" role="alert" data-testid="online-error">${errorKey ? escapeHtml(t(errorKey)) : ''}</p><button class="primary pixel" data-testid="${mode === 'join' ? 'online-join-submit' : 'online-create-submit'}" type="submit">${mode === 'join' ? t('online.join') : t('online.create')}</button></form></main>`;
-    bindLanguage(mount, render);
+    bindCurrentLanguage(mount, render);
     mount.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', showTitle);
     const codeInput = mount.querySelector<HTMLInputElement>('[data-testid="online-code"]');
     codeInput?.addEventListener('input', () => {

@@ -29,16 +29,25 @@ export function getLang(): Language {
   return language;
 }
 
-export function setLang(next: Language): void {
+function applyLanguage(next: Language): void {
   language = next;
   document.documentElement.lang = next;
+  for (const listener of [...listeners]) listener(next);
+}
+
+export function setLang(next: Language): void {
+  applyLanguage(next);
   try {
     localStorage.setItem(storageKey, next);
   } catch {
     // Keep the selected language in memory even when persistence is unavailable.
   }
-  for (const listener of listeners) listener(next);
 }
+
+window.addEventListener('storage', (event: StorageEvent) => {
+  if (event.key !== storageKey || (event.newValue !== 'th' && event.newValue !== 'en')) return;
+  applyLanguage(event.newValue);
+});
 
 export function onLangChange(listener: LanguageListener): () => void {
   listeners.add(listener);

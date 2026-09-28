@@ -138,8 +138,21 @@ describe('online screens', () => {
     expect(document.querySelector('[data-testid="screen-lobby"]')?.textContent).toContain('Ada');
     expect(document.querySelector('[data-testid="screen-lobby"]')?.textContent).toContain('Host');
     expect(document.querySelector('[data-testid="lobby-start"]')).toBeNull();
-    document.querySelector<HTMLButtonElement>('[data-testid="lobby-class-thief"]')!.click();
+    const thiefClass = document.querySelector<HTMLButtonElement>(
+      '[data-testid="lobby-class-thief"]',
+    )!;
+    thiefClass.focus();
+    thiefClass.click();
     expect(socket.sent).toContainEqual({ type: 'setClass', classId: 'thief' });
+    socket.receive({
+      type: 'lobby',
+      code: 'ABCDE',
+      host: 0,
+      seats: [seat(), seat({ seat: 1, name: 'Lin', classId: 'thief' })],
+    });
+    expect(document.activeElement).toBe(
+      document.querySelector('[data-testid="lobby-class-thief"]'),
+    );
   });
 
   it('lets the host start and hands the first view to the online-game hook', () => {
