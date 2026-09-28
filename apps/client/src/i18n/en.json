@@ -218,5 +218,9 @@
   "online.error.invalidRequest": "That request could not be completed.",
   "online.error.invalidSeat": "That seat is not available.",
   "online.error.notHost": "Only the host can start the game.",
-  "online.error.notAvailable": "That seat is no longer available."
+  "online.error.notAvailable": "That seat is no longer available.",
+  "online.reconnecting": "Reconnecting…",
+  "online.takeover": "A bot is playing your seat.",
+  "online.reclaim": "Take my seat back",
+  "online.opponentPicked": "Opponent has picked"
 }
