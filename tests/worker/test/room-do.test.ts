@@ -3,19 +3,25 @@ import { describe, expect, it } from 'vitest';
 
 function nextMessage(socket: WebSocket, label = 'unlabeled'): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`WebSocket message timed out: ${label}`)),
-      1_000,
-    );
-    socket.addEventListener(
-      'message',
-      (event) => {
-        clearTimeout(timer);
-        resolve(JSON.parse(event.data as string));
-      },
-      { once: true },
-    );
-    socket.addEventListener('error', reject, { once: true });
+    const cleanup = () => {
+      clearTimeout(timer);
+      socket.removeEventListener('message', onMessage);
+      socket.removeEventListener('error', onError);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`WebSocket message timed out: ${label}`));
+    }, 1_000);
+    const onMessage = (event: MessageEvent) => {
+      cleanup();
+      resolve(JSON.parse(event.data as string));
+    };
+    const onError = (event: Event) => {
+      cleanup();
+      reject(event);
+    };
+    socket.addEventListener('message', onMessage);
+    socket.addEventListener('error', onError);
   });
 }
 
@@ -199,6 +205,122 @@ describe('Room Durable Object and Worker routes', () => {
       ]),
     });
     host.close();
+  });
+
+  it('keeps a reconnected seat alive when the older socket closes late', async () => {
+    const created = await createRoom('Reconnect');
+    const stub = env.ROOM.getByName(created.body.code);
+    const olderResponse = await connect(created.body.code, created.body.token);
+    const older = olderResponse.webSocket!;
+    older.accept();
+    await nextMessage(older, 'older welcome');
+    await nextMessage(older, 'older lobby');
+
+    const olderClosed = new Promise<number>((resolve) =>
+      older.addEventListener('close', (event) => resolve(event.code), { once: true }),
+    );
+    const newerResponse = await connect(created.body.code, created.body.token);
+    const newer = newerResponse.webSocket!;
+    newer.accept();
+    await nextMessage(newer, 'newer welcome');
+    await nextMessage(newer, 'newer lobby');
+    expect(await olderClosed).toBe(4000);
+
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    await runDurableObjectAlarm(stub);
+    expect(newer.readyState).toBe(WebSocket.OPEN);
+    const visitorResponse = await connect(created.body.code);
+    const visitor = visitorResponse.webSocket!;
+    visitor.accept();
+    expect(await nextMessage(visitor, 'room still exists after stale close')).toMatchObject({
+      type: 'lobby',
+      seats: expect.arrayContaining([expect.objectContaining({ seat: 0, connected: true })]),
+    });
+    visitor.close();
+    newer.close();
+  });
+
+  it('closes the previous seat socket when a newer socket attaches', async () => {
+    const created = await createRoom('OneSocket');
+    const olderResponse = await connect(created.body.code, created.body.token);
+    const older = olderResponse.webSocket!;
+    older.accept();
+    await nextMessage(older, 'older socket welcome');
+    await nextMessage(older, 'older socket lobby');
+
+    const olderClosed = new Promise<number>((resolve) =>
+      older.addEventListener('close', (event) => resolve(event.code), { once: true }),
+    );
+    const newerResponse = await connect(created.body.code, created.body.token);
+    const newer = newerResponse.webSocket!;
+    newer.accept();
+    expect(await nextMessage(newer, 'newer socket welcome')).toMatchObject({
+      type: 'welcome',
+      seat: 0,
+    });
+    expect(await nextMessage(newer, 'newer socket lobby')).toMatchObject({ type: 'lobby' });
+    expect(await olderClosed).toBe(4000);
+    newer.close();
+  });
+
+  it('closes an open seat socket when a visitor claims its bot-taken-over seat', async () => {
+    const created = await createRoom('Claim');
+    const stub = env.ROOM.getByName(created.body.code);
+    const hostResponse = await connect(created.body.code, created.body.token);
+    const host = hostResponse.webSocket!;
+    host.accept();
+    await nextMessage(host, 'claim host welcome');
+    await nextMessage(host, 'claim host lobby');
+    const started = await send(host, { type: 'start' });
+    if (started.type !== 'view') await nextMessage(host, 'claim game start view');
+
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    await runDurableObjectAlarm(stub);
+    let hostViewCount = 0;
+
+    const visitorResponse = await connect(created.body.code);
+    const visitor = visitorResponse.webSocket!;
+    visitor.accept();
+    hostViewCount = 0;
+    const onHostMessage = () => {
+      hostViewCount++;
+    };
+    host.addEventListener('message', onHostMessage);
+    const hostClosed = new Promise<number>((resolve) =>
+      host.addEventListener('close', (event) => resolve(event.code), { once: true }),
+    );
+    expect(await send(visitor, { type: 'claim', seat: 0 })).toMatchObject({
+      type: 'welcome',
+      seat: 0,
+      token: expect.any(String),
+    });
+    expect(await nextMessage(visitor, 'claimed seat view')).toMatchObject({ type: 'view', you: 0 });
+    expect(await hostClosed).toBe(4000);
+    host.removeEventListener('message', onHostMessage);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(hostViewCount).toBe(0);
+    visitor.close();
+  });
+
+  it('disconnects a seat when its only socket closes', async () => {
+    const created = await createRoom('Disconnect');
+    const hostResponse = await connect(created.body.code, created.body.token);
+    const host = hostResponse.webSocket!;
+    host.accept();
+    await nextMessage(host, 'disconnect host welcome');
+    await nextMessage(host, 'disconnect host lobby');
+
+    const visitorResponse = await connect(created.body.code);
+    const visitor = visitorResponse.webSocket!;
+    visitor.accept();
+    await nextMessage(visitor, 'disconnect visitor initial lobby');
+    const disconnectedLobby = nextMessage(visitor, 'single socket disconnect');
+    host.close();
+    expect(await disconnectedLobby).toMatchObject({
+      type: 'lobby',
+      seats: expect.arrayContaining([expect.objectContaining({ seat: 0, connected: false })]),
+    });
+    visitor.close();
   });
 
   it('expires the stored room when the TTL alarm fires', async () => {

@@ -88,6 +88,20 @@ export class Room {
     else await this.ctx.storage.setAlarm(result.nextAlarmAt);
   }
 
+  private attachSeat(socket: HibernatableSocket, seat: number): void {
+    for (const other of this.ctx.getWebSockets()) {
+      if (other === socket || other.readyState !== 1 || this.attachment(other).seat !== seat)
+        continue;
+      const attachment = this.attachment(other);
+      attachment.seat = null;
+      other.serializeAttachment(attachment);
+      other.close(4000, 'Seat opened elsewhere');
+    }
+    const attachment = this.attachment(socket);
+    attachment.seat = seat;
+    socket.serializeAttachment(attachment);
+  }
+
   private async dispatch(
     result: RoomStepResult,
     issuedTokens = new Map<string, string>(),
@@ -104,10 +118,13 @@ export class Room {
         );
       }
       for (const socket of targets) {
-        const attachment = this.attachment(socket as HibernatableSocket);
-        if (output.msg.type === 'welcome') attachment.seat = output.msg.seat;
-        socket.serializeAttachment(attachment);
-        const token = issuedTokens.get(attachment.conn);
+        if (socket.readyState !== 1) continue;
+        const hibernatable = socket as HibernatableSocket;
+        const attachment = this.attachment(hibernatable);
+        if (output.msg.type === 'welcome') this.attachSeat(hibernatable, output.msg.seat);
+        else socket.serializeAttachment(attachment);
+        const currentAttachment = this.attachment(hibernatable);
+        const token = issuedTokens.get(currentAttachment.conn);
         const message =
           output.msg.type === 'welcome' && token !== undefined
             ? { ...output.msg, token }
@@ -223,6 +240,18 @@ export class Room {
     const room = await this.load();
     if (room === null) return;
     const attachment = this.attachment(socket as HibernatableSocket);
+    if (
+      attachment.seat === null ||
+      this.ctx
+        .getWebSockets()
+        .some(
+          (other) =>
+            other !== socket &&
+            other.readyState === 1 &&
+            this.attachment(other).seat === attachment.seat,
+        )
+    )
+      return;
     await this.dispatch(
       roomStep(
         room,
