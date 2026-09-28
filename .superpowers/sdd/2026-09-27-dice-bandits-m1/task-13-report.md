@@ -64,4 +64,4 @@ Command: `npm run typecheck && npm run lint && npm run format:check && npm test 
 - Production build passed; existing Vite bundle-size warning (>500 kB) remains.
 - E2E: 7 passed, 1 skipped (desktop-only mobile rotation journey).
 - Port 4173 was free after E2E. `git diff --check` passed.
-- Base SHA: `526eb93`. Fix commit SHA: to be recorded after the required commit.
+- Base SHA: `526eb93`. Fix implementation commit SHA: `4876387b697c8ba97390222c9225640560a5612e`.
