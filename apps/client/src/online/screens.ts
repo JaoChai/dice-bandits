@@ -119,8 +119,11 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
       }
     } else if (message.type === 'lobby') {
       if (!session) {
-        mode = 'join';
-        renderForm();
+        // The invite form is already on screen; re-rendering would wipe what the visitor typed.
+        if (mode !== 'join') {
+          mode = 'join';
+          renderForm();
+        }
         return;
       }
       lobby = message;

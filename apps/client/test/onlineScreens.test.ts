@@ -118,6 +118,26 @@ describe('online screens', () => {
     expect(document.querySelector('[data-testid="online-form"]')).not.toBeNull();
   });
 
+  it('keeps a typed name on the invite form when lobby updates arrive', () => {
+    showOnlineScreens({
+      fetcher: vi.fn(),
+      socketFactory,
+      onStartGame: vi.fn(),
+      initialCode: 'ABCDE',
+    });
+    document.querySelector<HTMLInputElement>('[data-testid="online-name"]')!.value = 'Lin';
+    socket.receive({ type: 'lobby', code: 'ABCDE', host: 0, seats: [seat()] });
+    socket.receive({
+      type: 'lobby',
+      code: 'ABCDE',
+      host: 0,
+      seats: [seat(), seat({ seat: 1, name: 'Bo' })],
+    });
+    expect(document.querySelector<HTMLInputElement>('[data-testid="online-name"]')!.value).toBe(
+      'Lin',
+    );
+  });
+
   it('renders lobby seats, lets a player choose class and only lets the host start', () => {
     showOnlineScreens({
       fetcher: vi.fn(),
