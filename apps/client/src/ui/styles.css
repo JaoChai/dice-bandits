@@ -498,8 +498,20 @@ h1 {
   gap: 4px;
 }
 .results-header button {
+  min-width: 38px;
   min-height: 30px;
+  border: 1px solid #ffe1a0;
+  border-radius: 6px;
   padding: 4px 8px;
+  background: #e1a54f;
+  color: #241a2d;
+  font-weight: 700;
+  line-height: 1;
+}
+.results-header button[aria-pressed='true'] {
+  background: #fff0c2;
+  border-color: #fff4dc;
+  color: #171324;
 }
 .results-ranking {
   display: grid;

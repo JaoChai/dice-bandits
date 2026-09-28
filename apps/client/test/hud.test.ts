@@ -1,4 +1,10 @@
-import { createGame, type GameConfig } from '@dice-bandits/engine';
+import {
+  createGame,
+  legalActions,
+  step,
+  type GameConfig,
+  type GameState,
+} from '@dice-bandits/engine';
 import { describe, expect, it } from 'vitest';
 import { setLang, t } from '../src/i18n';
 import { renderHud } from '../src/ui/hud';
@@ -12,7 +18,51 @@ const config: GameConfig = {
   ],
 };
 
+function pvpBattleWithSeatZeroPicking(): GameState {
+  let state = createGame({
+    seed: 'hud-pvp-seat-zero',
+    rounds: 12,
+    seats: [0, 1].map((seat) => ({
+      name: `Human ${seat}`,
+      classId: seat === 0 ? 'knight' : 'thief',
+      control: 'human' as const,
+      personality: null,
+    })),
+  });
+  state.phase = { kind: 'duelOffer', remaining: 1, targets: [1] };
+  state.turnSeat = 0;
+  state = step(state, { type: 'duel', target: 1 }).state;
+  if (state.phase.kind !== 'battle') throw new Error('expected PvP battle');
+
+  const firstPicker = state.players.find((player) =>
+    legalActions(state, player.seat).some((action) => action.type === 'battlePick'),
+  );
+  if (!firstPicker) throw new Error('expected first PvP picker');
+  const firstPick = legalActions(state, firstPicker.seat).find(
+    (action) => action.type === 'battlePick',
+  );
+  if (!firstPick) throw new Error('expected legal battle pick');
+  state = step(state, firstPick).state;
+  const nextPicker = state.players.find((player) =>
+    legalActions(state, player.seat).some((action) => action.type === 'battlePick'),
+  );
+  if (nextPicker?.seat !== 0) throw new Error('expected seat 0 to pick second');
+  return state;
+}
+
 describe('renderHud', () => {
+  it('shows the pass screen and hides picks when seat 0 is the next human PvP picker', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = pvpBattleWithSeatZeroPicking();
+
+    renderHud(root, state, () => undefined);
+
+    expect(root.querySelector('[data-testid="pass-ready"]')).not.toBeNull();
+    expect(root.querySelectorAll('[data-testid^="pick-"]')).toHaveLength(0);
+    root.remove();
+  });
+
   it('localizes the compact level label in Thai', () => {
     const root = document.createElement('div');
     document.body.append(root);
