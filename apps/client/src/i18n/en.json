@@ -4,6 +4,8 @@
   "title.newGame": "New game",
   "title.continue": "Continue",
   "title.language": "Language",
+  "lang.th": "TH",
+  "lang.en": "EN",
   "title.gameName": "DICE BANDITS",
   "setup.defaultName": "Player {n}",
   "setup.title": "Build your crew",

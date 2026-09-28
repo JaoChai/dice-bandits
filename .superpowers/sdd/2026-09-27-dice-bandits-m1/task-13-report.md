@@ -39,3 +39,29 @@ Command: `npm run typecheck && npm run lint && npm run format:check && npm test 
 - `playwright-report/` and `test-results/` are ignored and were not committed.
 - Port 4173 was free after the E2E run.
 - No push and no `gh run watch`; remote CI remains unverified as required by the override.
+
+## Fix round 1
+
+### Findings addressed
+
+- `apps/client/src/ui/hud.ts:7-9,58-73`: language click handling is delegated once from the persistent `.game-shell`; a WeakMap updates the latest state/dispatch context on each render. This avoids listener accumulation while preserving `.game-shell` and `#phaser-board` across HUD updates.
+- `apps/client/src/ui/hud.ts:43`, `apps/client/src/ui/screens.ts:22`, `apps/client/src/ui/results.ts:39`: replaced hard-coded language toggle labels with `t('lang.th')` and `t('lang.en')`.
+- `apps/client/src/i18n/en.json:7-8` and `apps/client/src/i18n/th.json:7-8`: added both translation keys (values `TH` and `EN`).
+- `apps/client/test/hud.test.ts:69-115`: added regressions for one handler after five renders, use of the latest rendered game state, and translated toggle labels.
+
+### RED/GREEN
+
+- RED before the fix: repeated-render test failed because one click called `setAttribute` 5 times instead of once; label test failed because the visible `TH` label resolved to the missing-key fallback `lang.th`. The latest-state test also asserts exactly one rerender after rendering an updated state.
+- GREEN: targeted HUD suite passed, 10/10 tests.
+
+### Full gate
+
+Command: `npm run typecheck && npm run lint && npm run format:check && npm test && npm run sim -- --games 200 --players 4 && npm run build && npm run e2e`
+
+- Typecheck, lint, and format check passed.
+- Unit tests: 24 files / 143 tests passed (engine 16/113; client 7/22; pixelize 1/8).
+- Simulation: 200 games; 0 crashes, 0 stuck; average 12 rounds.
+- Production build passed; existing Vite bundle-size warning (>500 kB) remains.
+- E2E: 7 passed, 1 skipped (desktop-only mobile rotation journey).
+- Port 4173 was free after E2E. `git diff --check` passed.
+- Base SHA: `526eb93`. Fix commit SHA: to be recorded after the required commit.

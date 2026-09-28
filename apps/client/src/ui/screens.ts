@@ -19,7 +19,7 @@ const drafts: SeatDraft[] = Array.from({ length: 4 }, (_, i) => ({
 }));
 
 function languageToggle(): string {
-  return `<div class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" class="${getLang() === 'th' ? 'selected' : ''}" aria-pressed="${getLang() === 'th'}">TH</button><button type="button" data-lang="en" class="${getLang() === 'en' ? 'selected' : ''}" aria-pressed="${getLang() === 'en'}">EN</button></div>`;
+  return `<div class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" class="${getLang() === 'th' ? 'selected' : ''}" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" class="${getLang() === 'en' ? 'selected' : ''}" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></div>`;
 }
 
 function bindLanguageToggle(root: HTMLElement, rerender: () => void): void {

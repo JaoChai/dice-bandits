@@ -4,6 +4,8 @@
   "title.newGame": "เริ่มเกมใหม่",
   "title.continue": "เล่นต่อ",
   "title.language": "ภาษา",
+  "lang.th": "TH",
+  "lang.en": "EN",
   "title.gameName": "DICE BANDITS",
   "setup.defaultName": "ผู้เล่น {n}",
   "setup.title": "จัดทีมโจร",

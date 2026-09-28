@@ -5,8 +5,8 @@ import {
   type GameConfig,
   type GameState,
 } from '@dice-bandits/engine';
-import { describe, expect, it } from 'vitest';
-import { setLang, t } from '../src/i18n';
+import { describe, expect, it, vi } from 'vitest';
+import { getLang, setLang, t } from '../src/i18n';
 import { renderHud } from '../src/ui/hud';
 
 const config: GameConfig = {
@@ -64,6 +64,54 @@ describe('renderHud', () => {
     expect(root.querySelector('[data-lang="en"]')?.getAttribute('aria-pressed')).toBe('false');
     root.remove();
     setLang('en');
+  });
+
+  it('binds the language toggle once across repeated HUD renders', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    const dispatch = vi.fn();
+    setLang('th');
+    for (let render = 0; render < 5; render += 1) renderHud(root, state, dispatch);
+    const nav = root.querySelector('.game-topline nav')!;
+    const setAttribute = vi.spyOn(nav, 'setAttribute');
+
+    root.querySelector<HTMLButtonElement>('[data-lang="en"]')!.click();
+
+    expect(getLang()).toBe('en');
+    expect(setAttribute).toHaveBeenCalledTimes(1);
+    root.remove();
+  });
+
+  it('uses the latest state when a language toggle rerenders the HUD', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const initialState = createGame(config);
+    const latestState = createGame(config);
+    latestState.round = 7;
+    setLang('th');
+    renderHud(root, initialState, () => undefined);
+    renderHud(root, latestState, () => undefined);
+    const nav = root.querySelector('.game-topline nav')!;
+    const setAttribute = vi.spyOn(nav, 'setAttribute');
+    root.querySelector<HTMLButtonElement>('[data-lang="en"]')!.click();
+
+    expect(root.querySelector('.round-label')?.textContent).toBe(
+      t('board.round', { round: latestState.round, total: latestState.config.rounds }),
+    );
+    expect(setAttribute).toHaveBeenCalledTimes(1);
+    root.remove();
+  });
+
+  it('uses localized language labels in the toggle', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    renderHud(root, state, () => undefined);
+
+    expect(root.querySelector('[data-lang="th"]')?.textContent).toBe(t('lang.th'));
+    expect(root.querySelector('[data-lang="en"]')?.textContent).toBe(t('lang.en'));
+    root.remove();
   });
 
   it('shows the pass screen and hides picks when seat 0 is the next human PvP picker', () => {

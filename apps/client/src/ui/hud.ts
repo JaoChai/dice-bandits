@@ -4,6 +4,12 @@ import { getLang, setLang, t } from '../i18n';
 import { renderBattleUi } from './battleUi';
 import { showActionDialog, showPhaseDialog } from './dialogs';
 
+const hudContexts = new WeakMap<
+  HTMLElement,
+  { state: GameState; dispatch: (action: Action) => void }
+>();
+const hudLanguageListeners = new WeakSet<HTMLElement>();
+
 export function renderHud(
   root: HTMLElement,
   state: GameState,
@@ -34,7 +40,7 @@ export function renderHud(
           )
           .join('')
       : '';
-  const header = `<header class="game-topline"><strong class="pixel">${t('title.gameName')}</strong><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span><nav class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">TH</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">EN</button></nav><button class="text-button" data-action="exit">${t('setup.back')}</button></header>`;
+  const header = `<header class="game-topline"><strong class="pixel">${t('title.gameName')}</strong><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span><nav class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></nav><button class="text-button" data-action="exit">${t('setup.back')}</button></header>`;
   if (!root.querySelector('.game-shell')) {
     root.innerHTML = `<section class="game-shell" data-testid="screen-board"><div class="board-stage" id="phaser-board"></div>${header}<section class="seat-hud"></section><nav class="action-bar" aria-label="${t('board.actions')}"></nav><div class="rotate-hint" data-testid="rotate-hint">${t('board.rotateHint')}</div></section>`;
   } else {
@@ -51,6 +57,21 @@ export function renderHud(
         button.setAttribute('aria-pressed', String(button.dataset.lang === getLang()));
       });
     }
+  }
+  const shell = root.querySelector<HTMLElement>('.game-shell')!;
+  hudContexts.set(shell, { state, dispatch });
+  if (!hudLanguageListeners.has(shell)) {
+    hudLanguageListeners.add(shell);
+    shell.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const button = target.closest<HTMLButtonElement>('[data-lang]');
+      if (!button || !shell.contains(button)) return;
+      const context = hudContexts.get(shell);
+      if (!context) return;
+      setLang(button.dataset.lang as 'th' | 'en');
+      renderHud(root, context.state, context.dispatch);
+    });
   }
   root.querySelector('.seat-hud')!.innerHTML = seats;
   const actionBar = root.querySelector<HTMLElement>('.action-bar')!;
@@ -75,12 +96,6 @@ export function renderHud(
   if (state.phase.kind === 'pvpReward') showActionDialog(root, actions, dispatch);
   else if (state.phase.kind === 'levelUp' || state.phase.kind === 'shop')
     showPhaseDialog(root, state, actions, dispatch);
-  root.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach((button) => {
-    button.addEventListener('click', () => {
-      setLang(button.dataset.lang as 'th' | 'en');
-      renderHud(root, state, dispatch);
-    });
-  });
 }
 
 function playerCard(state: GameState, player: Player): string {
