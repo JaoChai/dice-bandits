@@ -55,3 +55,32 @@
 
 - New visible strings are localized in both dictionaries and the existing i18n key-parity test passed. Test hooks remain gated by `VITE_TEST_HOOKS=1`; dependencies and Phaser configuration were not changed.
 - No remaining task blocker. Minor visual concern: the narrow-landscape world-rule chip behind the game UI appears truncated; non-zero-speed tween timing was not browser-exercised (though compiled/typechecked).
+
+## Fix round 1
+
+**Date:** 2026-09-28
+**Fix commit:** `c41c594934da6b636b456833917aa2b11c2b16b3`
+
+### Finding 1 — seat 0 skipped the PvP pass screen
+
+- **Cause/fix:** `apps/client/src/ui/hud.ts:53-61` delegates battle rendering to `renderBattleUi`; `apps/client/src/ui/battleUi.ts:23-25,45-54` tests `battleSeat !== undefined` and owns pass-screen visibility/ready behavior. Seat 0 is no longer treated as false.
+- **TDD RED:** Added a real-engine PvP state with seat 0 as the next picker in `apps/client/test/hud.test.ts:21-62`. `npm test -w @dice-bandits/client -- --run test/hud.test.ts` failed on the expected assertion: `expected null not to be null` for `[data-testid="pass-ready"]` (1 failed, 4 passed).
+- **GREEN:** The same focused test passed after the change (5 passed), asserting Ready is present and no `pick-*` buttons are exposed until handoff.
+- **Seat truthiness audit:** No other seat-number truthiness checks found in `hud.ts`, `main.ts`, or `BattleScene.ts`; seat-index access uses `??`/explicit kind checks.
+
+### Finding 2 — extract battle UI
+
+- Created `apps/client/src/ui/battleUi.ts:1-85`; moved pending-side/pass-key state, battle-pick bar/test IDs, and pass-screen markup/ready handling out of `hud.ts`. Existing `pick-<pick>`, `pass-screen`, and `pass-ready` IDs remain unchanged. No visible strings were added; text uses existing i18n keys.
+
+### Finding 3 — results language button visibility
+
+- Updated `apps/client/src/ui/styles.css:500-516` with explicit minimum dimensions, border, fill, foreground, weight, and selected-state contrast for the TH/EN controls.
+- Browser measurement at 844×390 after selecting Thai: TH **40×30 px**, EN **39×30 px**; both labels visible, with computed foreground/background colors `#171324/#fff0c2` and `#241a2d/#e1a54f`, respectively. Vision review confirmed the Thai results screen and legible labels with no clipping.
+
+### Verification and browser evidence
+
+- **Gate passed:** `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build -w @dice-bandits/client`. Totals: engine 113, client 17, pixelize 8 tests passed. Build retains the existing large-chunk warning (~1.46 MB minified).
+- Chromium journey used `VITE_TEST_HOOKS=1`, `?seed=seed-1&speed=0`, two human seats, accepted `action-duel-0`; reached round 2 PvP with `a=seat 1`, `b=seat 0`. Pass-ready was observed immediately before **12/12 PvP picks**, including all six seat-0 handoffs.
+- At `speed=1`, completed an attack/defend PvP pair and captured the Phaser canvas at 110 ms after the resolving pick. Vision confirmed the battle canvas and transient red floating damage text. Screenshots: `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t12-fix1-anim.png` and Thai results at 844×390 `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t12-fix1-results.png`.
+- Browser console/page errors: none. Dev server stopped; port 4174 confirmed closed.
+- **Fix-code SHA:** `c41c594934da6b636b456833917aa2b11c2b16b3`.
