@@ -5,6 +5,7 @@ import type { Room } from './model';
 import { nextRoomAlarmAt, publicSeat } from './model';
 import type { ServerMsg } from './protocol';
 import { redactBattlePickEvents, redactGameState } from './redact';
+import { syncIdleDeadlines } from './timers';
 
 export interface PlayResult {
   room: Room;
@@ -93,7 +94,8 @@ export function runBotChain(room: Room, now: number, initialEvents: GameEvent[] 
     }
   }
   const pendingBotWork = nextRoom.status !== 'finished' && availableBotSeat(nextRoom) !== null;
-  nextRoom = { ...nextRoom, pendingBotWork };
+  nextRoom = { ...nextRoom, pendingBotWork, botFailures: 0, botRetryAt: null };
+  nextRoom = syncIdleDeadlines(nextRoom, now);
   return {
     room: nextRoom,
     out: outbound(nextRoom, events),

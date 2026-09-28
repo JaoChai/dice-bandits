@@ -159,7 +159,7 @@ describe('server-authoritative play', () => {
     }
   });
 
-  it('preserves pending bot work and re-arms immediately if an alarm bot step throws', async () => {
+  it('backs off alarm bot failures and stops after three consecutive failures', async () => {
     const engine = await import('@dice-bandits/engine');
     const stepSpy = vi.spyOn(engine, 'step').mockImplementation(() => {
       throw new Error('injected alarm bot failure');
@@ -172,17 +172,26 @@ describe('server-authoritative play', () => {
         pendingBotWork: true,
         seats: room.seats.map((seat) => ({ ...seat, controller: 'botTakeover' as const })),
       };
-      const before = structuredClone(room);
-      const result = roomStep(room, { kind: 'alarm' }, 777);
-      expect(result.room).toEqual(before);
-      expect(result.nextAlarmAt).toBe(777);
-      expect(log).toHaveBeenCalledWith(
-        '[room]',
-        room.code,
-        0,
-        expect.any(String),
-        expect.any(Error),
-      );
+      let now = 777;
+      for (const delay of [1_000, 5_000]) {
+        const result = roomStep(room, { kind: 'alarm' }, now);
+        expect(result.room!.pendingBotWork).toBe(true);
+        expect(result.room!.botFailures).toBeGreaterThan(0);
+        expect(result.nextAlarmAt).toBe(now + delay);
+        expect(result.out).toEqual([]);
+        room = result.room!;
+        now += delay;
+      }
+      const final = roomStep(room, { kind: 'alarm' }, now);
+      expect(final.room!.pendingBotWork).toBe(false);
+      expect(final.room!.botFailures).toBe(0);
+      expect(final.nextAlarmAt).not.toBe(now);
+      expect(
+        final.out.filter(
+          (item) => item.msg.type === 'error' && item.msg.key === 'online.error.server',
+        ),
+      ).toHaveLength(4);
+      expect(log).toHaveBeenCalledTimes(1);
     } finally {
       stepSpy.mockRestore();
       log.mockRestore();

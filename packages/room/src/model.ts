@@ -32,15 +32,20 @@ export interface Room {
   turn: number;
   lastActivityAt: number;
   pendingBotWork: boolean;
+  botFailures: number;
+  botRetryAt: number | null;
   config: RoomConfig;
 }
 
 export function nextRoomAlarmAt(room: Room, now?: number): number | null {
   const deadlines = room.seats.flatMap((seat) =>
-    seat.disconnectDeadline === null ? [] : [seat.disconnectDeadline],
+    [seat.disconnectDeadline, seat.idleDeadline].filter(
+      (deadline): deadline is number => deadline !== null,
+    ),
   );
-  if (room.pendingBotWork && now !== undefined) deadlines.push(now);
-  return deadlines.length === 0 ? null : Math.min(...deadlines);
+  deadlines.push(room.lastActivityAt + room.config.ttlMs);
+  if (room.pendingBotWork && now !== undefined) deadlines.push(room.botRetryAt ?? now);
+  return Math.min(...deadlines);
 }
 
 const DEFAULT_CONFIG: RoomConfig = { idleMs: 60_000, ttlMs: 86_400_000, botBatch: 200 };
@@ -81,6 +86,8 @@ export function createRoom(
     turn: 0,
     lastActivityAt: now,
     pendingBotWork: false,
+    botFailures: 0,
+    botRetryAt: null,
     config: { ...DEFAULT_CONFIG, ...config },
   };
 }
