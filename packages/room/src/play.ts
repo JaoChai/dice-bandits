@@ -4,6 +4,7 @@ import type { Outbound } from './roomStep';
 import type { Room } from './model';
 import { nextRoomAlarmAt, publicSeat } from './model';
 import type { ServerMsg } from './protocol';
+import { redactBattlePickEvents, redactGameState } from './redact';
 
 export interface PlayResult {
   room: Room;
@@ -29,13 +30,15 @@ export function logBotExecutionError(room: Room, error: BotExecutionError): void
 
 export function viewForSeat(room: Room, seat: number): ServerMsg {
   const game = room.game!;
+  const redacted = redactGameState(game, seat);
   return {
     type: 'view',
     turn: room.turn,
-    state: game,
+    state: redacted.state,
     you: seat,
     legal: legalActions(game, seat),
     seats: room.seats.map(publicSeat),
+    opponentPicked: redacted.opponentPicked,
   };
 }
 
@@ -57,7 +60,14 @@ function finishIfOver(room: Room): Room {
 }
 
 function outbound(room: Room, events: GameEvent[]): Outbound[] {
-  const result: Outbound[] = [{ to: 'all', msg: { type: 'events', turn: room.turn, events } }];
+  const result: Outbound[] = room.seats.map((seat) => ({
+    to: seat.seat,
+    msg: {
+      type: 'events',
+      turn: room.turn,
+      events: redactBattlePickEvents(events, room.game!, seat.seat),
+    },
+  }));
   result.push(...views(room));
   return result;
 }

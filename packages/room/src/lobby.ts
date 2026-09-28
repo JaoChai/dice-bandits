@@ -1,8 +1,9 @@
-import { createGame, legalActions } from '@dice-bandits/engine';
+import { createGame } from '@dice-bandits/engine';
 import type { ClassId, Personality, SeatConfig } from '@dice-bandits/engine';
 import { nextRoomAlarmAt, publicSeat } from './model';
 import type { Room } from './model';
 import type { ServerMsg } from './protocol';
+import { viewForSeat } from './play';
 
 const CLASSES: readonly ClassId[] = ['knight', 'thief', 'mage', 'cleric'];
 const PERSONALITIES: readonly Personality[] = ['greedy', 'vengeful', 'cowardly'];
@@ -154,17 +155,7 @@ export function lobbyMessage(
     lastActivityAt: now,
   };
   for (let seatNumber = 0; seatNumber < 4; seatNumber += 1) {
-    out.push({
-      to: seatNumber,
-      msg: {
-        type: 'view',
-        turn: 0,
-        state: game,
-        you: seatNumber,
-        legal: legalActions(game, seatNumber),
-        seats: nextRoom.seats.map(publicSeat),
-      },
-    });
+    out.push({ to: seatNumber, msg: viewForSeat(nextRoom, seatNumber) });
   }
   return { room: nextRoom, out, nextAlarmAt: alarmAt(nextRoom) };
 }

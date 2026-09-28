@@ -19,6 +19,7 @@ export type ServerMsg =
       you: number;
       legal: Action[];
       seats: PublicSeat[];
+      opponentPicked: boolean;
     }
   | { type: 'events'; turn: number; events: GameEvent[] }
   | { type: 'error'; key: string };
