@@ -4,16 +4,18 @@ import { createRoom } from '../src/model';
 import type { RoomStepResult } from '../src/roomStep';
 
 describe('room simulation', () => {
-  it('finishes five seeded games without crashes, stuck games, or alarm violations', () => {
-    const report = runRoomSimulation({ games: 5, seed: 'sim-test-' });
+  it('finishes seeded games and exercises battle items without alarm violations', () => {
+    const report = runRoomSimulation({ games: 30, seed: 'sim-test-' });
 
     expect(report).toMatchObject({
-      games: 5,
-      finished: 5,
+      games: 30,
+      finished: 30,
       crashes: 0,
       stuck: 0,
       alarmInvariantViolations: 0,
+      battleItemsUsed: expect.any(Number),
     });
+    expect(report.battleItemsUsed).toBeGreaterThan(0);
   });
 
   it('detects an alarm scheduled before the current time', () => {

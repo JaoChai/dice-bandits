@@ -1,4 +1,5 @@
 import type { GameEvent } from '@dice-bandits/engine';
+import { battleActorSeat } from '@dice-bandits/engine';
 import { createRoom } from './model';
 import type { Room } from './model';
 import { viewForSeat } from './play';
@@ -16,6 +17,7 @@ export interface RoomSimReport {
   crashes: number;
   stuck: number;
   alarmInvariantViolations: number;
+  battleItemsUsed: number;
   maxInputs: number;
   avgInputs: number;
 }
@@ -106,6 +108,7 @@ export function runRoomSimulation(options: RoomSimulationOptions): RoomSimReport
     crashes: 0,
     stuck: 0,
     alarmInvariantViolations: 0,
+    battleItemsUsed: 0,
     maxInputs: 0,
     avgInputs: 0,
   };
@@ -202,24 +205,9 @@ export function runRoomSimulation(options: RoomSimulationOptions): RoomSimReport
         } else {
           const view = viewForSeat(room, seat);
           const legal = view.type === 'view' ? view.legal : [];
-          const phase = room.game?.phase;
-          const actions =
-            phase?.kind === 'battle'
-              ? legal.filter((action) => action.type === 'battlePick')
-              : legal;
+          const actions = legal;
           const battleActorMatches =
-            phase?.kind !== 'battle' ||
-            (() => {
-              const battle = phase.battle;
-              const side =
-                battle.pending.attack === null
-                  ? battle.attackerSide
-                  : battle.attackerSide === 'a'
-                    ? 'b'
-                    : 'a';
-              const actor = side === 'a' ? battle.a : battle.b;
-              return actor.kind === 'player' && actor.seat === seat;
-            })();
+            room.game?.phase.kind !== 'battle' || battleActorSeat(room.game) === seat;
           const seatState = room.seats.find((candidate) => candidate.seat === seat);
           input =
             actions.length > 0 &&
@@ -237,6 +225,14 @@ export function runRoomSimulation(options: RoomSimulationOptions): RoomSimReport
                   },
                 }
               : { kind: 'connect', seat, conn: `seat-${seat}` };
+        }
+        if (
+          room.game?.phase.kind === 'battle' &&
+          input.kind === 'msg' &&
+          input.msg.type === 'action' &&
+          input.msg.action.type === 'useItem'
+        ) {
+          report.battleItemsUsed += 1;
         }
         const stepped = roomStep(room, input, now);
         room = stepped.room;
