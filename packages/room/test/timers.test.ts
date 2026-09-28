@@ -92,6 +92,27 @@ describe('room timers and control transfer', () => {
     ).toBe(true);
   });
 
+  it('honors an expired disconnect deadline before resuming pending bot work', () => {
+    const room = playingRoom({ idleMs: 100 });
+    const seat = room.game!.turnSeat;
+    const pending = {
+      ...room,
+      pendingBotWork: true,
+      seats: room.seats.map((item) =>
+        item.seat === seat ? { ...item, disconnectDeadline: 400 } : item,
+      ),
+    };
+
+    const result = roomStep(pending, { kind: 'alarm' }, 400);
+
+    expect(result.room!.seats[seat]!.controller).toBe('botTakeover');
+    expect(
+      result.out.some(
+        (item) => item.msg.type === 'view' && item.msg.seats[seat]!.controller === 'botTakeover',
+      ),
+    ).toBe(true);
+  });
+
   it('starts a fresh idle timer when the seat reclaims mid-game', () => {
     const room = playingRoom({ idleMs: 100 });
     const seat = room.game!.turnSeat;

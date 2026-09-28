@@ -66,33 +66,6 @@ function alarm(room: Room, now: number): RoomStepResult {
     return result(nextRoom, [], now);
   }
 
-  if (
-    room.pendingBotWork &&
-    room.status === 'playing' &&
-    (room.botRetryAt === null || now >= room.botRetryAt)
-  ) {
-    try {
-      return runBotChain(room, now);
-    } catch (err) {
-      const failures = room.botFailures + 1;
-      if (failures <= 2) {
-        const delay = [1_000, 5_000][failures - 1]!;
-        return result({ ...room, botFailures: failures, botRetryAt: now + delay }, [], now);
-      }
-      if (err instanceof BotExecutionError) logBotExecutionError(room, err);
-      else console.error('[room]', room.code, -1, room.game?.phase.kind, err);
-      const stopped = { ...room, pendingBotWork: false, botFailures: 0, botRetryAt: null };
-      return result(
-        stopped,
-        stopped.seats.map((seat) => ({
-          to: seat.seat,
-          msg: { type: 'error', key: 'online.error.server' },
-        })),
-        now,
-      );
-    }
-  }
-
   if (room.status === 'lobby') {
     const seats = room.seats.filter(
       (seat) => seat.disconnectDeadline === null || seat.disconnectDeadline > now,
@@ -121,7 +94,35 @@ function alarm(room: Room, now: number): RoomStepResult {
     };
   });
   const tookOver = changedSeats.some((seat, index) => seat !== room.seats[index]);
-  if (!tookOver) return result(room, [], now);
+  if (!tookOver) {
+    if (
+      room.pendingBotWork &&
+      room.status === 'playing' &&
+      (room.botRetryAt === null || now >= room.botRetryAt)
+    ) {
+      try {
+        return runBotChain(room, now);
+      } catch (err) {
+        const failures = room.botFailures + 1;
+        if (failures <= 2) {
+          const delay = [1_000, 5_000][failures - 1]!;
+          return result({ ...room, botFailures: failures, botRetryAt: now + delay }, [], now);
+        }
+        if (err instanceof BotExecutionError) logBotExecutionError(room, err);
+        else console.error('[room]', room.code, -1, room.game?.phase.kind, err);
+        const stopped = { ...room, pendingBotWork: false, botFailures: 0, botRetryAt: null };
+        return result(
+          stopped,
+          stopped.seats.map((seat) => ({
+            to: seat.seat,
+            msg: { type: 'error', key: 'online.error.server' },
+          })),
+          now,
+        );
+      }
+    }
+    return result(room, [], now);
+  }
   const takeoverRoom: Room = { ...room, seats: changedSeats, pendingBotWork: true };
   if (takeoverRoom.botRetryAt !== null && now < takeoverRoom.botRetryAt) {
     return result(
