@@ -76,3 +76,28 @@ Final fresh run completed successfully:
 
 - `15568c6 feat(client): board scene, HUD and game controller`
 - Separate report commit: `docs: record task 11 implementation report`.
+
+## Fix round 1
+
+**Status:** DONE_WITH_CONCERNS
+**Implementation commit:** `f76e8e3 fix(client): keep board animations and fit board above HUD`
+
+### Findings and fixes
+
+1. **Event animations survived until state redraw.** `apps/client/src/scenes/BoardScene.ts:20-58,61-65` now animates movement hop-by-hop to each event's destination and awaits dice, theft, frenzy, and movement effects. `apps/client/src/main.ts:43-51` routes the event callback through `apps/client/src/eventOrder.ts:1-6`; `game-state` redraw occurs only after the animation promise settles, so `renderBoard` no longer removes active tweens. Speed zero resolves effects immediately. Added `apps/client/test/event-order.test.ts:4-20` to verify animation-end precedes render.
+2. **Board fit and HUD boundary.** `apps/client/src/scenes/BoardScene.ts:67-89,103-120` maps actual board-grid coordinates using one uniform scale, centers the grid in a padded 640×300 region, and centers a single token on its space (only additional tokens fan slightly). Tiles are smaller than the minimum grid step. `apps/client/src/ui/styles.css:259-269,295-315,425-429` keeps the scene FIT-scaled, reserves the 60px seat-HUD strip, and uses a compact mobile stage.
+3. **Targeted item test IDs.** `apps/client/src/ui/hud.ts:107-121` now includes non-null item targets in IDs (e.g. `action-useItem-mapScroll-1`). Added coverage at `apps/client/test/hud.test.ts:30-42`.
+4. **HUD stats no longer ellipsize.** `apps/client/src/ui/styles.css:327-340` lets the stat line wrap, and the compact seat cards fit the 60px strip. Browser measurements at both requested viewports reported no HUD text overflow.
+
+### TDD evidence
+
+- **Event-order RED:** `npm test -w @dice-bandits/client -- --run test/event-order.test.ts test/hud.test.ts` initially failed with `Failed to resolve import "../src/eventOrder"`; after adding the production helper and wiring it into `main.ts`, the ordering test passed.
+- **Target-ID RED:** temporarily restored the old item-ID formatter and ran `npm test -w @dice-bandits/client -- --run test/hud.test.ts`; failed at `expected [...] to include 'action-useItem-mapScroll-1'` (1 failed, 1 passed). Restored the target suffix; focused suite passed: 2 files, 3 tests.
+
+### Verification
+
+- Full gate passed on final implementation source: `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build -w @dice-bandits/client` — typecheck, lint, format clean; engine 113, client 12, pixelize 8 tests passed; client build passed. Existing >500KB bundle warning remains out of scope.
+- Browser run on committed code (`?seed=demo&speed=1`, `th-TH`; New game, Start, three human actions): **0 console/page errors**. At 1280×720: canvas 533.3×300 within 606×300 stage; seat HUD 606×60; action bar 606×52; all tested HUD text had `scrollWidth == clientWidth` (player stat span 100px). At 844×390: canvas 426.7×240 within 606×240 stage; seat HUD 606×60; action bar 606×44; no HUD text overflow (stat span 102px).
+- Screenshots: `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t11-fix1-desktop.png` and `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t11-fix1-mobile.png`.
+- Visual inspection found no obvious tile overlap, a visible board-to-HUD gap, and readable stats/actions. The vision tool described one central player marker as visually isolated from tile clusters in both shots, although the renderer places player sprites at the same transformed board-space coordinates as their tiles (first token exactly centered, additional tokens fanned by 3 scene pixels). The central castle space is visually sparse; this remains a small-scale presentation concern, not a coordinate mismatch.
+- Dev server stopped after browser verification; port 4174 checked closed. No deploy or push.
