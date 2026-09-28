@@ -12,6 +12,25 @@ const game = () =>
     ],
   });
 
+const realBattleState = () => {
+  let state = createGame({
+    seed: 'save-battle-test',
+    rounds: 8,
+    seats: [
+      { name: 'A', classId: 'knight', control: 'bot', personality: 'greedy' },
+      { name: 'B', classId: 'thief', control: 'bot', personality: 'vengeful' },
+      { name: 'C', classId: 'cleric', control: 'bot', personality: 'cowardly' },
+      { name: 'D', classId: 'mage', control: 'bot', personality: 'greedy' },
+    ],
+  });
+  for (let actionCount = 0; actionCount < 5000; actionCount++) {
+    if (state.phase.kind === 'battle') return state;
+    const action = chooseAction(state, state.turnSeat);
+    state = step(state, action).state;
+  }
+  throw new Error('engine did not reach a battle');
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
   clearSave();
@@ -46,9 +65,27 @@ describe('save data', () => {
     const toast = vi.fn();
     const unsubscribe = onSaveToast(toast);
     const state = game();
+    const realBattle = realBattleState();
+    if (realBattle.phase.kind !== 'battle') throw new Error('expected battle phase');
+    const battle = structuredClone(realBattle.phase);
+    const missingAtk = structuredClone(battle);
+    delete (missingAtk.battle.a.stats as Partial<typeof missingAtk.battle.a.stats>).atk;
+    const missingPoison = structuredClone(battle);
+    delete (missingPoison.battle.b.buffs as Partial<typeof missingPoison.battle.b.buffs>).poison;
+    const invalidRage = structuredClone(battle);
+    (invalidRage.battle.a.buffs as { rage?: unknown }).rage = 'yes';
+    const invalidAttack = structuredClone(battle);
+    (invalidAttack.battle.pending as { attack: unknown }).attack = 'punch';
+    const invalidDefense = structuredClone(battle);
+    (invalidDefense.battle.pending as { defense: unknown }).defense = 'dodge';
     const malformedPhases = [
       { kind: 'battle' },
       { kind: 'battle', battle: { a: null } },
+      missingAtk,
+      missingPoison,
+      invalidRage,
+      invalidAttack,
+      invalidDefense,
       { kind: 'gameOver', winners: [], highlights: [] },
       { kind: 'gameOver', ranking: [], winners: [], highlights: [{}] },
       { kind: 'levelUp', seat: 0, then: 'endTurn' },
@@ -66,6 +103,18 @@ describe('save data', () => {
     }
     expect(toast).toHaveBeenCalledTimes(malformedPhases.length);
     unsubscribe();
+  });
+
+  it('accepts real engine battle states with rage true or absent', () => {
+    for (const rage of [true, undefined]) {
+      const state = realBattleState();
+      if (state.phase.kind !== 'battle') throw new Error('expected battle phase');
+      const battle = structuredClone(state.phase);
+      if (rage === undefined) delete battle.battle.a.buffs.rage;
+      else battle.battle.a.buffs.rage = rage;
+      saveGame({ ...state, phase: battle });
+      expect(loadGame()).toEqual({ ...state, phase: battle });
+    }
   });
 
   it('round-trips real engine states across gameplay phases', () => {

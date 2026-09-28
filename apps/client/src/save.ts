@@ -72,6 +72,27 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+function isStats(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.maxHp === 'number' &&
+    typeof value.atk === 'number' &&
+    typeof value.def === 'number' &&
+    typeof value.spd === 'number' &&
+    typeof value.mag === 'number'
+  );
+}
+
+function isBuffs(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.ironSkin === 'boolean' &&
+    typeof value.poison === 'boolean' &&
+    typeof value.halveNext === 'boolean' &&
+    (value.rage === undefined || typeof value.rage === 'boolean')
+  );
+}
+
 function isCombatant(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -80,9 +101,9 @@ function isCombatant(value: unknown): boolean {
     (typeof value.monsterId === 'string' || value.monsterId === null) &&
     typeof value.level === 'number' &&
     typeof value.hp === 'number' &&
-    isRecord(value.stats) &&
+    isStats(value.stats) &&
     typeof value.secretUsed === 'boolean' &&
-    isRecord(value.buffs)
+    isBuffs(value.buffs)
   );
 }
 
@@ -110,8 +131,14 @@ function isPhase(value: unknown): boolean {
         (battle.attackerSide === 'a' || battle.attackerSide === 'b') &&
         (battle.half === 1 || battle.half === 2) &&
         isRecord(battle.pending) &&
-        (typeof battle.pending.attack === 'string' || battle.pending.attack === null) &&
-        (typeof battle.pending.defense === 'string' || battle.pending.defense === null)
+        (battle.pending.attack === 'attack' ||
+          battle.pending.attack === 'strike' ||
+          battle.pending.attack === 'secret' ||
+          battle.pending.attack === null) &&
+        (battle.pending.defense === 'defend' ||
+          battle.pending.defense === 'counter' ||
+          battle.pending.defense === 'secret' ||
+          battle.pending.defense === null)
       );
     }
     case 'pvpReward':

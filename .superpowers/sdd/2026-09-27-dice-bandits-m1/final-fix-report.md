@@ -28,3 +28,10 @@
 - Validity sweep covered: `awaitRoll`, `battle`, `chooseBranch`, `duelOffer`, `endOfTurn`, `gameOver`, `levelUp`, `pvpReward`, `shop`, `townChallenge`.
 - Gate passed: typecheck; lint; format check; tests (25 files, 149 passed); 200-game/four-player simulation (0 crashes, 0 stuck); build; e2e (7 passed, 1 skipped). Ports 4173 and 4174 were free before e2e.
 - Build/e2e retained the existing Vite warning about the minified JS chunk exceeding 500 kB. No push or deploy performed.
+
+## Fix round 3
+
+- Completed validation only for nested battle fields: all five combatant stats must be numbers; `ironSkin`, `poison`, and `halveNext` must be booleans; optional `rage` may be absent or boolean; pending attack/defense picks must match their engine literal unions or be null.
+- TDD: malformed battle regression cases failed before the validator fix (save load incorrectly returned the malformed state), then passed. Added explicit round trips for a real engine battle with `rage: true` and with `rage` absent. The real-engine validity sweep remains green.
+- Gate passed: typecheck; lint; format check; tests (25 files, 150 passed); 200-game/four-player simulation (0 crashes, 0 stuck); build; e2e (7 passed, 1 skipped). Ports 4173 and 4174 were free before e2e.
+- Build/e2e retained the existing Vite warning about the minified JS chunk exceeding 500 kB. No push or deploy performed.
