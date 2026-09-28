@@ -243,3 +243,204 @@ h1 {
     font-size: 0.8rem;
   }
 }
+.game-shell {
+  position: relative;
+  width: min(100%, 640px);
+  max-width: 640px;
+  min-height: min(100vh, 560px);
+  overflow: hidden;
+  border: 3px solid #e7aa57;
+  border-radius: 12px;
+  background: #202b3c;
+  box-shadow:
+    0 0 0 4px #171324,
+    0 10px 35px #08060dbb;
+}
+.board-stage {
+  width: 100%;
+  height: min(52.5vw, 360px);
+  min-height: 220px;
+  background: #273449;
+}
+.board-stage canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  image-rendering: pixelated;
+}
+.game-topline {
+  position: absolute;
+  z-index: 2;
+  inset: 6px 10px auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #fff4dc;
+  font-weight: 700;
+  text-shadow: 1px 2px #171324;
+}
+.game-topline .pixel {
+  font-size: 0.48rem;
+}
+.world-chip {
+  max-width: 28%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 6px;
+  padding: 3px 7px;
+  background: #171324cc;
+}
+.seat-hud {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  padding: 5px;
+  background: #302039;
+}
+.seat-card {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #735e7d;
+  border-left: 3px solid var(--seat-color);
+  border-radius: 6px;
+  padding: 4px;
+  background: #211c30;
+  font-size: 0.72rem;
+}
+.seat-card.active {
+  outline: 2px solid #ffd477;
+}
+.seat-card img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.seat-details {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.seat-details strong,
+.seat-details span,
+.seat-details small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hp-track {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #633e4a;
+}
+.hp-track span {
+  display: block;
+  height: 100%;
+  background: #6acb72;
+}
+.action-bar {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-height: 52px;
+  overflow-x: auto;
+  padding: 5px;
+  background: #171324;
+}
+.action-button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  border: 1px solid #ffe1a0;
+  border-radius: 6px;
+  padding: 5px 9px;
+  background: #784448;
+  color: #fff4dc;
+  font-weight: 700;
+}
+.action-button:disabled {
+  opacity: 0.65;
+}
+.dialog-shade {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #100d19cc;
+}
+.game-dialog {
+  display: grid;
+  gap: 8px;
+  min-width: min(320px, 90%);
+  border: 2px solid #e7aa57;
+  border-radius: 10px;
+  padding: 14px;
+  background: #302039;
+}
+.game-dialog h2 {
+  margin: 0;
+  color: #ffd477;
+}
+.game-dialog button {
+  min-height: 40px;
+  border-radius: 6px;
+  background: #4c4168;
+  color: #fff4dc;
+}
+.game-toast,
+.error-panel {
+  position: absolute;
+  z-index: 9;
+  inset: auto auto 70px 50%;
+  transform: translateX(-50%);
+  border: 1px solid #e7aa57;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #562f47;
+  box-shadow: 0 4px 16px #0009;
+}
+.error-panel {
+  top: 35%;
+  bottom: auto;
+  display: grid;
+  gap: 8px;
+  width: min(90%, 380px);
+  text-align: center;
+  transform: translateX(-50%);
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .game-shell {
+    min-height: 0;
+  }
+  .board-stage {
+    height: 180px;
+    min-height: 0;
+  }
+  .seat-hud {
+    gap: 3px;
+    padding: 3px;
+  }
+  .seat-card {
+    min-height: 48px;
+    padding: 3px;
+    font-size: 0.62rem;
+  }
+  .seat-card img {
+    width: 28px;
+    height: 28px;
+  }
+  .seat-details small {
+    display: none;
+  }
+  .action-bar {
+    min-height: 44px;
+  }
+  .action-button {
+    min-height: 34px;
+  }
+}
