@@ -9,6 +9,9 @@ import { showSetup, showTitle } from './ui/screens';
 import { clearSave, saveGame } from './save';
 import { testHooks } from './testHooks';
 import { t } from './i18n';
+import { showOnlineScreens, type OnlineSocket } from './online/screens';
+import { type RoomSession } from './online/session';
+import type { ServerMsg } from '@dice-bandits/room';
 import BootScene from './scenes/BootScene';
 import BoardScene from './scenes/BoardScene';
 import BattleScene from './scenes/BattleScene';
@@ -19,6 +22,42 @@ import { renderResults } from './ui/results';
 
 const app = getMount();
 let game: Phaser.Game | null = null;
+
+export function startOnlineGame(
+  socket: OnlineSocket,
+  session: RoomSession,
+  firstView: Extract<ServerMsg, { type: 'view' }>,
+): void {
+  void socket;
+  void session;
+  void firstView;
+  game?.destroy(true);
+  game = null;
+  app.innerHTML = `<main class="screen online-screen" data-testid="screen-online-game"><h1 class="pixel">${t('online.game.loading')}</h1></main>`;
+}
+
+function openOnline(options: { mode?: 'create' | 'join'; code?: string }): void {
+  history.pushState(null, '', options.code ? `/r/${options.code}` : '/');
+  showOnlineScreens({
+    ...(options.mode ? { initialMode: options.mode } : {}),
+    ...(options.code ? { initialCode: options.code } : {}),
+    onStartGame: startOnlineGame,
+  });
+}
+
+app.addEventListener('dice-bandits:online', (event) => {
+  const detail = (event as CustomEvent<{ mode?: 'create' | 'join'; code?: string }>).detail;
+  openOnline(detail);
+});
+app.addEventListener('dice-bandits:home', () => {
+  history.pushState(null, '', '/');
+  showTitle(startSetup);
+});
+window.addEventListener('popstate', () => {
+  const roomRoute = /^\/r\/([A-Z0-9]{5})$/i.exec(location.pathname);
+  if (roomRoute) openOnline({ code: roomRoute[1]!.toUpperCase() });
+  else showTitle(startSetup);
+});
 
 function getMount(): HTMLElement {
   const mount = document.querySelector<HTMLElement>('#app');
@@ -130,4 +169,6 @@ if (testHooks.enabled && testHooks.seed)
     '',
     `?seed=${encodeURIComponent(testHooks.seed)}&speed=${testHooks.speed}`,
   );
-showTitle(startSetup);
+const initialRoom = /^\/r\/([A-Z0-9]{5})$/i.exec(location.pathname);
+if (initialRoom) openOnline({ code: initialRoom[1]!.toUpperCase() });
+else showTitle(startSetup);
