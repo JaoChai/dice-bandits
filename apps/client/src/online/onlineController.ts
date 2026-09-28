@@ -24,6 +24,7 @@ export class OnlineController {
   private pendingEvents: GameEvent[] = [];
   private readonly socket: OnlineTransport;
   private readonly onEvents: OnlineControllerOptions['onEvents'];
+  private messageQueue: Promise<void> = Promise.resolve();
 
   constructor(options: OnlineControllerOptions) {
     this.currentState = options.state;
@@ -77,7 +78,13 @@ export class OnlineController {
     this.socketStatus = status;
   }
 
-  async handleMessage(message: ServerMsg): Promise<void> {
+  handleMessage(message: ServerMsg): Promise<void> {
+    const queued = this.messageQueue.then(() => this.applyMessage(message));
+    this.messageQueue = queued.catch(() => undefined);
+    return queued;
+  }
+
+  private async applyMessage(message: ServerMsg): Promise<void> {
     if (message.type === 'events') {
       this.pendingEvents.push(...message.events);
       return;

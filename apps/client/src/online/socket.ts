@@ -2,10 +2,14 @@ import type { ClientMsg, ServerMsg } from '@dice-bandits/room';
 
 export type RoomSocketStatus = 'open' | 'reconnecting' | 'closed';
 
-export interface RoomSocketOptions {
-  url: string;
+export interface RoomSocketHandlers {
   onMessage(message: ServerMsg): void;
   onStatus(status: RoomSocketStatus): void;
+  onTerminal?(code: number): void;
+}
+
+export interface RoomSocketOptions extends RoomSocketHandlers {
+  url: string;
   wsFactory?: (url: string) => WebSocket;
   timers?: { set: typeof setTimeout; clear: typeof clearTimeout };
 }
@@ -15,8 +19,9 @@ const TERMINAL_CLOSE_CODES = new Set([4000, 4404]);
 
 export class RoomSocket {
   private readonly url: string;
-  private readonly onMessage: (message: ServerMsg) => void;
-  private readonly onStatus: (status: RoomSocketStatus) => void;
+  private onMessage: RoomSocketOptions['onMessage'];
+  private onStatus: RoomSocketOptions['onStatus'];
+  private onTerminal: RoomSocketOptions['onTerminal'];
   private readonly wsFactory: (url: string) => WebSocket;
   private readonly timers: { set: typeof setTimeout; clear: typeof clearTimeout };
   private readonly queue: ClientMsg[] = [];
@@ -30,9 +35,16 @@ export class RoomSocket {
     this.url = options.url;
     this.onMessage = options.onMessage;
     this.onStatus = options.onStatus;
+    this.onTerminal = options.onTerminal;
     this.wsFactory = options.wsFactory ?? ((url) => new WebSocket(url));
     this.timers = options.timers ?? { set: setTimeout, clear: clearTimeout };
     this.connect();
+  }
+
+  setHandlers(handlers: RoomSocketHandlers): void {
+    this.onMessage = handlers.onMessage;
+    this.onStatus = handlers.onStatus;
+    this.onTerminal = handlers.onTerminal;
   }
 
   send(message: ClientMsg): void {
@@ -95,6 +107,7 @@ export class RoomSocket {
       if (this.manuallyClosed) return;
       if (TERMINAL_CLOSE_CODES.has(event.code)) {
         this.manuallyClosed = true;
+        this.onTerminal?.(event.code);
         this.onStatus('closed');
         return;
       }

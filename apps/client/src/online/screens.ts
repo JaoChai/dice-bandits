@@ -1,12 +1,13 @@
 import type { ClientMsg, ServerMsg } from '@dice-bandits/room';
 import type { RoomSession } from './session';
 import { clearSession, loadSession, saveSession } from './session';
-import { RoomSocket, type RoomSocketOptions } from './socket';
+import { RoomSocket, type RoomSocketOptions, type RoomSocketHandlers } from './socket';
 import { getLang, setLang, t } from '../i18n';
 
 export interface OnlineSocket {
   send(message: ClientMsg): void;
   close(): void;
+  setHandlers(handlers: RoomSocketHandlers): void;
 }
 
 export interface OnlineScreensOptions {
@@ -147,6 +148,11 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
           errorKey = 'online.error.openedElsewhere';
           render();
         }
+      },
+      onTerminal: (closeCode) => {
+        errorKey = closeCode === 4404 ? 'online.error.notFound' : 'online.error.openedElsewhere';
+        if (closeCode === 4404 && session) clearSession(session.code);
+        render();
       },
     });
     if (!nextSession && joinName) {

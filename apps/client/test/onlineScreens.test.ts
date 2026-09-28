@@ -19,10 +19,19 @@ const seat = (overrides: Partial<PublicSeat> = {}): PublicSeat => ({
 class FakeSocket implements OnlineSocket {
   constructor(options: RoomSocketOptions) {
     this.onMessage = options.onMessage;
+    this.onStatus = options.onStatus;
+    this.onTerminal = options.onTerminal;
   }
   sent: unknown[] = [];
   close = vi.fn();
   onMessage: (message: ServerMsg) => void;
+  onStatus: RoomSocketOptions['onStatus'];
+  onTerminal: RoomSocketOptions['onTerminal'];
+  setHandlers(handlers: Pick<RoomSocketOptions, 'onMessage' | 'onStatus' | 'onTerminal'>): void {
+    this.onMessage = handlers.onMessage;
+    this.onStatus = handlers.onStatus;
+    this.onTerminal = handlers.onTerminal;
+  }
   send(message: Parameters<OnlineSocket['send']>[0]): void {
     this.sent.push(message);
   }

@@ -130,27 +130,33 @@ describe('OnlineController', () => {
     root.remove();
   });
 
-  it('waits for event animation before applying the following view', async () => {
+  it('serializes views and events that arrive while an animation is pending', async () => {
     let releaseAnimation!: () => void;
     const animation = new Promise<void>((resolve) => {
       releaseAnimation = resolve;
     });
     const onEvents = vi.fn(() => animation);
     const { controller } = makeController(onEvents);
-    await controller.handleMessage(view({ turn: 12 }));
-    const next = view({ turn: 13, state: { ...structuredClone(initialState), round: 2 } });
+    await controller.handleMessage(view({ turn: 10 }));
+    const view1State = { ...structuredClone(initialState), round: 2 };
+    const view2State = { ...structuredClone(initialState), round: 3 };
     const events = [{ type: 'turnEnded' } as unknown as GameEvent];
 
-    await controller.handleMessage({ type: 'events', turn: 13, events });
-    const applyingView = controller.handleMessage(next);
+    const applyingEvents1 = controller.handleMessage({ type: 'events', turn: 11, events });
+    const applyingView1 = controller.handleMessage(view({ turn: 11, state: view1State }));
+    await Promise.resolve();
+    const applyingEvents2 = controller.handleMessage({ type: 'events', turn: 12, events });
+    const applyingView2 = controller.handleMessage(view({ turn: 12, state: view2State }));
     await Promise.resolve();
 
-    expect(onEvents).toHaveBeenCalledWith(events, next.state);
-    expect(controller.turn).toBe(12);
+    await vi.waitFor(() => expect(onEvents).toHaveBeenCalledTimes(1));
+    expect(controller.turn).toBe(10);
+    expect(controller.state.round).toBe(1);
+    expect(onEvents).toHaveBeenCalledTimes(1);
     releaseAnimation();
-    await applyingView;
-    expect(controller.turn).toBe(13);
-    expect(controller.state.round).toBe(2);
+    await Promise.all([applyingEvents1, applyingView1, applyingEvents2, applyingView2]);
+    expect(controller.turn).toBe(12);
+    expect(controller.state.round).toBe(3);
   });
 
   it('shows takeover and reconnecting banners and reclaims the controlled seat', async () => {

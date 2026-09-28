@@ -7,6 +7,9 @@ import { createGame, type Action, type GameState } from '@dice-bandits/engine';
 import { GameController } from './controller';
 import { showSetup, showTitle } from './ui/screens';
 import { clearSave, saveGame } from './save';
+import { clearSession } from './online/session';
+import { OnlineController } from './online/onlineController';
+import type { RoomSocketStatus } from './online/socket';
 import { testHooks } from './testHooks';
 import { t } from './i18n';
 import { showOnlineScreens, type OnlineSocket } from './online/screens';
@@ -28,12 +31,137 @@ export function startOnlineGame(
   session: RoomSession,
   firstView: Extract<ServerMsg, { type: 'view' }>,
 ): void {
-  void socket;
-  void session;
-  void firstView;
   game?.destroy(true);
   game = null;
-  app.innerHTML = `<main class="screen online-screen" data-testid="screen-online-game"><h1 class="pixel">${t('online.game.loading')}</h1></main>`;
+  window.diceBanditsText = t;
+  window.diceBanditsSpeed = testHooks.speed;
+
+  const renderOnlineHud = (): void => {
+    renderHud(app, controller.state, (action) => void controller.dispatch(action), {
+      legal: controller.legal,
+      online: controller.hudOnlineState,
+    });
+  };
+  const showOnlineError = (key: string): void => {
+    game?.destroy(true);
+    game = null;
+    app.innerHTML = `<main class="screen online-screen" data-testid="screen-online-error"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button></header><p class="error" role="alert" data-testid="online-error">${escapeHtml(t(key))}</p></main>`;
+    app.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', () => {
+      history.pushState(null, '', '/');
+      showTitle(startSetup);
+    });
+  };
+  const showOnlineResults = (state: GameState): void => {
+    game?.destroy(true);
+    game = null;
+    renderResults(
+      app,
+      state,
+      () => {
+        history.pushState(null, '', '/');
+        showTitle(startSetup);
+      },
+      () => {
+        history.pushState(null, '', '/');
+        showTitle(startSetup);
+      },
+    );
+  };
+  const controller = new OnlineController({
+    state: firstView.state,
+    socket,
+    onEvents: async (events, nextState) => {
+      renderHud(app, nextState, (action) => void controller.dispatch(action), {
+        legal: controller.legal,
+        online: controller.hudOnlineState,
+      });
+      renderEventToast(app, events);
+      const scene = game?.scene.getScene('BoardScene') as BoardScene | undefined;
+      const battleScene = game?.scene.getScene('BattleScene') as BattleScene | undefined;
+      await animateThenRender(
+        async () => {
+          await Promise.all([
+            scene?.playEvents(events) ?? Promise.resolve(),
+            game?.scene.isActive('BattleScene')
+              ? (battleScene?.playEvents(events, window.diceBanditsSpeed) ?? Promise.resolve())
+              : Promise.resolve(),
+          ]);
+        },
+        () => {
+          game?.registry.set('state', nextState);
+          game?.events.emit('game-state', nextState);
+          if (nextState.phase.kind === 'battle') {
+            if (!game?.scene.isActive('BattleScene')) scene?.scene.launch('BattleScene');
+          } else if (game?.scene.isActive('BattleScene')) {
+            scene?.scene.stop('BattleScene');
+          }
+        },
+      );
+    },
+  });
+
+  const handleMessage = (message: ServerMsg): void => {
+    if (message.type === 'error') {
+      if (message.key === 'online.error.notFound') clearSession(session.code);
+      showOnlineError(message.key);
+      return;
+    }
+    void controller.handleMessage(message).then(() => {
+      if (message.type !== 'view') return;
+      if (controller.state.phase.kind === 'gameOver') showOnlineResults(controller.state);
+      else renderOnlineHud();
+    });
+  };
+  const handleStatus = (status: RoomSocketStatus): void => {
+    controller.setSocketStatus(status);
+    if (app.querySelector('[data-testid="screen-board"]')) renderOnlineHud();
+  };
+  socket.setHandlers({
+    onMessage: handleMessage,
+    onStatus: handleStatus,
+    onTerminal: (code) => {
+      if (code === 4404) clearSession(session.code);
+      showOnlineError(code === 4404 ? 'online.error.notFound' : 'online.error.openedElsewhere');
+    },
+  });
+
+  void controller.handleMessage(firstView).then(() => {
+    if (controller.state.phase.kind === 'gameOver') {
+      showOnlineResults(controller.state);
+      return;
+    }
+    renderOnlineHud();
+    game = new Phaser.Game({
+      type: Phaser.AUTO,
+      parent: 'phaser-board',
+      width: 640,
+      height: 360,
+      backgroundColor: '#273449',
+      pixelArt: true,
+      roundPixels: true,
+      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+      scene: [BootScene, BoardScene, BattleScene],
+    });
+    game.registry.set('state', controller.state);
+    app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {
+      game?.destroy(true);
+      game = null;
+      history.pushState(null, '', '/');
+      showTitle(startSetup);
+    });
+    if (import.meta.env.VITE_TEST_HOOKS === '1') {
+      window.__db = { getState: () => controller.state };
+    }
+    window.addEventListener('dice-bandits:lang', renderOnlineHud);
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!,
+  );
 }
 
 function openOnline(options: { mode?: 'create' | 'join'; code?: string }): void {
