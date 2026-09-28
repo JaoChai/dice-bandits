@@ -101,3 +101,35 @@ Final fresh run completed successfully:
 - Screenshots: `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t11-fix1-desktop.png` and `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t11-fix1-mobile.png`.
 - Visual inspection found no obvious tile overlap, a visible board-to-HUD gap, and readable stats/actions. The vision tool described one central player marker as visually isolated from tile clusters in both shots, although the renderer places player sprites at the same transformed board-space coordinates as their tiles (first token exactly centered, additional tokens fanned by 3 scene pixels). The central castle space is visually sparse; this remains a small-scale presentation concern, not a coordinate mismatch.
 - Dev server stopped after browser verification; port 4174 checked closed. No deploy or push.
+
+## Fix round 2
+
+**Status:** DONE
+**Commit:** `1fabc2b fix(client): fit HUD seat cards inside the 60px strip`
+
+### Change
+
+- `apps/client/src/ui/hud.ts:61-70`: compacted the always-visible stat row to gold / level / town values while preserving the full localized stat string in `title` and `aria-label`; bandit-card statuses now render as a compact count-and-card chip with full localized details in `title` and `aria-label`.
+- `apps/client/src/ui/styles.css:320-368,463-468`: constrained the avatar/details to the 50px card, placed name/stats/HP/status on fixed compact rows, and kept the compact status chip visible in mobile landscape where other small text is hidden.
+- `apps/client/test/hud.test.ts:30-42`: added an accessible compact-status-chip regression test. No i18n keys were added or changed.
+
+### TDD evidence
+
+- **RED:** `npm test -w @dice-bandits/client -- --run test/hud.test.ts` failed as intended before the markup change: `.seat-status` was absent (`expected undefined to be '1 🃏'`); existing two tests passed.
+- **GREEN:** Included in the final full gate below; client suite passed **6 files / 13 tests**.
+
+### Verification
+
+- Final gate passed before commit: `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build -w @dice-bandits/client`. Engine **16 files / 113 tests**, client **6 files / 13 tests**, pixelize **1 file / 8 tests** passed; build passed with the existing >500 KB JS chunk warning.
+- Re-ran the required Playwright browser script against committed code, Thai locale, `?seed=demo&speed=1`; exercised default 2 seats and 4 seats at both viewports, attempted up to five human actions to surface status effects, captured screenshots, and recorded **0 console/page errors**. A compact status chip appeared in each run.
+
+| Viewport | Seats | Card boxes | scroll H/C | scroll W/C | Descendant text outside |
+|---|---:|---|---|---|---|
+| 1280×720 | 2 | each 145.25×50 px | 48/48 | 141/141 | none |
+| 1280×720 | 4 | each 145.25×50 px | 48/48 | 141/141 | none |
+| 844×390 | 2 | each 147.75×50 px | 48/48 | 144/144 | none |
+| 844×390 | 4 | each 147.75×50 px | 48/48 | 144/144 | none |
+
+- Screenshots: `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t11-fix2-desktop.png` and `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t11-fix2-mobile.png`.
+- Vision review: desktop showed all names, compact stats, HP bars and status chip inside cards. Mobile crop confirmed the apparently protruding fourth-card chip was fully inside its card; DOM measurements also show no out-of-card text or scroll overflow. Names/stats are intentionally compact at this fixed card size.
+- Dev server stopped; port 4174 confirmed closed. No push.
