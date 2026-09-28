@@ -8,6 +8,7 @@ import {
   playAction,
   runBotChain,
   viewForSeat,
+  viewForVisitor,
 } from './play';
 import { reclaimSeat, startTakeover, syncIdleDeadlines } from './timers';
 import type { ClientMsg, ServerMsg } from './protocol';
@@ -137,7 +138,12 @@ function alarm(room: Room, now: number): RoomStepResult {
   return alarm(takeoverRoom, now);
 }
 
-function connectedRoom(room: Room, seatNumber: number | null, now: number): RoomStepResult {
+function connectedRoom(
+  room: Room,
+  seatNumber: number | null,
+  conn: string,
+  now: number,
+): RoomStepResult {
   const seats = room.seats.map((seat) => {
     if (seat.seat !== seatNumber) return seat;
     const connected = { ...seat, connected: true, disconnectDeadline: null };
@@ -151,7 +157,11 @@ function connectedRoom(room: Room, seatNumber: number | null, now: number): Room
   if (nextRoom.status === 'playing') nextRoom = syncIdleDeadlines(nextRoom, now);
   return result(
     nextRoom,
-    nextRoom.status === 'lobby' ? [lobbyBroadcast(nextRoom)] : gameViews(nextRoom),
+    nextRoom.status === 'lobby'
+      ? [lobbyBroadcast(nextRoom)]
+      : seatNumber === null
+        ? [{ to: { conn }, msg: viewForVisitor(nextRoom) }]
+        : gameViews(nextRoom),
     now,
   );
 }
@@ -191,7 +201,7 @@ function rejectStale(room: Room, seat: number, conn: string, now: number): RoomS
 
 export function roomStep(room: Room, input: RoomInput, now: number): RoomStepResult {
   if (input.kind === 'alarm') return alarm(room, now);
-  if (input.kind === 'connect') return connectedRoom(room, input.seat, now);
+  if (input.kind === 'connect') return connectedRoom(room, input.seat, input.conn, now);
   if (input.kind === 'disconnect') return disconnectedRoom(room, input.seat, now);
 
   if (input.msg.type === 'claim') {

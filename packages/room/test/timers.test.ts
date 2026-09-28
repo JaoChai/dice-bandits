@@ -113,6 +113,17 @@ describe('room timers and control transfer', () => {
     ).toBe(true);
   });
 
+  it('sends a public game view to a visitor so they can claim a taken-over human seat', () => {
+    const room = playingRoom();
+    const result = roomStep(room, { kind: 'connect', seat: null, conn: 'visitor' }, 600);
+    expect(result.out).toContainEqual(
+      expect.objectContaining({
+        to: { conn: 'visitor' },
+        msg: expect.objectContaining({ type: 'view' }),
+      }),
+    );
+  });
+
   it('starts a fresh idle timer when the seat reclaims mid-game', () => {
     const room = playingRoom({ idleMs: 100 });
     const seat = room.game!.turnSeat;

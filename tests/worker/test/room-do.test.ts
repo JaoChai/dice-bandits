@@ -281,6 +281,7 @@ describe('Room Durable Object and Worker routes', () => {
     const visitorResponse = await connect(created.body.code);
     const visitor = visitorResponse.webSocket!;
     visitor.accept();
+    await nextMessage(visitor, 'claim visitor game view');
     hostViewCount = 0;
     const onHostMessage = () => {
       hostViewCount++;
