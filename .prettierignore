@@ -1,0 +1,8 @@
+docs/concepts
+docs/superpowers
+package-lock.json
+apps/client/public
+apps/client/worker-configuration.d.ts
+dist
+.wrangler
+.superpowers

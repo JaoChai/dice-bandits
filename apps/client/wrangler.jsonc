@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "dice-bandits",
+  "main": "./worker/index.ts",
+  "account_id": "597f5be7a854697fad368e23dc391593",
+  "compatibility_date": "2026-09-27",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dice-bandits",
+      "database_id": "52b66e75-a9ed-4615-8c14-cf7e7535bd8e",
+    },
+  ],
+}

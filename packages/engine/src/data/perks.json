@@ -1,0 +1,14 @@
+[
+  { "id": "hpUp", "effect": "+10 maxHp" },
+  { "id": "atkUp", "effect": "+3 atk" },
+  { "id": "defUp", "effect": "+3 def" },
+  { "id": "spdUp", "effect": "+3 spd" },
+  { "id": "magUp", "effect": "+3 mag" },
+  { "id": "taxman", "effect": "+20% tax" },
+  { "id": "looter", "effect": "Rob takes 40%" },
+  { "id": "thickSkin", "effect": "Monster damage -15%" },
+  { "id": "quickFeet", "effect": "+1 move when rolling 1" },
+  { "id": "haggler", "effect": "Shop -15%" },
+  { "id": "scavenger", "effect": "+50% chest gold" },
+  { "id": "grudgeHolder", "effect": "+15% dmg vs the leader" }
+]

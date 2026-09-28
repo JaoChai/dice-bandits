@@ -1,0 +1,74 @@
+{
+  "coin": {
+    "x": 0,
+    "y": 0,
+    "width": 16,
+    "height": 16
+  },
+  "sword": {
+    "x": 16,
+    "y": 0,
+    "width": 16,
+    "height": 16
+  },
+  "question": {
+    "x": 32,
+    "y": 0,
+    "width": 16,
+    "height": 16
+  },
+  "chest": {
+    "x": 48,
+    "y": 0,
+    "width": 16,
+    "height": 16
+  },
+  "heart": {
+    "x": 0,
+    "y": 16,
+    "width": 16,
+    "height": 16
+  },
+  "skull": {
+    "x": 16,
+    "y": 16,
+    "width": 16,
+    "height": 16
+  },
+  "shop": {
+    "x": 32,
+    "y": 16,
+    "width": 16,
+    "height": 16
+  },
+  "castle": {
+    "x": 48,
+    "y": 16,
+    "width": 16,
+    "height": 16
+  },
+  "town": {
+    "x": 0,
+    "y": 32,
+    "width": 16,
+    "height": 16
+  },
+  "trap": {
+    "x": 16,
+    "y": 32,
+    "width": 16,
+    "height": 16
+  },
+  "crown": {
+    "x": 32,
+    "y": 32,
+    "width": 16,
+    "height": 16
+  },
+  "hat": {
+    "x": 48,
+    "y": 32,
+    "width": 16,
+    "height": 16
+  }
+}
