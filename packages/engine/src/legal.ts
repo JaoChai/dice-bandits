@@ -2,6 +2,15 @@ import type { Action, AttackPick, DefensePick, GameState } from './types';
 import { BALANCE, ITEM_BY_ID, PRANK_ALIASES } from './data/index';
 import { leader } from './rules/pvp';
 
+export function battleActorSeat(state: GameState): number | null {
+  if (state.phase.kind !== 'battle') return null;
+  const battle = state.phase.battle;
+  const side =
+    battle.pending.attack === null ? battle.attackerSide : battle.attackerSide === 'a' ? 'b' : 'a';
+  const actor = side === 'a' ? battle.a : battle.b;
+  return actor.kind === 'player' ? actor.seat : null;
+}
+
 /**
  * Full enumeration of the actions `seat` may legally take right now.
  * `step` accepts exactly these (battlePick exempt; see legalBattlePicks).
@@ -106,10 +115,12 @@ export function legalActions(state: GameState, seat: number): Action[] {
       const c = state.phase.battle;
       const side = c.pending.attack === null ? c.attackerSide : c.attackerSide === 'a' ? 'b' : 'a';
       const actor = side === 'a' ? c.a : c.b;
+      const actorSeat = battleActorSeat(state);
+      if (actor.kind !== 'player' || actorSeat !== seat) return [];
       const itemActions: Action[] = [];
-      for (const item of actor.kind === 'player'
-        ? state.players[seat]!.items.filter((id) => ITEM_BY_ID[id]?.kind === 'battle')
-        : []) {
+      for (const item of state.players[actorSeat]!.items.filter(
+        (id) => ITEM_BY_ID[id]?.kind === 'battle',
+      )) {
         const opponent = actor === c.a ? c.b : c.a;
         const target = ITEM_BY_ID[item]?.effect.poisonPct
           ? opponent.kind === 'player'
@@ -118,7 +129,6 @@ export function legalActions(state: GameState, seat: number): Action[] {
           : null;
         itemActions.push({ type: 'useItem', item, target });
       }
-      if (actor.kind !== 'player' || actor.seat !== seat) return [];
       const picks: Action[] =
         side === c.attackerSide
           ? (actor.secretUsed

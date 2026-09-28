@@ -147,6 +147,76 @@ describe('Task 6 items and shop', () => {
     expect(current.players[0]!.forcedRoll).toBe(4);
   });
 
+  it('lets both PvP combatants use battle items on the correct player without advancing battle', () => {
+    const s = createGame(config);
+    s.players[0]!.stats.spd = 100;
+    s.players[0]!.items = ['ironSkin'];
+    s.players[1]!.items = ['potion', 'ironSkin', 'poisonBlade'];
+    s.players[1]!.hp = Math.ceil((s.players[1]!.stats.maxHp * 40) / 100);
+    const defenderSeat = 1;
+    const attackerHp = s.players[0]!.hp;
+    startBattle(s, {
+      context: 'pvp',
+      spaceId: 1,
+      opponent: {
+        kind: 'player',
+        seat: defenderSeat,
+        monsterId: null,
+        level: s.players[defenderSeat]!.level,
+        hp: s.players[defenderSeat]!.hp,
+        stats: { ...s.players[defenderSeat]!.stats, spd: 1 },
+        secretUsed: false,
+        buffs: { ironSkin: false, poison: false, halveNext: false },
+      },
+    });
+    if (s.phase.kind !== 'battle') throw new Error('expected battle');
+
+    const attackerItem = legalActions(s, 0).find(
+      (action) => action.type === 'useItem' && action.item === 'ironSkin',
+    );
+    expect(attackerItem).toEqual({ type: 'useItem', item: 'ironSkin', target: null });
+    const attackerUsed = step(s, attackerItem!);
+    expect(attackerUsed.state.players[0]!.items).toEqual([]);
+    expect(attackerUsed.state.phase.kind).toBe('battle');
+    if (attackerUsed.state.phase.kind !== 'battle') throw new Error('expected battle');
+    const attackerPicked = step(attackerUsed.state, {
+      type: 'battlePick',
+      side: 'a',
+      pick: 'attack',
+    });
+    expect(attackerPicked.state.phase.kind).toBe('battle');
+
+    const defenderLegal = legalActions(attackerPicked.state, defenderSeat);
+    expect(defenderLegal).toContainEqual({ type: 'useItem', item: 'potion', target: null });
+    expect(defenderLegal).toContainEqual({ type: 'useItem', item: 'ironSkin', target: null });
+    expect(defenderLegal).toContainEqual({ type: 'useItem', item: 'poisonBlade', target: 0 });
+    let current = step(attackerPicked.state, { type: 'useItem', item: 'potion', target: null });
+    expect(current.state.players[defenderSeat]!.hp).toBeGreaterThan(s.players[defenderSeat]!.hp);
+    expect(current.state.players[0]!.hp).toBe(attackerHp);
+    expect(current.state.players[defenderSeat]!.items).toEqual(['ironSkin', 'poisonBlade']);
+    expect(current.state.phase.kind).toBe('battle');
+    current = step(current.state, { type: 'useItem', item: 'ironSkin', target: null });
+    current = step(current.state, { type: 'useItem', item: 'poisonBlade', target: 0 });
+    if (current.state.phase.kind !== 'battle') throw new Error('expected battle');
+    expect(current.state.phase.battle.b.buffs.ironSkin).toBe(true);
+    expect(current.state.phase.battle.a.buffs.poison).toBe(true);
+    expect(current.state.players[0]!.items).toEqual([]);
+    expect(current.state.players[defenderSeat]!.items).toEqual([]);
+    const stillDefenderPick = legalActions(current.state, defenderSeat).find(
+      (action) => action.type === 'battlePick',
+    );
+    expect(stillDefenderPick).toBeDefined();
+    let battleState = current.state;
+    for (let i = 0; i < 30 && battleState.phase.kind === 'battle'; i++) {
+      const bt = battleState.phase.battle;
+      const side =
+        bt.pending.attack === null ? bt.attackerSide : bt.attackerSide === 'a' ? 'b' : 'a';
+      const pick = side === bt.attackerSide ? 'attack' : 'defend';
+      battleState = step(battleState, { type: 'battlePick', side, pick }).state;
+    }
+    expect(battleState.phase.kind).not.toBe('battle');
+  });
+
   it('equips purchased equipment and removes its stat bonus when sold', () => {
     const s = createGame(config);
     s.phase = { kind: 'shop', stock: ['bronzeSword'] };
