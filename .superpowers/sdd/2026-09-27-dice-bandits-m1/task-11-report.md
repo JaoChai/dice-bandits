@@ -133,3 +133,26 @@ Final fresh run completed successfully:
 - Screenshots: `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t11-fix2-desktop.png` and `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t11-fix2-mobile.png`.
 - Vision review: desktop showed all names, compact stats, HP bars and status chip inside cards. Mobile crop confirmed the apparently protruding fourth-card chip was fully inside its card; DOM measurements also show no out-of-card text or scroll overflow. Names/stats are intentionally compact at this fixed card size.
 - Dev server stopped; port 4174 confirmed closed. No push.
+
+## Fix round 3
+
+**Status:** DONE
+**Implementation commit:** `b949a3a fix(client): localize compact HUD level label`
+
+### Change
+
+- `apps/client/src/ui/hud.ts:69` now renders the compact stat row with `t('board.levelShort')` instead of the hard-coded `Lv` label.
+- Added `board.levelShort` as `Lv` to both `apps/client/src/i18n/en.json:135` and `apps/client/src/i18n/th.json:135`; the compact label remains the same width in both locales.
+- `apps/client/test/hud.test.ts:16-26` checks the compact level label in Thai.
+
+### TDD evidence
+
+- **RED:** `npm test -w @dice-bandits/client -- --run test/hud.test.ts` failed as intended: expected `board.levelShort1`, received the hard-coded `Lv1` (1 failed, 3 passed).
+- **GREEN:** Re-ran the focused suite after the fix: **1 file / 4 tests passed**.
+
+### Verification
+
+- Required full gate passed: `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build -w @dice-bandits/client`.
+- Typecheck, lint, format check passed; engine **16 files / 113 tests**, client **6 files / 14 tests**, pixelize **1 file / 8 tests** passed; client production build passed.
+- Build retains the existing >500 KB JavaScript chunk warning. No browser run was needed because Thai uses the same compact `Lv` value.
+- No push.
