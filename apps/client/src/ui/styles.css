@@ -243,6 +243,37 @@ h1 {
     font-size: 0.8rem;
   }
 }
+@media (max-height: 400px) {
+  #app {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .setup-screen {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .setup-screen h1 {
+    line-height: 1.35;
+  }
+  #setup-form {
+    gap: 3px;
+  }
+  #setup-form .primary {
+    min-height: 30px;
+    padding: 4px 12px;
+  }
+  .seat-list {
+    gap: 4px;
+  }
+  .seat-row {
+    gap: 3px 6px;
+    padding: 4px 6px;
+  }
+  .seat-row input,
+  .seat-row select {
+    height: 24px;
+  }
+}
 .game-shell {
   position: relative;
   width: min(100%, 640px);

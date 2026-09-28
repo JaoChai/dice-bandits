@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createGame, data, legalActions, step } from '@dice-bandits/engine';
 import { getLang, setLang, t } from '../src/i18n';
 import th from '../src/i18n/th.json';
@@ -43,6 +43,22 @@ describe('i18n', () => {
     expect(t('title.welcome', { name: 'Mali' })).toContain('Mali');
     setLang('th');
     expect(getLang()).toBe('th');
+  });
+
+  it('falls back to the default language and keeps language changes in memory when storage throws', async () => {
+    vi.resetModules();
+    const getItemSpy = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('storage disabled');
+    });
+    const isolatedI18n = await import('../src/i18n');
+    expect(isolatedI18n.getLang()).toBe('en');
+    getItemSpy.mockRestore();
+    const setItemSpy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('storage disabled');
+    });
+    expect(() => isolatedI18n.setLang('th')).not.toThrow();
+    expect(isolatedI18n.getLang()).toBe('th');
+    setItemSpy.mockRestore();
   });
 
   it('translates all engine data ids and observed engine event types', () => {

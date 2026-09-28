@@ -13,8 +13,12 @@ const listeners = new Set<LanguageListener>();
 const storageKey = 'lang';
 
 function initialLanguage(): Language {
-  const stored = localStorage.getItem(storageKey);
-  if (stored === 'th' || stored === 'en') return stored;
+  try {
+    const stored = localStorage.getItem(storageKey);
+    if (stored === 'th' || stored === 'en') return stored;
+  } catch {
+    // Use the browser preference when persistence is unavailable.
+  }
   return navigator.language.toLowerCase().startsWith('th') ? 'th' : 'en';
 }
 
@@ -28,7 +32,11 @@ export function getLang(): Language {
 export function setLang(next: Language): void {
   language = next;
   document.documentElement.lang = next;
-  localStorage.setItem(storageKey, next);
+  try {
+    localStorage.setItem(storageKey, next);
+  } catch {
+    // Keep the selected language in memory even when persistence is unavailable.
+  }
   for (const listener of listeners) listener(next);
 }
 

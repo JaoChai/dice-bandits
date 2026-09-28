@@ -65,14 +65,25 @@ function netWorth(state: GameState, player: Player): number {
 
 function highlightLabel(highlight: Highlight, state: GameState): string {
   if (highlight.key === 'hotTown') {
+    const space =
+      highlight.spaceId === null || highlight.flips === 0
+        ? undefined
+        : state.board.spaces.find((item) => item.id === highlight.spaceId);
     const town =
-      highlight.spaceId === null
-        ? null
-        : state.towns.find((item) => item.spaceId === highlight.spaceId);
+      highlight.spaceId === null || highlight.flips === 0 || !space
+        ? t('results.noTown')
+        : t('results.townName', {
+            region: t(`region.${space.region}`),
+            id: highlight.spaceId,
+          });
+    const townValue =
+      highlight.spaceId === null || highlight.flips === 0
+        ? 0
+        : (state.towns.find((item) => item.spaceId === highlight.spaceId)?.value ?? 0);
     return t('results.hotTown', {
-      town: highlight.spaceId === null ? '—' : highlight.spaceId,
+      town,
       flips: highlight.flips,
-      value: town?.value ?? 0,
+      value: townValue,
     });
   }
   return t(`results.${highlight.key}`, {
