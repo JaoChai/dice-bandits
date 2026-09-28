@@ -10,6 +10,7 @@ export default tseslint.config(
       '**/test-results',
       '**/playwright-report',
       'apps/client/public',
+      'apps/client/worker-configuration.d.ts',
       'docs/**',
       '.superpowers/**',
     ],

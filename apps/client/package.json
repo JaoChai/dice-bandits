@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "e2e": "playwright test",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@fontsource/chakra-petch": "5.3.0",

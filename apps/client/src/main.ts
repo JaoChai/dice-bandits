@@ -104,10 +104,8 @@ function startGame(state: GameState): void {
     game = null;
     showTitle(startSetup);
   });
-  if (testHooks.enabled) {
+  if (import.meta.env.VITE_TEST_HOOKS === '1') {
     window.__db = { getState: () => controller.state };
-  } else {
-    delete window.__db;
   }
   window.addEventListener('dice-bandits:lang', () => renderHud(app, controller.state, dispatch));
   saveGame(controller.state);
