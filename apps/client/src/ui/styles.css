@@ -318,26 +318,45 @@ h1 {
   outline: 2px solid #ffd477;
 }
 .seat-card img {
-  width: 34px;
-  height: 34px;
+  display: flex;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
   image-rendering: pixelated;
 }
 .seat-details {
   min-width: 0;
+  flex: 1;
   display: grid;
+  grid-template-rows: 10px 10px 5px 10px;
+  align-content: center;
   gap: 1px;
+  overflow: hidden;
 }
 .seat-details strong,
 .seat-details small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 10px;
 }
 .seat-details span {
-  white-space: normal;
-  overflow-wrap: anywhere;
-  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  line-height: 10px;
+  font-size: 0.5rem;
+}
+.seat-details .seat-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 10px;
+  font-size: 0.5rem;
 }
 .hp-track {
   height: 5px;
@@ -443,6 +462,9 @@ h1 {
   }
   .seat-details small {
     display: none;
+  }
+  .seat-details .seat-status {
+    display: block;
   }
   .action-bar {
     min-height: 44px;

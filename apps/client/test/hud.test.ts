@@ -27,6 +27,19 @@ describe('renderHud', () => {
     root.remove();
   });
 
+  it('renders bandit-card status as a compact chip with an accessible full label', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    state.players[0]!.banditCards = ['cursedLegs'];
+    renderHud(root, state, () => undefined);
+    const status = root.querySelector<HTMLElement>('.seat-status');
+    expect(status?.textContent).toBe('1 🃏');
+    expect(status?.getAttribute('aria-label')).toBeTruthy();
+    expect(status?.getAttribute('title')).toBe(status?.getAttribute('aria-label'));
+    root.remove();
+  });
+
   it('includes target id in targeted item action test ids', () => {
     const root = document.createElement('div');
     document.body.append(root);
