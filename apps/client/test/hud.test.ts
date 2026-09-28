@@ -51,6 +51,21 @@ function pvpBattleWithSeatZeroPicking(): GameState {
 }
 
 describe('renderHud', () => {
+  it('switches in-game action labels when the language control is used', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    setLang('en');
+    renderHud(root, state, () => undefined);
+
+    expect(root.querySelector('[data-testid="action-roll"]')?.textContent).toBe('Roll');
+    root.querySelector<HTMLButtonElement>('[data-lang="th"]')?.click();
+    expect(root.querySelector('[data-testid="action-roll"]')?.textContent).toBe('ทอยเต๋า');
+    expect(root.querySelector('[data-lang="en"]')?.getAttribute('aria-pressed')).toBe('false');
+    root.remove();
+    setLang('en');
+  });
+
   it('shows the pass screen and hides picks when seat 0 is the next human PvP picker', () => {
     const root = document.createElement('div');
     document.body.append(root);
