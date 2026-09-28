@@ -23,18 +23,15 @@ export function renderBattleUi(
   const passNeeded =
     battleSeat !== undefined && needsPassScreen(state, side) && !readyPasses.has(passKey);
   const shownActions = passNeeded ? [] : actions;
-  const buttons = humanPicker
-    ? shownActions
-        .filter(
-          (action): action is Extract<Action, { type: 'battlePick' }> =>
-            action.type === 'battlePick',
-        )
-        .map(
-          (action, index) =>
-            `<button class="action-button" data-testid="pick-${action.pick}" data-action-index="${index}">${escapeHtml(actionName(action))}</button>`,
-        )
-        .join('')
-    : '';
+  const pickerActions = humanPicker
+    ? shownActions.filter((action) => action.type === 'battlePick' || action.type === 'useItem')
+    : [];
+  const buttons = pickerActions
+    .map(
+      (action, index) =>
+        `<button class="action-button" data-testid="${battleActionTestId(action)}" data-action-index="${index}">${escapeHtml(actionName(action))}</button>`,
+    )
+    .join('');
 
   const actionBar = root.querySelector<HTMLElement>('.action-bar');
   if (actionBar) {
@@ -54,10 +51,18 @@ export function renderBattleUi(
     });
   }
   root.querySelectorAll<HTMLButtonElement>('[data-action-index]').forEach((button) => {
-    const action = shownActions[Number(button.dataset.actionIndex)];
+    const action = pickerActions[Number(button.dataset.actionIndex)];
     if (action) button.addEventListener('click', () => dispatch(action));
   });
   return true;
+}
+
+function battleActionTestId(action: Action): string {
+  if (action.type === 'battlePick') return `pick-${action.pick}`;
+  if (action.type === 'useItem') {
+    return `action-useItem-${action.item}${action.target === null ? '' : `-${action.target}`}`;
+  }
+  return '';
 }
 
 function pendingSide(state: GameState): BattleSide {

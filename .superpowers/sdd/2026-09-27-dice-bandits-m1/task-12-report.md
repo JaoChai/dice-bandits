@@ -84,3 +84,21 @@
 - At `speed=1`, completed an attack/defend PvP pair and captured the Phaser canvas at 110 ms after the resolving pick. Vision confirmed the battle canvas and transient red floating damage text. Screenshots: `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t12-fix1-anim.png` and Thai results at 844×390 `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t12-fix1-results.png`.
 - Browser console/page errors: none. Dev server stopped; port 4174 confirmed closed.
 - **Fix-code SHA:** `c41c594934da6b636b456833917aa2b11c2b16b3`.
+
+## Fix round 2
+
+**Date:** 2026-09-28
+**Fix commit:** pending
+
+### Finding — battle consumable controls dropped
+
+- **Cause/fix:** `apps/client/src/ui/battleUi.ts` previously filtered to `battlePick` only. It now renders both `battlePick` and eligible `useItem` actions, retaining `pick-<pick>` IDs and assigning `action-useItem-<item>[-<target>]` IDs with the existing localized action labels. Pass-required actions remain hidden until Ready. Click handlers now resolve indexes from the same filtered array used to render buttons.
+- **TDD RED:** Added a real engine-derived PvP battle fixture with a battle potion in seat 0's inventory. Before the UI fix, `npm test -w @dice-bandits/client -- --run test/hud.test.ts` failed on `expected null not to be null` for the `action-useItem-potion` control. The regression test also verifies the item remains hidden behind Ready and dispatches the exact legal `useItem` action afterward.
+- **GREEN:** Focused HUD suite passed (6 tests).
+
+### Verification and browser evidence
+
+- **Gate passed:** `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build -w @dice-bandits/client`. Totals: engine 113 tests, client 18 tests, pixelize 8 tests. Build retains the existing large-chunk warning (~1.46 MB minified).
+- Chromium `seed-1`, two-human PvP run confirmed pass-ready before 12/12 picks. No browser console or page errors.
+- The journey did not naturally acquire a battle item; the shop offered equipment, and the run reached game over without one. To exercise the UI in-browser, the test hook provisioned a potion directly onto the active player in a real PvP battle state, then triggered a HUD render. The localized `Use item · Potion` button appeared; clicking consumed the potion. Screenshot: `/home/jaochai/.hermes/profiles/hermes-dev/cache/scratch/t12-fix2-item.png`. Natural shop acquisition remains unverified; the engine-derived regression test verifies rendering and dispatch.
+- Stopped the dev server; `ss -ltnp 'sport = :4174'` confirmed the port was closed.

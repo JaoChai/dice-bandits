@@ -63,6 +63,33 @@ describe('renderHud', () => {
     root.remove();
   });
 
+  it('renders and dispatches battle-item actions for the human battle picker', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = pvpBattleWithSeatZeroPicking();
+    state.players[0]!.items.push('potion');
+    const expectedAction = legalActions(state, 0).find(
+      (action) => action.type === 'useItem' && action.item === 'potion',
+    );
+    if (!expectedAction) throw new Error('expected battle-item use action after adding potion');
+    const dispatched: (typeof expectedAction)[] = [];
+
+    renderHud(root, state, (action) => {
+      if (action.type === 'useItem') dispatched.push(action);
+    });
+
+    expect(root.querySelector('[data-testid="pass-ready"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid^="action-useItem-potion"]')).toBeNull();
+    root.querySelector<HTMLButtonElement>('[data-testid="pass-ready"]')?.click();
+    const itemButton = root.querySelector<HTMLButtonElement>(
+      '[data-testid^="action-useItem-potion"]',
+    );
+    expect(itemButton).not.toBeNull();
+    itemButton?.click();
+    expect(dispatched).toEqual([expectedAction]);
+    root.remove();
+  });
+
   it('localizes the compact level label in Thai', () => {
     const root = document.createElement('div');
     document.body.append(root);
