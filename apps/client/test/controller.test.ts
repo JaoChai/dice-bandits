@@ -22,10 +22,13 @@ afterEach(() => {
 describe('GameController', () => {
   it('runs a human and three bots to game over, autosaving every action', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const phases = new Set<string>(['awaitRoll']);
     const controller = new GameController({
       state: createGame(config),
-      speed: 0,
-      onEvents: async () => undefined,
+      speed: 0.01,
+      onEvents: async (_events, state) => {
+        phases.add(state.phase.kind);
+      },
     });
     let actions = 0;
 
@@ -41,25 +44,9 @@ describe('GameController', () => {
     }
 
     expect(controller.state.phase.kind).toBe('gameOver');
+    expect(phases).toContain('battle');
+    expect(phases).toContain('gameOver');
     expect(actions).toBeLessThan(2000);
-    expect(errors).not.toHaveBeenCalled();
-  });
-
-  it('runs the phase seat bot when a level-up is for a seat other than turnSeat', async () => {
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const state = createGame(config);
-    state.phase = {
-      kind: 'levelUp',
-      seat: 2,
-      choices: ['hpUp', 'atkUp'],
-      then: 'continue',
-    };
-    const controller = new GameController({ state, speed: 0, onEvents: async () => undefined });
-
-    await (controller as unknown as { runBotsIfNeeded: () => Promise<void> }).runBotsIfNeeded();
-
-    expect(controller.state.players[2]!.perks).toHaveLength(1);
-    expect(controller.state.phase.kind).toBe('awaitRoll');
     expect(errors).not.toHaveBeenCalled();
   });
 

@@ -16,12 +16,7 @@ import { invest, startTownChallenge } from './rules/towns';
  */
 export function step(state: GameState, action: Action): StepResult {
   const next = structuredClone(state);
-  const seat =
-    next.phase.kind === 'pvpReward'
-      ? next.phase.winner
-      : next.phase.kind === 'levelUp'
-        ? next.phase.seat
-        : next.turnSeat;
+  const seat = next.phase.kind === 'pvpReward' ? next.phase.winner : next.turnSeat;
 
   const isBattlePick = action.type === 'battlePick';
   const legal = legalActions(next, seat).some((a) => actionsEq(a, action));

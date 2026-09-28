@@ -91,7 +91,12 @@ export class GameController {
         const legal = legalActions(this.currentState, actor.seat);
         if (!legal.length) break;
         await delay(randomDelay() * this.speed);
-        await this.dispatchBotAction(actor.seat);
+        const currentActor = this.actingSides().find(
+          ({ seat }) => this.currentState.players[seat]?.control === 'bot',
+        );
+        if (!currentActor) break;
+        if (!legalActions(this.currentState, currentActor.seat).length) continue;
+        await this.dispatchBotAction(currentActor.seat);
       }
     })().finally(() => {
       this.botRun = null;
