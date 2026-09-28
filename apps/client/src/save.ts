@@ -58,24 +58,93 @@ function discardSave(): void {
   for (const listener of toastListeners) listener('toast.saveDiscarded');
 }
 
-const phaseKinds = new Set([
-  'awaitRoll',
-  'moving',
-  'chooseBranch',
-  'duelOffer',
-  'battle',
-  'pvpReward',
-  'levelUp',
-  'shop',
-  'townManage',
-  'townChallenge',
-  'endOfTurn',
-  'gameOver',
-]);
 const regions = new Set(['meadow', 'desert', 'snow', 'volcano']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'number');
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isCombatant(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    (value.kind === 'player' || value.kind === 'monster') &&
+    (typeof value.seat === 'number' || value.seat === null) &&
+    (typeof value.monsterId === 'string' || value.monsterId === null) &&
+    typeof value.level === 'number' &&
+    typeof value.hp === 'number' &&
+    isRecord(value.stats) &&
+    typeof value.secretUsed === 'boolean' &&
+    isRecord(value.buffs)
+  );
+}
+
+function isPhase(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.kind !== 'string') return false;
+  switch (value.kind) {
+    case 'awaitRoll':
+    case 'endOfTurn':
+      return true;
+    case 'moving':
+      return typeof value.remaining === 'number';
+    case 'chooseBranch':
+      return typeof value.remaining === 'number' && isNumberArray(value.options);
+    case 'duelOffer':
+      return typeof value.remaining === 'number' && isNumberArray(value.targets);
+    case 'battle': {
+      const battle = value.battle;
+      return (
+        isRecord(battle) &&
+        (battle.context === 'monster' || battle.context === 'town' || battle.context === 'pvp') &&
+        typeof battle.spaceId === 'number' &&
+        isCombatant(battle.a) &&
+        isCombatant(battle.b) &&
+        typeof battle.exchange === 'number' &&
+        (battle.attackerSide === 'a' || battle.attackerSide === 'b') &&
+        (battle.half === 1 || battle.half === 2) &&
+        isRecord(battle.pending) &&
+        (typeof battle.pending.attack === 'string' || battle.pending.attack === null) &&
+        (typeof battle.pending.defense === 'string' || battle.pending.defense === null)
+      );
+    }
+    case 'pvpReward':
+      return typeof value.winner === 'number' && typeof value.loser === 'number';
+    case 'levelUp':
+      return (
+        typeof value.seat === 'number' &&
+        isStringArray(value.choices) &&
+        (value.then === 'endTurn' || value.then === 'continue')
+      );
+    case 'shop':
+      return isStringArray(value.stock);
+    case 'townManage':
+    case 'townChallenge':
+      return typeof value.spaceId === 'number';
+    case 'gameOver':
+      return (
+        isNumberArray(value.ranking) &&
+        isNumberArray(value.winners) &&
+        Array.isArray(value.highlights) &&
+        value.highlights.every(
+          (highlight) =>
+            isRecord(highlight) &&
+            (highlight.key === 'biggestRobbery' || highlight.key === 'mostKod'
+              ? typeof highlight.seat === 'number' && typeof highlight.value === 'number'
+              : highlight.key === 'hotTown' &&
+                (typeof highlight.spaceId === 'number' || highlight.spaceId === null) &&
+                typeof highlight.flips === 'number'),
+        )
+      );
+    default:
+      return false;
+  }
 }
 
 function isGameState(value: unknown): value is GameState {
@@ -98,12 +167,7 @@ function isGameState(value: unknown): value is GameState {
   )
     return false;
   if (typeof value.round !== 'number' || typeof value.turnSeat !== 'number') return false;
-  if (
-    !isRecord(value.phase) ||
-    typeof value.phase.kind !== 'string' ||
-    !phaseKinds.has(value.phase.kind)
-  )
-    return false;
+  if (!isPhase(value.phase)) return false;
   if (!value.config.seats.every((seat) => isRecord(seat))) return false;
   if (
     !value.players.every(

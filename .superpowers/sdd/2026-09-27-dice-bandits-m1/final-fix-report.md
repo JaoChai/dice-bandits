@@ -20,3 +20,11 @@
 
 - Build/e2e emitted the existing Vite warning that the minified JS chunk exceeds 500 kB; it is out of scope for this fix wave.
 - No push or deploy performed.
+
+## Fix round 2
+
+- Added hand-written, per-kind phase payload validation before accepting saved game state, including nested battle combatants/pending picks and game-over highlights.
+- Added malformed-phase discard/toast cases and an 8-seed, four-bot validity sweep that saves and reloads every real intermediate engine state through game over. TDD red: the malformed-phase test failed against kind-only validation; green: targeted save suite passed (6 tests).
+- Validity sweep covered: `awaitRoll`, `battle`, `chooseBranch`, `duelOffer`, `endOfTurn`, `gameOver`, `levelUp`, `pvpReward`, `shop`, `townChallenge`.
+- Gate passed: typecheck; lint; format check; tests (25 files, 149 passed); 200-game/four-player simulation (0 crashes, 0 stuck); build; e2e (7 passed, 1 skipped). Ports 4173 and 4174 were free before e2e.
+- Build/e2e retained the existing Vite warning about the minified JS chunk exceeding 500 kB. No push or deploy performed.
