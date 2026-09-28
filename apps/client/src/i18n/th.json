@@ -132,6 +132,7 @@
   "board.round": "รอบ {round}/{total}",
   "board.actions": "คำสั่ง",
   "board.level": "เลเวล",
+  "board.levelShort": "Lv",
   "board.towns": "เมือง",
   "board.hp": "พลังชีวิต",
   "board.gold": "G",

@@ -66,7 +66,7 @@ function playerCard(state: GameState, player: Player): string {
   const compactCards = player.banditCards.length
     ? `<small class="seat-status" title="${escapeHtml(cards)}" aria-label="${escapeHtml(cards)}">${player.banditCards.length} 🃏</small>`
     : '';
-  return `<article class="seat-card ${player.seat === state.turnSeat ? 'active' : ''}" style="--seat-color:${seatHex(player.seat)}"><img src="/sprites/hero-${player.classId}-portrait.png" alt="${t(`class.${player.classId}`)}"><div class="seat-details"><strong>${escapeHtml(name)}</strong><span title="${escapeHtml(statsLabel)}" aria-label="${escapeHtml(statsLabel)}">${player.gold}🪙 · Lv${player.level} · ${towns}🏘</span><div class="hp-track" aria-label="${t('board.hp')}"><span style="width:${hp}%"></span></div>${compactCards}</div></article>`;
+  return `<article class="seat-card ${player.seat === state.turnSeat ? 'active' : ''}" style="--seat-color:${seatHex(player.seat)}"><img src="/sprites/hero-${player.classId}-portrait.png" alt="${t(`class.${player.classId}`)}"><div class="seat-details"><strong>${escapeHtml(name)}</strong><span title="${escapeHtml(statsLabel)}" aria-label="${escapeHtml(statsLabel)}">${player.gold}🪙 · ${t('board.levelShort')}${player.level} · ${towns}🏘</span><div class="hp-track" aria-label="${t('board.hp')}"><span style="width:${hp}%"></span></div>${compactCards}</div></article>`;
 }
 
 function actionName(action: Action): string {

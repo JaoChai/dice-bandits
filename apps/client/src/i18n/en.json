@@ -132,6 +132,7 @@
   "board.round": "Round {round}/{total}",
   "board.actions": "Actions",
   "board.level": "Lv",
+  "board.levelShort": "Lv",
   "board.towns": "towns",
   "board.hp": "Health",
   "board.gold": "G",

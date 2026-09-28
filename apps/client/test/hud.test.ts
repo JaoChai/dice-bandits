@@ -1,5 +1,6 @@
 import { createGame, type GameConfig } from '@dice-bandits/engine';
 import { describe, expect, it } from 'vitest';
+import { setLang, t } from '../src/i18n';
 import { renderHud } from '../src/ui/hud';
 
 const config: GameConfig = {
@@ -12,6 +13,19 @@ const config: GameConfig = {
 };
 
 describe('renderHud', () => {
+  it('localizes the compact level label in Thai', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    setLang('th');
+    renderHud(root, state, () => undefined);
+    const stats = root.querySelector('.seat-card span[title]');
+
+    expect(stats?.textContent).toContain(`${t('board.levelShort')}${state.players[0]!.level}`);
+    root.remove();
+    setLang('en');
+  });
+
   it('keeps the mounted Phaser board canvas connected across state updates', () => {
     const root = document.createElement('div');
     document.body.append(root);
