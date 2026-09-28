@@ -11,9 +11,11 @@ import { testHooks } from './testHooks';
 import { t } from './i18n';
 import BootScene from './scenes/BootScene';
 import BoardScene from './scenes/BoardScene';
+import BattleScene from './scenes/BattleScene';
 import { animateThenRender } from './eventOrder';
 import { renderHud } from './ui/hud';
 import { renderEventToast } from './ui/dialogs';
+import { renderResults } from './ui/results';
 
 const app = getMount();
 let game: Phaser.Game | null = null;
@@ -34,6 +36,10 @@ function startSetup(): void {
 }
 
 function startGame(state: GameState): void {
+  if (state.phase.kind === 'gameOver') {
+    renderResults(app, state, startSetup, () => showTitle(startSetup));
+    return;
+  }
   game?.destroy(true);
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
@@ -44,10 +50,33 @@ function startGame(state: GameState): void {
       renderHud(app, nextState, dispatch);
       renderEventToast(app, events);
       const scene = game?.scene.getScene('BoardScene') as BoardScene | undefined;
+      const battleScene = game?.scene.getScene('BattleScene') as BattleScene | undefined;
       await animateThenRender(
-        () => scene?.playEvents(events) ?? Promise.resolve(),
-        () => game?.events.emit('game-state', nextState),
+        async () => {
+          await Promise.all([
+            scene?.playEvents(events) ?? Promise.resolve(),
+            game?.scene.isActive('BattleScene')
+              ? (battleScene?.playEvents(events, window.diceBanditsSpeed) ?? Promise.resolve())
+              : Promise.resolve(),
+          ]);
+        },
+        () => {
+          game?.registry.set('state', nextState);
+          game?.events.emit('game-state', nextState);
+          if (nextState.phase.kind === 'battle') {
+            if (!game?.scene.isActive('BattleScene')) scene?.scene.launch('BattleScene');
+          } else if (game?.scene.isActive('BattleScene')) {
+            scene?.scene.stop('BattleScene');
+          }
+        },
       );
+      if (nextState.phase.kind === 'gameOver') {
+        game?.destroy(true);
+        game = null;
+        renderResults(app, nextState, startSetup, () => {
+          showTitle(startSetup);
+        });
+      }
     },
   });
   function dispatch(action: Action): void {
@@ -67,7 +96,7 @@ function startGame(state: GameState): void {
     pixelArt: true,
     roundPixels: true,
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    scene: [BootScene, BoardScene],
+    scene: [BootScene, BoardScene, BattleScene],
   });
   game.registry.set('state', state);
   app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {

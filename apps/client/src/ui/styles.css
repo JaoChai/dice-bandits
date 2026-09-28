@@ -473,3 +473,128 @@ h1 {
     min-height: 34px;
   }
 }
+.results-screen {
+  width: min(100%, 640px);
+  max-height: min(92vh, 560px);
+  overflow-y: auto;
+  border: 3px solid #e7aa57;
+  border-radius: 12px;
+  padding: clamp(12px, 3vw, 22px);
+  background: linear-gradient(145deg, #302039, #201a30 78%);
+  box-shadow: 0 10px 35px #08060dbb;
+}
+.results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.results-header h1 {
+  margin: 0 0 12px;
+  font-size: clamp(1rem, 3vw, 1.4rem);
+}
+.results-header nav {
+  display: flex;
+  gap: 4px;
+}
+.results-header button {
+  min-height: 30px;
+  padding: 4px 8px;
+}
+.results-ranking {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.results-ranking li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #735e7d;
+  border-radius: 6px;
+  padding: 6px 9px;
+  background: #211c30;
+}
+.results-ranking li.winner {
+  border-color: #ffd477;
+  background: #473548;
+}
+.results-highlights {
+  margin: 12px 0;
+}
+.results-highlights h2 {
+  margin: 0 0 5px;
+  color: #ffd477;
+  font-size: 1rem;
+}
+.results-highlights p {
+  margin: 4px 0;
+}
+.results-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.pass-device {
+  z-index: 20;
+}
+.pass-device .game-dialog {
+  width: min(92%, 420px);
+  max-height: 90%;
+  text-align: center;
+}
+.pass-portrait {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  margin: 0 auto;
+}
+.pass-device h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.phase-dialog {
+  width: min(92%, 480px);
+  max-height: 88%;
+  overflow: auto;
+}
+.phase-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+.phase-choices button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 8px;
+}
+.rotate-hint {
+  display: none;
+}
+@media (orientation: portrait) and (max-width: 900px) {
+  .rotate-hint {
+    position: fixed;
+    z-index: 30;
+    inset: auto 8px 8px;
+    display: block;
+    border: 1px solid #ffe1a0;
+    border-radius: 8px;
+    padding: 8px;
+    background: #171324ee;
+    text-align: center;
+    font-weight: 700;
+    pointer-events: none;
+  }
+  .dialog-shade {
+    overflow-y: auto;
+    padding: 10px;
+  }
+  .game-dialog {
+    max-height: 92%;
+    overflow: auto;
+  }
+}

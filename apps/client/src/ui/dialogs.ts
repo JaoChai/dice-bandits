@@ -18,6 +18,40 @@ export function renderEventToast(root: HTMLElement, events: GameEvent[]): void {
   window.setTimeout(() => toast.remove(), 2400);
 }
 
+export function showPhaseDialog(
+  root: HTMLElement,
+  state: import('@dice-bandits/engine').GameState,
+  actions: Action[],
+  dispatch: (action: Action) => void,
+): void {
+  const dialog = document.createElement('div');
+  dialog.className = 'dialog-shade';
+  const title = state.phase.kind === 'levelUp' ? t('perk.title') : t('shop.title');
+  dialog.innerHTML = `<section class="game-dialog phase-dialog" role="dialog" aria-modal="true"><h2>${title}</h2><div class="phase-choices">${actions.map((action, index) => `<button data-testid="${phaseTestId(action)}" data-choice="${index}">${phaseLabel(action)}</button>`).join('')}</div></section>`;
+  dialog.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const action = actions[Number(button.dataset.choice)];
+      if (action) dispatch(action);
+      dialog.remove();
+    });
+  });
+  root.append(dialog);
+}
+
+function phaseTestId(action: Action): string {
+  return action.type === 'pickPerk'
+    ? `perk-${action.perk}`
+    : `shop-${action.type}-${action.type === 'shopBuy' || action.type === 'shopSell' ? action.item : 'leave'}`;
+}
+
+function phaseLabel(action: Action): string {
+  if (action.type === 'pickPerk') return t(`perk.${action.perk}`);
+  if (action.type === 'shopBuy') return `${t('action.buy')} · ${t(`item.${action.item}`)}`;
+  if (action.type === 'shopSell') return `${t('action.sell')} · ${t(`item.${action.item}`)}`;
+  if (action.type === 'leave') return t('action.leave');
+  return '';
+}
+
 export function showActionDialog(
   root: HTMLElement,
   actions: Action[],
