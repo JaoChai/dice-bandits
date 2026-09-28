@@ -15,6 +15,7 @@ jobs:
       - run: npm run test:worker
       - run: npm run build -w @dice-bandits/client
       - run: npm run sim -- --games 200 --players 4
+      - run: npm run sim:room -- --games 200
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
       - uses: actions/upload-artifact@v4
