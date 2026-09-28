@@ -45,6 +45,24 @@ describe('GameController', () => {
     expect(errors).not.toHaveBeenCalled();
   });
 
+  it('runs the phase seat bot when a level-up is for a seat other than turnSeat', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const state = createGame(config);
+    state.phase = {
+      kind: 'levelUp',
+      seat: 2,
+      choices: ['hpUp', 'atkUp'],
+      then: 'continue',
+    };
+    const controller = new GameController({ state, speed: 0, onEvents: async () => undefined });
+
+    await (controller as unknown as { runBotsIfNeeded: () => Promise<void> }).runBotsIfNeeded();
+
+    expect(controller.state.players[2]!.perks).toHaveLength(1);
+    expect(controller.state.phase.kind).toBe('awaitRoll');
+    expect(errors).not.toHaveBeenCalled();
+  });
+
   it('logs an illegal action without changing state', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const state = createGame(config);

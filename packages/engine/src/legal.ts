@@ -8,7 +8,12 @@ import { leader } from './rules/pvp';
  */
 export function legalActions(state: GameState, seat: number): Action[] {
   if (state.phase.kind === 'gameOver') return [];
-  if (state.phase.kind !== 'battle' && state.phase.kind !== 'pvpReward' && seat !== state.turnSeat)
+  if (
+    state.phase.kind !== 'battle' &&
+    state.phase.kind !== 'pvpReward' &&
+    state.phase.kind !== 'levelUp' &&
+    seat !== state.turnSeat
+  )
     return [];
   switch (state.phase.kind) {
     case 'awaitRoll': {

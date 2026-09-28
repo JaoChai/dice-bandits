@@ -36,6 +36,23 @@ describe('turn flow', () => {
     expect(s.players.every((p) => p.gold === 300 && p.pos === s.board.castleId)).toBe(true);
     expect(s.phase.kind).toBe('awaitRoll');
   });
+  it('allows the level-up phase seat to act when it differs from turnSeat', () => {
+    const s = createGame({
+      ...cfg(),
+      seats: [
+        ...cfg().seats,
+        { name: 'C', classId: 'mage', control: 'bot', personality: 'greedy' },
+      ],
+    });
+    s.phase = { kind: 'levelUp', seat: 2, choices: ['hpUp', 'atkUp'], then: 'continue' };
+
+    expect(legalActions(s, 2)).toEqual([
+      { type: 'pickPerk', perk: 'hpUp' },
+      { type: 'pickPerk', perk: 'atkUp' },
+    ]);
+    expect(step(s, { type: 'pickPerk', perk: 'hpUp' }).state.players[2]!.perks).toContain('hpUp');
+  });
+
   it('rejects illegal actions without changing state', () => {
     const s = createGame(cfg());
     const before = JSON.stringify(s);

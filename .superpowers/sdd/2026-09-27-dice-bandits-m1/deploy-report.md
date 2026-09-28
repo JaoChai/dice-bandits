@@ -17,3 +17,11 @@
 ## Owner setup
 - Configure `CLOUDFLARE_API_TOKEN` in repository Actions secrets. Required token permissions: **Account Workers Scripts Edit** and **Account D1 Edit**.
 - Auto-provisioning is not part of this workflow: the controller should create/verify the D1 database, add its `database_id` to Wrangler config, and then enable the first deploy. Subsequent main pushes deploy after CI passes.
+
+## Bot no-legal-action regression (2026-09-28)
+- Reproduction: focused state fixture from seed `t1`, `turnSeat=0`, phase `levelUp` for seat 2; before the fix, the regression test failed because `legalActions(state, 2)` returned `[]`. This reproduces the phase/seat mismatch, not a naturally reached live-game seed. Client controller fixture uses one human and three bots and confirms the phase-seat bot picks a perk without logging an error.
+- Root cause: `packages/engine/src/legal.ts:11-17` treated `levelUp` like turn-owned phases and rejected any seat other than `turnSeat`, while `apps/client/src/controller.ts:74-80` correctly selects `phase.seat`. Also, `packages/engine/src/step.ts:19-24` validated `levelUp` actions as `turnSeat` rather than `phase.seat`.
+- Fix: exempt `levelUp` from the `turnSeat` guard and resolve action ownership to `phase.seat` in `step`; ordinary human turns remain turnSeat-owned.
+- TDD: engine regression was RED (expected legal perk choices, received `[]`) before the fix, then GREEN; focused client and engine tests pass.
+- Gate: typecheck, lint, format check, build passed; tests 26 files / 156 tests passed (engine 16/114, client 9/34, pixelize 1/8); simulation 200 games, 0 crashes, 0 stuck; E2E 7 passed, 1 skipped.
+- E2E ports 4173, 4174, and 8788 were confirmed free before running. No push or deployment performed; build emitted the existing >500 kB client chunk warning.
