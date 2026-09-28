@@ -258,14 +258,15 @@ h1 {
 }
 .board-stage {
   width: 100%;
-  height: min(52.5vw, 360px);
+  height: min(300px, 46.875vw);
   min-height: 220px;
   background: #273449;
 }
 .board-stage canvas {
   display: block;
-  width: 100% !important;
-  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  margin: auto;
   image-rendering: pixelated;
 }
 .game-topline {
@@ -294,6 +295,7 @@ h1 {
 }
 .seat-hud {
   display: grid;
+  height: 60px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
   padding: 5px;
@@ -301,15 +303,16 @@ h1 {
 }
 .seat-card {
   min-width: 0;
+  height: 50px;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   border: 1px solid #735e7d;
   border-left: 3px solid var(--seat-color);
   border-radius: 6px;
-  padding: 4px;
+  padding: 2px;
   background: #211c30;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
 }
 .seat-card.active {
   outline: 2px solid #ffd477;
@@ -326,11 +329,15 @@ h1 {
   gap: 1px;
 }
 .seat-details strong,
-.seat-details span,
 .seat-details small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.seat-details span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.1;
 }
 .hp-track {
   height: 5px;
@@ -418,7 +425,7 @@ h1 {
     min-height: 0;
   }
   .board-stage {
-    height: 180px;
+    height: 240px;
     min-height: 0;
   }
   .seat-hud {

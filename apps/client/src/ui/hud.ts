@@ -107,7 +107,7 @@ function itemName(id: string): string {
 function testId(action: Action): string {
   const suffix =
     action.type === 'useItem'
-      ? `-${action.item}`
+      ? `-${action.item}${action.target === null ? '' : `-${action.target}`}`
       : action.type === 'shopBuy' || action.type === 'shopSell'
         ? `-${action.item}`
         : action.type === 'chooseBranch'

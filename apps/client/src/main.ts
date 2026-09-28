@@ -11,6 +11,7 @@ import { testHooks } from './testHooks';
 import { t } from './i18n';
 import BootScene from './scenes/BootScene';
 import BoardScene from './scenes/BoardScene';
+import { animateThenRender } from './eventOrder';
 import { renderHud } from './ui/hud';
 import { renderEventToast } from './ui/dialogs';
 
@@ -42,8 +43,11 @@ function startGame(state: GameState): void {
     onEvents: async (events, nextState) => {
       renderHud(app, nextState, dispatch);
       renderEventToast(app, events);
-      game?.events.emit('game-events', events);
-      game?.events.emit('game-state', nextState);
+      const scene = game?.scene.getScene('BoardScene') as BoardScene | undefined;
+      await animateThenRender(
+        () => scene?.playEvents(events) ?? Promise.resolve(),
+        () => game?.events.emit('game-state', nextState),
+      );
     },
   });
   function dispatch(action: Action): void {

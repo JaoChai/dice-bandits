@@ -26,4 +26,17 @@ describe('renderHud', () => {
     expect(canvas.isConnected).toBe(true);
     root.remove();
   });
+
+  it('includes target id in targeted item action test ids', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    state.players[0]!.items = ['mapScroll'];
+    renderHud(root, state, () => undefined);
+    const ids = [...root.querySelectorAll<HTMLButtonElement>('.action-button')].map(
+      (button) => button.dataset.testid,
+    );
+    expect(ids).toContain('action-useItem-mapScroll-1');
+    root.remove();
+  });
 });

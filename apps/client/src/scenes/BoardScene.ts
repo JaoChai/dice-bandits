@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
-import type { GameState, Region } from '@dice-bandits/engine';
-import { coinBurst, dice, hop, shake } from '../fx';
+import type { GameState, GameEvent, Region } from '@dice-bandits/engine';
+import { coinBurst, dice, shake } from '../fx';
 
 export default class BoardScene extends Phaser.Scene {
   private tokenObjects = new Map<number, Phaser.GameObjects.Image>();
+  private spacePositions = new Map<number, { x: number; y: number }>();
 
   constructor() {
     super('BoardScene');
@@ -12,35 +13,83 @@ export default class BoardScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setScroll(0, 0);
     this.game.events.on('game-state', (state: GameState) => this.renderBoard(state));
-    this.game.events.on('game-events', (events: { type: string; seat: number | null }[]) => {
-      for (const event of events) {
-        const token = event.seat === null ? undefined : this.tokenObjects.get(event.seat);
-        if (event.type === 'Moved' && token) hop(this, token, window.diceBanditsSpeed);
-        if (event.type === 'DiceRolled' && token) dice(this, token, window.diceBanditsSpeed);
-        if (event.type === 'GoldStolen' && token) coinBurst(this, token, window.diceBanditsSpeed);
-        if (event.type === 'FrenzyStarted') shake(this, window.diceBanditsSpeed);
-      }
-    });
     const initial = this.game.registry.get('state') as GameState | undefined;
     if (initial) this.renderBoard(initial);
+  }
+
+  async playEvents(events: GameEvent[]): Promise<void> {
+    const speed = window.diceBanditsSpeed;
+    for (const event of events) {
+      const token = event.seat === null ? undefined : this.tokenObjects.get(event.seat);
+      if (event.type === 'DiceRolled' && token) {
+        dice(this, token, speed);
+        await wait(350 * speed);
+      } else if (event.type === 'Moved' && token) {
+        const destination = this.spacePositions.get(Number(event.params.to));
+        if (destination && speed > 0) {
+          const middleX = (token.x + destination.x) / 2;
+          await new Promise<void>((resolve) => {
+            this.tweens.add({
+              targets: token,
+              x: middleX,
+              y: destination.y - 8,
+              duration: 100 * speed,
+              ease: 'Sine.easeOut',
+              onComplete: () => {
+                this.tweens.add({
+                  targets: token,
+                  x: destination.x,
+                  y: destination.y,
+                  duration: 100 * speed,
+                  ease: 'Sine.easeIn',
+                  onComplete: () => resolve(),
+                });
+              },
+            });
+          });
+        } else if (destination) {
+          token.setPosition(destination.x, destination.y);
+        }
+      } else if (event.type === 'GoldStolen' && token) {
+        coinBurst(this, token, speed);
+        await wait(360 * speed);
+      } else if (event.type === 'FrenzyStarted') {
+        shake(this, speed);
+        await wait(220 * speed);
+      }
+    }
   }
 
   private renderBoard(state: GameState): void {
     this.children.removeAll(true);
     this.tokenObjects.clear();
+    this.spacePositions.clear();
     const positions = new Map<number, { x: number; y: number }>();
     const countAtSpace = new Map<number, number>();
     const minX = Math.min(...state.board.spaces.map((space) => space.x));
     const maxX = Math.max(...state.board.spaces.map((space) => space.x));
     const minY = Math.min(...state.board.spaces.map((space) => space.y));
     const maxY = Math.max(...state.board.spaces.map((space) => space.y));
+    const paddingX = 24;
+    const paddingTop = 55;
+    const paddingBottom = 27;
+    const boardHeightAvailable = 300 - paddingTop - paddingBottom;
+    const scale = Math.min(
+      (640 - paddingX * 2) / Math.max(1, maxX - minX),
+      boardHeightAvailable / Math.max(1, maxY - minY),
+    );
+    const boardWidth = (maxX - minX) * scale;
+    const boardHeight = (maxY - minY) * scale;
+    const offsetX = (640 - boardWidth) / 2;
+    const offsetY = paddingTop + (boardHeightAvailable - boardHeight) / 2;
     for (const space of state.board.spaces) {
-      const x = 25 + ((space.x - minX) / Math.max(1, maxX - minX)) * 590;
-      const y = 90 + ((space.y - minY) / Math.max(1, maxY - minY)) * 260;
+      const x = offsetX + (space.x - minX) * scale;
+      const y = offsetY + (space.y - minY) * scale;
       positions.set(space.id, { x, y });
+      this.spacePositions.set(space.id, { x, y });
       this.add
         .image(x, y, `tile-${space.region as Region}`)
-        .setDisplaySize(24, 24)
+        .setDisplaySize(20, 20)
         .setDepth(0);
       const marker = this.add.graphics().setDepth(1);
       marker.fillStyle(kindColor(space.kind), 1);
@@ -58,11 +107,12 @@ export default class BoardScene extends Phaser.Scene {
       const index = countAtSpace.get(player.pos) ?? 0;
       countAtSpace.set(player.pos, index + 1);
       const angle = (index * Math.PI) / 2;
-      const x = point.x + Math.cos(angle) * 8;
-      const y = point.y + Math.sin(angle) * 8;
+      const fanRadius = index === 0 ? 0 : 3;
+      const x = point.x + Math.cos(angle) * fanRadius;
+      const y = point.y + Math.sin(angle) * fanRadius;
       const token = this.add
         .image(x, y, `hero-${player.classId}`)
-        .setDisplaySize(19, 19)
+        .setDisplaySize(14, 14)
         .setDepth(4);
       this.tokenObjects.set(player.seat, token);
       const decorations = this.add.graphics().setDepth(5);
@@ -94,6 +144,12 @@ export default class BoardScene extends Phaser.Scene {
       banner.fillRoundedRect(205, 3, 230, 22, 5);
     }
   }
+}
+
+function wait(duration: number): Promise<void> {
+  return duration <= 0
+    ? Promise.resolve()
+    : new Promise((resolve) => window.setTimeout(resolve, duration));
 }
 
 function kindColor(kind: string): number {
