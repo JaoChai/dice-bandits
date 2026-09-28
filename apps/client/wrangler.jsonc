@@ -10,11 +10,11 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"],
   },
-  // database_id is added by the controller after creating the D1 database; required before the first deploy
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "dice-bandits",
+      "database_id": "52b66e75-a9ed-4615-8c14-cf7e7535bd8e",
     },
   ],
 }
