@@ -86,8 +86,16 @@ dice-bandits/
   `connected`, `tokenHash | null`, `idleSince | null`.
   - `kind: 'bot'` = a seat filled by a bot at Start; never claimable.
   - `controller: 'botTakeover'` = a human seat currently played by a bot.
-- **Host:** seat 0. In the lobby, if the host is disconnected > 60 s, host passes to
-  the lowest connected human seat.
+- **Host:** seat 0 at creation. In the lobby, a seat disconnected > 60 s is removed
+  (freeing the slot); if it was the host, host passes to the lowest remaining seat;
+  if no seats remain the room is deleted.
+- **Start:** fills every free slot up to 4 seats with bots (unused classes first,
+  personalities cycling greedy → vengeful → cowardly).
+- **Invite link:** `/r/<CODE>` opens the join/rejoin flow for that code; with a stored
+  token it reconnects with no clicks. The title screen also shows "Back to room CODE"
+  when a stored session exists.
+- **Cross-device claim** is possible only for a human seat currently under bot
+  takeover (so at most 60 s after the original device dropped).
 - **Seat token:** 128-bit random, returned once to the client; only its SHA-256 hash
   is stored. The client keeps `{ code, seat, token }` in `localStorage`
   (key `dice-bandits:room:<code>`). A new-device claim issues a new token and
@@ -126,9 +134,17 @@ Client messages larger than 4 KB or with an unknown `type` are rejected.
 Before any `view` is sent, the server derives it from `GameState`:
 - **Battle picks:** the opponent side's pending pick is replaced by `null`, and a
   boolean `opponentPicked` is added. Picks become visible only through the
-  `BattleRound` events after both sides picked.
-- **RNG:** `state.rng` and `state.config.seed` are removed (they would let a client
-  predict dice rolls and bot choices).
+  events emitted after both sides picked (resolution of that half-exchange).
+- **Secret flag:** the engine sets `secretUsed = true` at pick time. When a hidden
+  opponent pick is `secret`, the view also shows that combatant's `secretUsed` as
+  `false` (a secret can only be used once, so the pre-pick value was `false`).
+- **Events:** the engine emits `BattlePick` with the pick value as soon as a side picks
+  (`packages/engine/src/rules/battle.ts` ~266). For every role whose pick is still
+  pending after the input, the last `BattlePick` event of that role has its `pick`
+  param replaced by `'hidden'` for every viewer except the picking seat.
+- **RNG:** `state.rng` is replaced by `[0, 0, 0, 0]` and `state.config.seed` by `''`
+  (they would let a client predict dice rolls and bot choices). The view keeps the
+  `GameState` shape so M1 renderers work unchanged.
 - The client never computes legality from a redacted view; it uses `legal` from the
   server. Online games show no "pass the device" screen.
 
@@ -140,10 +156,11 @@ Before any `view` is sent, the server derives it from `GameState`:
    (`kind: 'bot'`), engine `createGame` runs with a server-generated seed.
 4. **Play:** human `action` → validate (`turn`, seat, `legalActions`) → `step` →
    persist → broadcast `events` + per-seat `view`. Then the server runs bot seats
-   (including takeovers) **immediately, one step at a time, persisting each step**,
-   until a player-controlled seat must act or the game is over (hard cap 500 bot steps
-   per input; exceeding it is logged as an error). The client paces animations; bots
-   have no server-side "thinking" delay.
+   (including takeovers) **immediately**, until a player-controlled seat must act or
+   the game is over. Bot steps run in batches of at most 200 per input; if more bot
+   work remains (e.g. every human is under takeover), the DO persists, broadcasts and
+   re-arms its alarm for "now" to continue. The client paces animations; bots have no
+   server-side "thinking" delay.
 5. **Idle takeover:** when a player-controlled seat has a non-empty `legal` list, its
    idle deadline is `now + 60 s`. At the deadline the seat switches to
    `botTakeover` and the bot plays on. The player's screen shows
@@ -181,12 +198,14 @@ Timers are configurable only for tests: the Worker reads optional `ROOM_IDLE_MS`
    start with bot fill, action validation (wrong seat, stale `turn`, illegal action),
    bot chain after a human action, idle and disconnect takeover, reclaim, cross-device
    claim invalidates old token, expiry, alarm = earliest deadline.
-2. **Redaction test:** for full bot-driven games, every `view` sent to every seat is
-   checked: no opponent pending pick before its `BattleRound`, no `rng`, no `seed`.
-3. **Durable Object integration (`tests/worker`):** `@cloudflare/vitest-pool-workers`
-   (latest `0.22.0`) requires **Vitest ^4.1.0**, while the repo pins **Vitest 5.0.2**. So
-   DO tests live in their own workspace package pinned to Vitest `4.1.11` +
-   pool-workers `0.22.0`, pointing at `apps/client/wrangler.jsonc`. Covers WebSocket
+2. **Redaction test:** for full bot-driven games, every `view` and `events` message sent
+   to every seat is checked: no opponent pending pick (state or `BattlePick` event)
+   before both picks are in, no leaked `secretUsed`, no real `rng`, no `seed`.
+3. **Durable Object integration (`tests/worker`):** the Workers Vitest integration
+   (`@cloudflare/vitest-plugin` `1.3.0`, or the older `@cloudflare/vitest-pool-workers`
+   `0.22.0`; task 1 picks one after checking current docs) requires **Vitest ^4.1.0**, while the repo pins **Vitest 5.0.2**. So DO
+   tests live in their own workspace package pinned to Vitest `4.1.11` + the plugin,
+   pointing at `apps/client/wrangler.jsonc`. Covers WebSocket
    connect/reconnect, persistence across `evictDurableObject`, and
    `runDurableObjectAlarm` for takeover/expiry. Plan task 1 proves this setup; if it
    cannot work, fall back to testing the DO through `wrangler dev` with a Node
@@ -208,7 +227,8 @@ Timers are configurable only for tests: the Worker reads optional `ROOM_IDLE_MS`
   each `setAlarm()` is billed as one row written; `runDurableObjectAlarm`,
   `runInDurableObject`, `evictDurableObject` (pool-workers ≥ 0.16.20) for tests;
   WebSocket message limit 32 MiB.
-- npm: `@cloudflare/vitest-pool-workers@0.22.0` peer `vitest ^4.1.0`; latest
+- npm: `@cloudflare/vitest-plugin@1.3.0` and `@cloudflare/vitest-pool-workers@0.22.0`
+  both peer `vitest ^4.1.0`; latest
   Vitest 4 = `4.1.11`. Repo: Vitest `5.0.2`, Wrangler `4.141.0`,
   `@cloudflare/vite-plugin` `1.60.2`, Phaser `4.2.1`.
 - Implementation tasks must re-check any Durable Object / Wrangler API against current
