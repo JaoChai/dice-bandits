@@ -20,6 +20,12 @@ function playingRoom(config: Partial<Room['config']> = {}): Room {
   ).room!;
 }
 
+function expectNoStaleAlarm(result: ReturnType<typeof roomStep>, now: number): void {
+  if (result.nextAlarmAt === null || result.nextAlarmAt > now) return;
+  expect(result.nextAlarmAt).toBe(now);
+  expect(result.room?.pendingBotWork && result.room.botRetryAt === null).toBe(true);
+}
+
 function errorKey(result: ReturnType<typeof roomStep>): string | undefined {
   const error = result.out.find((item) => item.msg.type === 'error');
   return error?.msg.type === 'error' ? error.msg.key : undefined;
@@ -206,6 +212,68 @@ describe('room timers and control transfer', () => {
     expect(connected.room!.lastActivityAt).toBe(900);
     expect(connected.nextAlarmAt).toBe(1900);
     expect(roomStep(connected.room!, { kind: 'alarm' }, 1900).room).toBeNull();
+  });
+
+  it('clears expired disconnect deadlines for seats already under bot takeover', () => {
+    let room = playingRoom({ idleMs: 100 });
+    const actor = room.game!.turnSeat;
+    const takeover = roomStep(room, { kind: 'alarm' }, room.seats[actor]!.idleDeadline!);
+    expectNoStaleAlarm(takeover, room.seats[actor]!.idleDeadline!);
+    room = takeover.room!;
+    expect(room.seats[actor]!.controller).toBe('botTakeover');
+    const disconnected = roomStep(room, { kind: 'disconnect', seat: actor, conn: 'seat' }, 400);
+    expectNoStaleAlarm(disconnected, 400);
+    room = disconnected.room!;
+    const deadline = room.seats[actor]!.disconnectDeadline!;
+    const result = roomStep(room, { kind: 'alarm' }, deadline);
+    expectNoStaleAlarm(result, deadline);
+    expect(result.room!.seats[actor]!.disconnectDeadline).toBeNull();
+    expect(result.nextAlarmAt === null || result.nextAlarmAt > deadline).toBe(true);
+  });
+
+  it('does not schedule takeover or bot work for finished rooms', () => {
+    const playing = playingRoom({ idleMs: 100, ttlMs: 1000 });
+    const finished: Room = { ...playing, status: 'finished', pendingBotWork: false };
+    const disconnected = roomStep(finished, { kind: 'disconnect', seat: 0, conn: 'seat' }, 300);
+    expectNoStaleAlarm(disconnected, 300);
+    const result = roomStep(disconnected.room!, { kind: 'alarm' }, 400);
+    expectNoStaleAlarm(result, 400);
+    expect(result.room!.pendingBotWork).toBe(false);
+    expect(result.room!.seats[0]!.controller).toBe('player');
+    expect(result.room!.seats[0]!.disconnectDeadline).toBeNull();
+    expect(result.nextAlarmAt).toBe(
+      disconnected.room!.lastActivityAt + disconnected.room!.config.ttlMs,
+    );
+  });
+
+  it('does not reset another acting seat idle deadline on a connection change, but refreshes after its action', () => {
+    let room = createRoom('ABCDE', 'Ada', 'old-hash', 0, { idleMs: 100 });
+    room = roomStep(
+      room,
+      msg(null, 'visitor', { type: 'join', name: 'Bob' }, { newTokenHash: 'bob-hash' }),
+      0,
+    ).room!;
+    room = roomStep(
+      room,
+      msg(0, 'host', { type: 'start' }, { seed: 'timer-regression-seed' }),
+      0,
+    ).room!;
+    const actor = room.seats.find((seat) => seat.idleDeadline !== null)!;
+    const deadline = actor.idleDeadline!;
+    const other = actor.seat === 0 ? 1 : 0;
+    room = roomStep(room, { kind: 'disconnect', seat: other, conn: 'other' }, 50).room!;
+    room = roomStep(room, { kind: 'connect', seat: other, conn: 'other-return' }, 55).room!;
+    expect(room.seats[actor.seat]!.idleDeadline).toBe(deadline);
+
+    const legal = legalActions(room.game!, actor.seat);
+    const acted = roomStep(
+      room,
+      msg(actor.seat, 'actor', { type: 'action', action: legal[0]!, turn: room.turn }),
+      60,
+    ).room!;
+    if (legalActions(acted.game!, actor.seat).length > 0) {
+      expect(acted.seats[actor.seat]!.idleDeadline).toBe(160);
+    }
   });
 
   it('refreshes activity for accepted messages but not rejected messages', () => {

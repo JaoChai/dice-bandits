@@ -1,7 +1,11 @@
 import { legalActions } from '@dice-bandits/engine';
 import type { Room, RoomSeat } from './model';
 
-export function syncIdleDeadlines(room: Room, now: number): Room {
+export function syncIdleDeadlines(
+  room: Room,
+  now: number,
+  resetSeats: readonly number[] = [],
+): Room {
   if (room.status !== 'playing' || room.game === null) {
     return { ...room, seats: room.seats.map((seat) => ({ ...seat, idleDeadline: null })) };
   }
@@ -12,11 +16,16 @@ export function syncIdleDeadlines(room: Room, now: number): Room {
       )
       .map((seat) => seat.seat),
   );
+  const reset = new Set(resetSeats);
   return {
     ...room,
     seats: room.seats.map((seat) => ({
       ...seat,
-      idleDeadline: actingSeats.has(seat.seat) ? now + room.config.idleMs : null,
+      idleDeadline: !actingSeats.has(seat.seat)
+        ? null
+        : seat.idleDeadline !== null && !reset.has(seat.seat)
+          ? seat.idleDeadline
+          : now + room.config.idleMs,
     })),
   };
 }

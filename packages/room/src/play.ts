@@ -73,7 +73,12 @@ function outbound(room: Room, events: GameEvent[]): Outbound[] {
   return result;
 }
 
-export function runBotChain(room: Room, now: number, initialEvents: GameEvent[] = []): PlayResult {
+export function runBotChain(
+  room: Room,
+  now: number,
+  initialEvents: GameEvent[] = [],
+  resetIdleSeats: readonly number[] = [],
+): PlayResult {
   let nextRoom = room;
   const events = [...initialEvents];
   let steps = 0;
@@ -95,7 +100,7 @@ export function runBotChain(room: Room, now: number, initialEvents: GameEvent[] 
   }
   const pendingBotWork = nextRoom.status !== 'finished' && availableBotSeat(nextRoom) !== null;
   nextRoom = { ...nextRoom, pendingBotWork, botFailures: 0, botRetryAt: null };
-  nextRoom = syncIdleDeadlines(nextRoom, now);
+  nextRoom = syncIdleDeadlines(nextRoom, now, resetIdleSeats);
   return {
     room: nextRoom,
     out: outbound(nextRoom, events),
@@ -153,7 +158,7 @@ export function playAction(
       lastActivityAt: now,
       pendingBotWork: false,
     });
-    return runBotChain(afterStep, now, result.events);
+    return runBotChain(afterStep, now, result.events, [seat]);
   } catch (err) {
     if (err instanceof BotExecutionError) logBotExecutionError(room, err);
     else console.error('[room]', room.code, seat, room.game.phase.kind, err);

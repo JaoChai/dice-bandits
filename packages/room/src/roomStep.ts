@@ -57,6 +57,15 @@ function result(room: Room | null, out: Outbound[], now: number): RoomStepResult
 function alarm(room: Room, now: number): RoomStepResult {
   if (now >= room.lastActivityAt + room.config.ttlMs) return result(null, [], now);
 
+  if (room.status === 'finished') {
+    const nextRoom: Room = {
+      ...room,
+      pendingBotWork: false,
+      seats: room.seats.map((seat) => ({ ...seat, disconnectDeadline: null, idleDeadline: null })),
+    };
+    return result(nextRoom, [], now);
+  }
+
   if (
     room.pendingBotWork &&
     room.status === 'playing' &&
@@ -102,9 +111,14 @@ function alarm(room: Room, now: number): RoomStepResult {
   const changedSeats = room.seats.map((seat) => {
     const idleExpired = seat.idleDeadline !== null && seat.idleDeadline <= now;
     const disconnectExpired = seat.disconnectDeadline !== null && seat.disconnectDeadline <= now;
-    return seat.controller === 'player' && (idleExpired || disconnectExpired)
-      ? startTakeover(seat)
-      : seat;
+    if (seat.controller === 'player' && (idleExpired || disconnectExpired))
+      return startTakeover(seat);
+    if (!idleExpired && !disconnectExpired) return seat;
+    return {
+      ...seat,
+      idleDeadline: idleExpired ? null : seat.idleDeadline,
+      disconnectDeadline: disconnectExpired ? null : seat.disconnectDeadline,
+    };
   });
   const tookOver = changedSeats.some((seat, index) => seat !== room.seats[index]);
   if (!tookOver) return result(room, [], now);
@@ -146,7 +160,15 @@ function disconnectedRoom(room: Room, seatNumber: number | null, now: number): R
     return result(room, [], now);
   const seats = room.seats.map((seat) =>
     seat.seat === seatNumber
-      ? { ...seat, connected: false, disconnectDeadline: now + room.config.idleMs }
+      ? {
+          ...seat,
+          connected: false,
+          disconnectDeadline:
+            room.status === 'lobby' || (room.status === 'playing' && seat.controller === 'player')
+              ? now + room.config.idleMs
+              : null,
+          idleDeadline: room.status === 'playing' ? seat.idleDeadline : null,
+        }
       : seat,
   );
   const nextRoom = { ...room, seats, lastActivityAt: now };
