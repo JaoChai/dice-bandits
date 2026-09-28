@@ -1,6 +1,6 @@
 import { createGame, legalActions } from '@dice-bandits/engine';
 import type { ClassId, Personality, SeatConfig } from '@dice-bandits/engine';
-import { publicSeat } from './model';
+import { nextRoomAlarmAt, publicSeat } from './model';
 import type { Room } from './model';
 import type { ServerMsg } from './protocol';
 
@@ -26,10 +26,7 @@ function error(conn: string, key: string): RoomOutput {
 }
 
 function alarmAt(room: Room): number | null {
-  const deadlines = room.seats.flatMap((seat) =>
-    seat.disconnectDeadline === null ? [] : [seat.disconnectDeadline],
-  );
-  return deadlines.length === 0 ? null : Math.min(...deadlines);
+  return nextRoomAlarmAt(room);
 }
 
 export function lobbyMessage(
@@ -48,26 +45,38 @@ export function lobbyMessage(
     const nextSeat = Array.from({ length: 4 }, (_, index) => index).find(
       (index) => !room.seats.some((item) => item.seat === index),
     );
-    if (room.status !== 'lobby' || nextSeat === undefined || !name || newTokenHash === undefined) {
-      out.push(error(conn, 'roomFull'));
-      return { room, out, nextAlarmAt: alarmAt(room) };
+    const errorKey =
+      room.status !== 'lobby'
+        ? 'gameStarted'
+        : seat >= 0
+          ? 'alreadySeated'
+          : name.length === 0 || name.length > 16
+            ? 'badName'
+            : newTokenHash === undefined
+              ? 'invalidRequest'
+              : nextSeat === undefined
+                ? 'roomFull'
+                : null;
+    if (errorKey !== null) {
+      out.push(error(conn, errorKey));
+      return { room, out, nextAlarmAt: nextRoomAlarmAt(room) };
     }
-    const seat = nextSeat;
+    const seatNumber = nextSeat!;
     const joined: Room['seats'][number] = {
-      seat,
+      seat: seatNumber,
       name,
       classId:
         CLASSES.find((classId) => !room.seats.some((item) => item.classId === classId)) ?? 'knight',
       kind: 'human',
       controller: 'player',
       connected: true,
-      tokenHash: newTokenHash,
+      tokenHash: newTokenHash!,
       disconnectDeadline: null,
       idleDeadline: null,
     };
     const nextRoom = { ...room, seats: [...room.seats, joined], lastActivityAt: now };
-    out.push({ to: { conn }, msg: { type: 'welcome', seat } }, lobby(nextRoom));
-    return { room: nextRoom, out, nextAlarmAt: alarmAt(nextRoom) };
+    out.push({ to: { conn }, msg: { type: 'welcome', seat: seatNumber } }, lobby(nextRoom));
+    return { room: nextRoom, out, nextAlarmAt: nextRoomAlarmAt(nextRoom) };
   }
 
   if (message.type === 'setClass') {

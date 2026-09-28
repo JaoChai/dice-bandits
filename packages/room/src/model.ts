@@ -35,6 +35,14 @@ export interface Room {
   config: RoomConfig;
 }
 
+export function nextRoomAlarmAt(room: Room, now?: number): number | null {
+  const deadlines = room.seats.flatMap((seat) =>
+    seat.disconnectDeadline === null ? [] : [seat.disconnectDeadline],
+  );
+  if (room.pendingBotWork && now !== undefined) deadlines.push(now);
+  return deadlines.length === 0 ? null : Math.min(...deadlines);
+}
+
 const DEFAULT_CONFIG: RoomConfig = { idleMs: 60_000, ttlMs: 86_400_000, botBatch: 200 };
 
 export function generateCode(random: () => number): string {

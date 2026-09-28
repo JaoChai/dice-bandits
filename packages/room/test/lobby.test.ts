@@ -31,6 +31,46 @@ describe('room lobby reducer', () => {
     expect(result.out.some((item) => item.to === 'all' && item.msg.type === 'lobby')).toBe(true);
   });
 
+  it.each([
+    [
+      'started room',
+      (room: ReturnType<typeof makeRoom>) => ({ ...room, status: 'playing' as const }),
+      'gameStarted',
+    ],
+    ['empty name', (room: ReturnType<typeof makeRoom>) => room, 'badName'],
+    ['missing token hash', (room: ReturnType<typeof makeRoom>) => room, 'invalidRequest'],
+  ])('returns the specific join error for %s', (caseName, prepare, expected) => {
+    void caseName;
+    const room = prepare(makeRoom());
+    const input =
+      expected === 'badName'
+        ? msg(null, 'visitor', { type: 'join', name: '   ' }, 'new-hash')
+        : expected === 'invalidRequest'
+          ? msg(null, 'visitor', { type: 'join', name: 'Bea' })
+          : msg(null, 'visitor', { type: 'join', name: 'Bea' }, 'new-hash');
+    const result = roomStep(room, input, 120);
+    expect(result.room).toEqual(room);
+    expect(result.out).toContainEqual({
+      to: { conn: 'visitor' },
+      msg: { type: 'error', key: `online.error.${expected}` },
+    });
+  });
+
+  it('rejects a join from a connection that already owns a seat', () => {
+    const room = addPlayer().room!;
+    const before = structuredClone(room);
+    const result = roomStep(
+      room,
+      msg(0, 'host', { type: 'join', name: 'Another' }, 'extra-hash'),
+      120,
+    );
+    expect(result.room).toEqual(before);
+    expect(result.out).toContainEqual({
+      to: { conn: 'host' },
+      msg: { type: 'error', key: 'online.error.alreadySeated' },
+    });
+  });
+
   it('rejects a fifth join with roomFull', () => {
     let room = makeRoom();
     for (let seat = 1; seat < MAX_SEATS; seat += 1) {
