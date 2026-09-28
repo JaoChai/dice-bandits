@@ -1,6 +1,6 @@
 import type { Action, GameState, StepResult } from './types';
 import { IllegalActionError } from './types';
-import { legalActions } from './legal';
+import { legalActions, battleActorSeat } from './legal';
 import { applyRoll, applyChooseBranch, applyDuelAnswer, endTurn } from './rules/movement';
 import { applyBattlePick } from './rules/battle';
 import { applyPvpReward, leader } from './rules/pvp';
@@ -16,7 +16,12 @@ import { invest, startTownChallenge } from './rules/towns';
  */
 export function step(state: GameState, action: Action): StepResult {
   const next = structuredClone(state);
-  const seat = next.phase.kind === 'pvpReward' ? next.phase.winner : next.turnSeat;
+  const seat =
+    next.phase.kind === 'pvpReward'
+      ? next.phase.winner
+      : next.phase.kind === 'battle'
+        ? (battleActorSeat(next) ?? next.turnSeat)
+        : next.turnSeat;
 
   const isBattlePick = action.type === 'battlePick';
   const legal = legalActions(next, seat).some((a) => actionsEq(a, action));
