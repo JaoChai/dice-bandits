@@ -22,10 +22,13 @@ afterEach(() => {
 describe('GameController', () => {
   it('runs a human and three bots to game over, autosaving every action', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const phases = new Set<string>(['awaitRoll']);
     const controller = new GameController({
       state: createGame(config),
-      speed: 0,
-      onEvents: async () => undefined,
+      speed: 0.01,
+      onEvents: async (_events, state) => {
+        phases.add(state.phase.kind);
+      },
     });
     let actions = 0;
 
@@ -41,6 +44,8 @@ describe('GameController', () => {
     }
 
     expect(controller.state.phase.kind).toBe('gameOver');
+    expect(phases).toContain('battle');
+    expect(phases).toContain('gameOver');
     expect(actions).toBeLessThan(2000);
     expect(errors).not.toHaveBeenCalled();
   });
