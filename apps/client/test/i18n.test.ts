@@ -30,6 +30,12 @@ describe('i18n', () => {
     expect(Object.keys(th).sort()).toEqual(Object.keys(en).sort());
     expect(Object.values(th).every((value) => value.trim().length > 0)).toBe(true);
     expect(Object.values(en).every((value) => value.trim().length > 0)).toBe(true);
+    expect(t('title.gameName')).toBe('DICE BANDITS');
+    expect(t('setup.defaultName', { n: 2 })).toBe('Player 2');
+    setLang('th');
+    expect(t('title.gameName')).toBe('DICE BANDITS');
+    expect(t('setup.defaultName', { n: 2 })).toBe('ผู้เล่น 2');
+    setLang('en');
   });
 
   it('interpolates named parameters and persists language changes', () => {

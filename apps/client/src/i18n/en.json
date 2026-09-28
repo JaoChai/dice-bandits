@@ -4,6 +4,8 @@
   "title.newGame": "New game",
   "title.continue": "Continue",
   "title.language": "Language",
+  "title.gameName": "DICE BANDITS",
+  "setup.defaultName": "Player {n}",
   "setup.title": "Build your crew",
   "setup.instructions": "Choose at least 2 seats, including at least 1 human player.",
   "setup.seat": "Seat {seat}",

@@ -4,6 +4,8 @@
   "title.newGame": "เริ่มเกมใหม่",
   "title.continue": "เล่นต่อ",
   "title.language": "ภาษา",
+  "title.gameName": "DICE BANDITS",
+  "setup.defaultName": "ผู้เล่น {n}",
   "setup.title": "จัดทีมโจร",
   "setup.instructions": "เลือกผู้เล่นอย่างน้อย 2 ที่นั่ง และต้องมีคนจริงอย่างน้อย 1 คน",
   "setup.seat": "ที่นั่ง {seat}",

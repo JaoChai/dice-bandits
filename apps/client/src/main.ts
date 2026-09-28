@@ -16,6 +16,14 @@ function getMount(): HTMLElement {
   return mount;
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!,
+  );
+}
+
 function startSetup(): void {
   showSetup((config) => {
     const state = createGame(config);
@@ -25,7 +33,7 @@ function startSetup(): void {
 }
 
 function renderStarted(playerName: string): void {
-  app.innerHTML = `<main class="screen title-screen" data-testid="screen-game-ready"><h1 class="pixel">DICE BANDITS</h1><p>${playerName.replace(/[&<>"']/g, '')}</p><button class="secondary" data-action="exit">${t('setup.back')}</button></main>`;
+  app.innerHTML = `<main class="screen title-screen" data-testid="screen-game-ready"><h1 class="pixel">${t('title.gameName')}</h1><p>${escapeHtml(playerName)}</p><button class="secondary" data-action="exit">${t('setup.back')}</button></main>`;
   app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {
     clearSave();
     showTitle(startSetup);
