@@ -479,3 +479,182 @@ describe('spritesheet mode', () => {
     await expect(assertPaletteOnly(badPng, 'main')).rejects.toThrow(/\(0, 0\)/);
   });
 });
+
+describe('components mode', () => {
+  it('de-fringes anti-aliased magenta halos so edges never quantise to key-red', async () => {
+    const source = join(sheetBase, 'fringe.png');
+    const width = 24;
+    const height = 24;
+    const fringe = await sharp({
+      create: { width, height, channels: 4 as const, background: '#ff00ff' },
+    })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    for (let y = 1; y < 22; y++)
+      for (let x = 1; x < 22; x++) {
+        const offset = (y * width + x) * 4;
+        const blend = x === 1 || y === 1 || x === 21 || y === 21 ? 0.45 : 0;
+        fringe[offset] = Math.round(152 + (255 - 152) * blend);
+        fringe[offset + 1] = Math.round(95 * (1 - blend));
+        fringe[offset + 2] = Math.round(59 + (255 - 59) * blend);
+      }
+    await sharp(fringe, { raw: { width, height, channels: 4 } })
+      .png()
+      .toFile(source);
+    await buildSheet(
+      {
+        name: 'fringe-prop',
+        source: 'fringe.png',
+        frames: 1,
+        cell: { width: 16, height: 16 },
+        split: 'components',
+        background: { color: [255, 0, 255], tolerance: 18 },
+        animations: {},
+      },
+      sheetBase,
+      sheetOut,
+    );
+    const { data } = await sharp(join(sheetOut, 'fringe-prop.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    let red = 0;
+    let magenta = 0;
+    let opaque = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      if ((data[index + 3] ?? 0) === 0) continue;
+      opaque++;
+      if (
+        (data[index] ?? 0) === 0xe8 &&
+        (data[index + 1] ?? 0) === 0x41 &&
+        (data[index + 2] ?? 0) === 0x42
+      )
+        red++;
+      if ((data[index] ?? 0) > 200 && (data[index + 2] ?? 0) > 200 && (data[index + 1] ?? 0) < 100)
+        magenta++;
+    }
+    expect(opaque).toBeGreaterThan(100);
+    expect(red, 'key-red fringe pixels').toBe(0);
+    expect(magenta, 'magenta pixels').toBe(0);
+  });
+
+  it('frames each component whole: no neighbour bleed and no corner-speck bbox stretch', async () => {
+    const source = join(sheetBase, 'separated.png');
+    const overlays: OverlayOptions[] = [
+      {
+        input: { create: { width: 60, height: 70, channels: 4 as const, background: '#40a040' } },
+        left: 16,
+        top: 20,
+      },
+      {
+        input: { create: { width: 4, height: 18, channels: 4 as const, background: '#203040' } },
+        left: 108,
+        top: 30,
+      },
+      {
+        input: { create: { width: 80, height: 76, channels: 4 as const, background: '#5e5469' } },
+        left: 124,
+        top: 24,
+      },
+      {
+        input: { create: { width: 70, height: 90, channels: 4 as const, background: '#fac42f' } },
+        left: 240,
+        top: 12,
+      },
+      {
+        input: { create: { width: 76, height: 72, channels: 4 as const, background: '#4f62b8' } },
+        left: 340,
+        top: 30,
+      },
+      {
+        input: { create: { width: 2, height: 2, channels: 4 as const, background: '#101010' } },
+        left: 478,
+        top: 0,
+      },
+    ];
+    await sharp({ create: { width: 480, height: 160, channels: 4, background: '#ff00ff' } })
+      .composite(overlays)
+      .png()
+      .toFile(source);
+    const output = await buildSheet(
+      {
+        name: 'separated-props',
+        source: 'separated.png',
+        frames: 4,
+        cell: { width: 32, height: 32 },
+        split: 'components',
+        background: { color: [255, 0, 255], tolerance: 18 },
+        animations: {},
+      },
+      sheetBase,
+      sheetOut,
+    );
+    expect(output.frames).toHaveLength(4);
+    const { data, info } = await sharp(join(sheetOut, 'separated-props.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const expected = [
+      [60, 70],
+      [80, 76],
+      [70, 90],
+      [76, 72],
+    ];
+    output.frames.forEach((frame, index) => {
+      const [wantW, wantH] = expected[index] ?? [32, 32];
+      const seen = new Uint8Array(frame.w * frame.h);
+      const sizes: number[] = [];
+      let minX = frame.w;
+      let maxX = -1;
+      let minY = frame.h;
+      let maxY = -1;
+      for (let start = 0; start < frame.w * frame.h; start++) {
+        if ((seen[start] ?? 0) || (data[start * info.channels + 3] ?? 0) !== 255) continue;
+        seen[start] = 1;
+        const queue = [start];
+        let size = 0;
+        for (let cursor = 0; cursor < queue.length; cursor++) {
+          const pixel = queue[cursor] ?? 0;
+          size++;
+          const x = pixel % frame.w;
+          const y = Math.floor(pixel / frame.w);
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= frame.w || ny >= frame.h) continue;
+              const next = ny * frame.w + nx;
+              if (
+                (seen[next] ?? 0) ||
+                (data[((frame.y + ny) * info.width + frame.x + nx) * info.channels + 3] ?? 0) !==
+                  255
+              )
+                continue;
+              seen[next] = 1;
+              queue.push(next);
+            }
+        }
+        sizes.push(size);
+      }
+      const label = `frame ${index}`;
+      const significant = sizes.filter((size) => size > 2);
+      expect(significant, `${label} components ${sizes}`).toHaveLength(1);
+      const scale = Math.min(30 / wantW, 30 / wantH, 1);
+      expect(maxX - minX + 1, `${label} width`).toBeGreaterThanOrEqual(
+        Math.round(wantW * scale * 0.75),
+      );
+      expect(maxY - minY + 1, `${label} height`).toBeGreaterThanOrEqual(
+        Math.round(wantH * scale * 0.75),
+      );
+      expect(minX, `${label} inset left`).toBeGreaterThanOrEqual(1);
+      expect(minY, `${label} inset top`).toBeGreaterThanOrEqual(1);
+      expect(maxX, `${label} inset right`).toBeLessThanOrEqual(31);
+      expect(maxY, `${label} inset bottom`).toBeLessThanOrEqual(31);
+    });
+  });
+});

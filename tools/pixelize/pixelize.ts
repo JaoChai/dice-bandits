@@ -109,6 +109,15 @@ async function removeFloodBackground(
     enqueue(x, y - 1);
     enqueue(x, y + 1);
   }
+  if (
+    Math.abs(background[0] - 255) < 8 &&
+    Math.abs(background[1] - 0) < 8 &&
+    Math.abs(background[2] - 255) < 8
+  ) {
+    // The magenta key survives anti-aliased edges as an opaque halo; remove its cast
+    // near transparency so downscaled edge pixels cannot quantise to palette red.
+    despillMagenta(data, width, height);
+  }
   return data;
 }
 
@@ -273,6 +282,34 @@ export async function assertPaletteOnly(
   }
 }
 
+function despillMagenta(data: Buffer, width: number, height: number): void {
+  const nearTransparent = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const pixel = y * width + x;
+      if (data[pixel * 4 + 3] !== 0) continue;
+      for (let dy = -3; dy <= 3; dy++)
+        for (let dx = -3; dx <= 3; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          nearTransparent[ny * width + nx] = 1;
+        }
+    }
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    const offset = pixel * 4;
+    if (data[offset + 3] === 0 || !nearTransparent[pixel]) continue;
+    const red = data[offset] ?? 0;
+    const green = data[offset + 1] ?? 0;
+    const blue = data[offset + 2] ?? 0;
+    if (blue > 120 && blue > green * 1.6 && red - green > 32 && blue - green > 32) {
+      const spill = Math.min(red - green, blue - green);
+      data[offset] = red - spill;
+      data[offset + 2] = blue - spill;
+    }
+  }
+}
+
 type Component = {
   pixels: Buffer;
   width: number;
@@ -317,10 +354,14 @@ function foregroundComponents(pixels: Buffer, width: number, height: number): Co
     }
     const w = maxX - minX + 1,
       h = maxY - minY + 1;
+    const member = new Uint8Array(width * height);
+    for (const pixel of queue) member[pixel] = 1;
     const crop = Buffer.alloc(w * h * 4);
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        const from = ((minY + y) * width + minX + x) * 4;
+        const index = (minY + y) * width + minX + x;
+        const from = index * 4;
+        if (!member[index]) continue;
         pixels.copy(crop, (y * w + x) * 4, from, from + 4);
       }
     }
@@ -372,44 +413,19 @@ async function buildSpecialSheet(
     const all = foregroundComponents(cutout, info.width, info.height);
     const threshold = Math.ceil(info.width * info.height * 0.001);
     const substantial = all.filter((component) => component.size >= threshold);
-    const specks = all.filter((component) => component.size < threshold);
     if (substantial.length < entry.frames)
       throw new Error(
         `Expected ${entry.frames} components in ${entry.name}, found ${substantial.length}`,
       );
+    // Each frame is exactly one whole object: use the component's own pixel mask so a
+    // neighbouring object inside the bounding box is never copied into the frame.
     const selected = substantial.sort((a, b) => a.left - b.left).slice(0, entry.frames);
-    const groups = selected.map((component) => [component]);
-    for (const speck of specks) {
-      let nearest = 0,
-        distance = Number.POSITIVE_INFINITY;
-      selected.forEach((component, index) => {
-        const dx = speck.left + speck.width / 2 - (component.left + component.width / 2);
-        const dy = speck.top + speck.height / 2 - (component.top + component.height / 2);
-        const next = dx * dx + dy * dy;
-        if (next < distance) {
-          distance = next;
-          nearest = index;
-        }
+    for (const component of selected)
+      sourceFrames.push({
+        pixels: component.pixels,
+        width: component.width,
+        height: component.height,
       });
-      groups[nearest]?.push(speck);
-    }
-    for (const group of groups) {
-      const left = Math.min(...group.map((c) => c.left)),
-        top = Math.min(...group.map((c) => c.top));
-      const right = Math.max(...group.map((c) => c.left + c.width)),
-        bottom = Math.max(...group.map((c) => c.top + c.height));
-      const width = right - left,
-        height = bottom - top,
-        pixels = Buffer.alloc(width * height * 4);
-      for (let y = 0; y < height; y++)
-        cutout.copy(
-          pixels,
-          y * width * 4,
-          ((top + y) * info.width + left) * 4,
-          ((top + y) * info.width + right) * 4,
-        );
-      sourceFrames.push({ pixels, width, height });
-    }
   }
   const processed: Buffer[] = [];
   for (const frame of sourceFrames) {
