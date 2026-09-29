@@ -110,15 +110,74 @@ async function removeFloodBackground(
     enqueue(x, y + 1);
   }
   if (
-    Math.abs(background[0] - 255) < 8 &&
-    Math.abs(background[1] - 0) < 8 &&
-    Math.abs(background[2] - 255) < 8
+    Math.abs(background[0] - 255) <= 24 &&
+    Math.abs(background[1]) <= 24 &&
+    Math.abs(background[2] - 255) <= 24
   ) {
     // The magenta key survives anti-aliased edges as an opaque halo; remove its cast
     // near transparency so downscaled edge pixels cannot quantise to palette red.
     despillMagenta(data, width, height);
   }
+  eliminateBackgroundBlends(data, width, height, background);
   return data;
+}
+
+// Flood-keying with a hard tolerance leaves a ring of semi-blended background at sprite
+// edges (the key survives anti-aliased outlines as opaque pixels). Any still-opaque pixel
+// on the transparency boundary that stays close to the key colour is blend, not art:
+// flood it away too. Grey keys sit inside the art's own value range, so this only fires
+// on boundary pixels — interior greys (rock highlights, fog, steel) are never touched.
+function eliminateBackgroundBlends(
+  data: Buffer,
+  width: number,
+  height: number,
+  background: [number, number, number],
+): void {
+  const near =
+    Math.max(
+      Math.abs(background[0] - 176),
+      Math.abs(background[1] - 176),
+      Math.abs(background[2] - 174),
+    ) <= 24;
+  const blendLimit = near ? 34 : 24;
+  const keyable = (offset: number): boolean =>
+    Math.abs((data[offset] ?? 0) - background[0]) <= blendLimit &&
+    Math.abs((data[offset + 1] ?? 0) - background[1]) <= blendLimit &&
+    Math.abs((data[offset + 2] ?? 0) - background[2]) <= blendLimit;
+  const boundary: number[] = [];
+  const isBoundary = (pixel: number): boolean => {
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    return (
+      (x > 0 && data[(pixel - 1) * 4 + 3] === 0) ||
+      (x < width - 1 && data[(pixel + 1) * 4 + 3] === 0) ||
+      (y > 0 && data[(pixel - width) * 4 + 3] === 0) ||
+      (y < height - 1 && data[(pixel + width) * 4 + 3] === 0)
+    );
+  };
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    if (data[pixel * 4 + 3] === 0 || !isBoundary(pixel)) continue;
+    if (keyable(pixel * 4)) boundary.push(pixel);
+  }
+  while (boundary.length > 0) {
+    const pixel = boundary.pop()!;
+    data[pixel * 4 + 3] = 0;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    for (const [dx, dy] of [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+    ]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      const next = ny * width + nx;
+      if (data[next * 4 + 3] === 0 || !keyable(next * 4)) continue;
+      boundary.push(next);
+    }
+  }
 }
 
 function areaAverage(
@@ -231,7 +290,13 @@ export type SheetEntry = {
   cell: { width: number; height: number };
   palette?: 'main' | 'backdrop';
   select?: number[];
-  split?: 'components';
+  split?: 'components' | 'grid';
+  /** Inclusive source x ranges for irregular grid poses (one per output frame). */
+  sourceRanges?: [number, number][];
+  /** Grid frames share one scale by default; effects can scale each animation family. */
+  scaleBy?: 'sheet' | 'animation';
+  noiseFloor?: number;
+  fullFrame?: boolean;
   background?: { color: [number, number, number]; tolerance: number };
   ground?: boolean;
   animations: Record<string, { from: number; to: number; fps: number; loop: boolean }>;
@@ -288,8 +353,8 @@ function despillMagenta(data: Buffer, width: number, height: number): void {
     for (let x = 0; x < width; x++) {
       const pixel = y * width + x;
       if (data[pixel * 4 + 3] !== 0) continue;
-      for (let dy = -3; dy <= 3; dy++)
-        for (let dx = -3; dx <= 3; dx++) {
+      for (let dy = -16; dy <= 16; dy++)
+        for (let dx = -16; dx <= 16; dx++) {
           const nx = x + dx;
           const ny = y + dy;
           if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
@@ -302,7 +367,7 @@ function despillMagenta(data: Buffer, width: number, height: number): void {
     const red = data[offset] ?? 0;
     const green = data[offset + 1] ?? 0;
     const blue = data[offset + 2] ?? 0;
-    if (blue > 120 && blue > green * 1.6 && red - green > 32 && blue - green > 32) {
+    if (blue > 80 && blue > green * 1.6 && red - green > 32 && blue - green > 32) {
       const spill = Math.min(red - green, blue - green);
       data[offset] = red - spill;
       data[offset + 2] = blue - spill;
@@ -390,7 +455,17 @@ async function buildSpecialSheet(
     join(toolDir, entry.palette === 'backdrop' ? 'palette-backdrop.json' : 'palette.json'),
   );
   const sourceFrames: Array<{ pixels: Buffer; width: number; height: number }> = [];
-  if (entry.ground) {
+  if (entry.fullFrame) {
+    // Whole-image mode (backdrops): no keying, no trimming — the sky may share the
+    // corner colour and the scene is opaque edge to edge. The backdrop palette never
+    // contains the pure key, so quantisation cannot paint transparency.
+    const raw = await sharp(sourcePath)
+      .resize(entry.cell.width, entry.cell.height, { fit: 'fill', kernel: 'lanczos3' })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    sourceFrames.push({ pixels: raw, width: entry.cell.width, height: entry.cell.height });
+  } else if (entry.ground) {
     const side = Math.min(info.width, info.height);
     for (let frame = 0; frame < entry.frames; frame++) {
       const left = Math.floor((frame * (info.width - side)) / Math.max(entry.frames - 1, 1));
@@ -401,6 +476,76 @@ async function buildSpecialSheet(
         .raw()
         .toBuffer();
       sourceFrames.push({ pixels: raw, width: entry.cell.width, height: entry.cell.height });
+    }
+  } else if (entry.split === 'grid') {
+    // Grid-grouped extraction: union components by expected column, or use measured
+    // x-ranges when a generated sheet spaces poses unevenly (the battle FX sheet).
+    // Detached islands stay with their parent pose rather than entering a neighbour.
+    const ranges = entry.sourceRanges;
+    if (
+      ranges &&
+      (ranges.length !== entry.frames ||
+        ranges.some(
+          ([left, right], index) =>
+            left !== (index === 0 ? 0 : ranges[index - 1]![1] + 1) ||
+            right < left ||
+            (index === entry.frames - 1 && right !== info.width - 1),
+        ))
+    )
+      throw new Error(`Invalid sourceRanges for ${entry.name}: must partition source width`);
+    const cutout = await removeFloodBackground(
+      source,
+      info.width,
+      info.height,
+      entry.background?.color,
+      entry.background?.tolerance ?? backgroundTolerance,
+    );
+    const all = foregroundComponents(cutout, info.width, info.height);
+    const floor = Math.max(entry.noiseFloor ?? Math.ceil(info.width * info.height * 0.001), 1);
+    const kept = all.filter((component) => component.size >= floor);
+    const columns = Array.from({ length: entry.frames }, () => [] as typeof kept);
+    for (const component of kept) {
+      const centre = component.left + component.width / 2;
+      if (ranges) {
+        const assigned = ranges.findIndex(([left, right]) => centre >= left && centre <= right);
+        if (assigned < 0) throw new Error(`Component outside sourceRanges for ${entry.name}`);
+        columns[assigned]!.push(component);
+        continue;
+      }
+      let best = 0;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (let frame = 0; frame < entry.frames; frame++) {
+        const columnCentre = ((frame + 0.5) * info.width) / entry.frames;
+        const distance = Math.abs(centre - columnCentre);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = frame;
+        }
+      }
+      columns[best]!.push(component);
+    }
+    for (let frame = 0; frame < entry.frames; frame++) {
+      const members = columns[frame]!;
+      if (members.length === 0)
+        throw new Error(`Expected a pose in frame ${frame} of ${entry.name}, found none`);
+      const left = Math.min(...members.map((component) => component.left));
+      const top = Math.min(...members.map((component) => component.top));
+      const right = Math.max(...members.map((component) => component.left + component.width - 1));
+      const bottom = Math.max(...members.map((component) => component.top + component.height - 1));
+      const width = right - left + 1;
+      const height = bottom - top + 1;
+      const union = Buffer.alloc(width * height * 4);
+      for (const component of members) {
+        for (let y = 0; y < component.height; y++) {
+          for (let x = 0; x < component.width; x++) {
+            const from = (y * component.width + x) * 4;
+            if (component.pixels[from + 3] === 0) continue;
+            const to = ((component.top - top + y) * width + (component.left - left + x)) * 4;
+            component.pixels.copy(union, to, from, from + 4);
+          }
+        }
+      }
+      sourceFrames.push({ pixels: union, width, height });
     }
   } else {
     const cutout = await removeFloodBackground(
@@ -428,18 +573,56 @@ async function buildSpecialSheet(
       });
   }
   const processed: Buffer[] = [];
-  for (const frame of sourceFrames) {
-    const inset = entry.split === 'components' ? 1 : 0;
+  // Battle grid poses share a scale: otherwise a wide strike shrinks the body and
+  // a spinning coin grows/shrinks from frame to frame. FX may group by animation.
+  const scales: number[] = sourceFrames.map(() => 0);
+  if (entry.split === 'grid') {
+    const groups =
+      entry.scaleBy === 'animation'
+        ? Object.values(entry.animations).map(({ from, to }) =>
+            Array.from({ length: to - from + 1 }, (_, index) => from + index),
+          )
+        : [sourceFrames.map((_, index) => index)];
+    const assigned = new Set<number>();
+    for (const group of groups) {
+      const members = group.map((index) => sourceFrames[index]);
+      if (members.some((member) => !member))
+        throw new Error(`Invalid animation frame in ${entry.name}`);
+      const scale = Math.min(
+        (entry.cell.width - 2) / Math.max(...members.map((member) => member!.width)),
+        (entry.cell.height - 2) / Math.max(...members.map((member) => member!.height)),
+      );
+      for (const index of group) {
+        if (assigned.has(index)) throw new Error(`Overlapping scale groups in ${entry.name}`);
+        scales[index] = scale;
+        assigned.add(index);
+      }
+    }
+    if (assigned.size !== sourceFrames.length)
+      throw new Error(`Unassigned scale group in ${entry.name}`);
+  }
+  for (const [frameIndex, frame] of sourceFrames.entries()) {
+    const inset = entry.split === 'components' || entry.split === 'grid' ? 1 : 0;
+    const gridScale = scales[frameIndex]!;
     const scaled = await sharp(frame.pixels, {
       raw: { width: frame.width, height: frame.height, channels: 4 },
     })
-      .resize(entry.cell.width - inset * 2, entry.cell.height - inset * 2, {
-        fit: 'contain',
-        kernel: 'nearest',
-        background: { r: 0, g: 0, b: 0, alpha: 0 },
-      })
+      .resize(
+        gridScale ? Math.max(1, Math.round(frame.width * gridScale)) : entry.cell.width - inset * 2,
+        gridScale
+          ? Math.max(1, Math.round(frame.height * gridScale))
+          : entry.cell.height - inset * 2,
+        {
+          fit: gridScale ? 'fill' : 'contain',
+          kernel: 'nearest',
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        },
+      )
       .png()
       .toBuffer();
+    const scaledInfo = await sharp(scaled).metadata();
+    const scaledW = scaledInfo.width!;
+    const scaledH = scaledInfo.height!;
     const resized = await sharp({
       create: {
         width: entry.cell.width,
@@ -448,7 +631,13 @@ async function buildSpecialSheet(
         background: { r: 0, g: 0, b: 0, alpha: 0 },
       },
     })
-      .composite([{ input: scaled, left: inset, top: inset }])
+      .composite([
+        {
+          input: scaled,
+          left: gridScale ? Math.floor((entry.cell.width - scaledW) / 2) : inset,
+          top: gridScale ? Math.floor((entry.cell.height - scaledH) / 2) : inset,
+        },
+      ])
       .ensureAlpha()
       .raw()
       .toBuffer();
@@ -623,7 +812,7 @@ export async function buildSheet(
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(entry.name))
     throw new Error(`Invalid sheet name: ${entry.name}`);
   const sourcePath = isAbsolute(entry.source) ? entry.source : resolve(baseDir, entry.source);
-  if (entry.ground || entry.split === 'components')
+  if (entry.fullFrame || entry.ground || entry.split === 'components' || entry.split === 'grid')
     return buildSpecialSheet(entry, sourcePath, outDir);
   const { data: source, info } = await sharp(sourcePath)
     .ensureAlpha()

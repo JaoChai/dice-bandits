@@ -480,6 +480,412 @@ describe('spritesheet mode', () => {
   });
 });
 
+describe('grid mode (battle sheets)', () => {
+  it('extracts grid-grouped poses whole: cross-boundary poses, multi-island unions, and dropped specks', async () => {
+    const source = join(sheetBase, 'battle-grid.png');
+    const overlays: OverlayOptions[] = [
+      // pose 0: single body inside column 0 (column width = 300)
+      {
+        input: { create: { width: 90, height: 60, channels: 4 as const, background: '#206040' } },
+        left: 30,
+        top: 20,
+      },
+      // pose 1: one wide body crossing the column 1 / column 2 boundary at x = 600,
+      // centre still inside column 1 (mirrors the approved sheets: poses cross
+      // boundaries but never drift past half a column)
+      {
+        input: { create: { width: 190, height: 70, channels: 4 as const, background: '#204080' } },
+        left: 430,
+        top: 15,
+      },
+      // pose 2: two separate islands (body + companion) that belong to one pose
+      {
+        input: { create: { width: 60, height: 40, channels: 4 as const, background: '#a0a020' } },
+        left: 760,
+        top: 20,
+      },
+      {
+        input: { create: { width: 40, height: 30, channels: 4 as const, background: '#804080' } },
+        left: 840,
+        top: 40,
+      },
+      // poses 3-5: plain single bodies
+      {
+        input: { create: { width: 100, height: 60, channels: 4 as const, background: '#207040' } },
+        left: 1000,
+        top: 20,
+      },
+      {
+        input: { create: { width: 90, height: 70, channels: 4 as const, background: '#406020' } },
+        left: 1350,
+        top: 15,
+      },
+      {
+        input: { create: { width: 80, height: 50, channels: 4 as const, background: '#604020' } },
+        left: 1600,
+        top: 30,
+      },
+      // noise speck near pose 0 that must be dropped by the pixel-count floor
+      {
+        input: { create: { width: 3, height: 3, channels: 4 as const, background: '#101010' } },
+        left: 200,
+        top: 90,
+      },
+    ];
+    await sharp({ create: { width: 1800, height: 100, channels: 4, background: '#969696' } })
+      .composite(overlays)
+      .png()
+      .toFile(source);
+    const output = await buildSheet(
+      {
+        name: 'battle-grid',
+        source: 'battle-grid.png',
+        frames: 6,
+        cell: { width: 24, height: 24 },
+        split: 'grid',
+        noiseFloor: 10,
+        background: { color: [150, 150, 150], tolerance: 18 },
+        animations: {},
+      },
+      sheetBase,
+      sheetOut,
+    );
+    expect(output.frames).toHaveLength(6);
+    const { data, info } = await sharp(join(sheetOut, 'battle-grid.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const boxes = output.frames.map((frame) => {
+      let minX = frame.w,
+        minY = frame.h,
+        maxX = -1,
+        maxY = -1,
+        opaque = 0;
+      for (let y = 0; y < frame.h; y++)
+        for (let x = 0; x < frame.w; x++) {
+          if (data[((frame.y + y) * info.width + frame.x + x) * info.channels + 3] === 0) continue;
+          opaque++;
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+      return { minX, minY, maxX, maxY, opaque, w: maxX - minX + 1, h: maxY - minY + 1 };
+    });
+    for (const [index, box] of boxes.entries()) {
+      expect(box.opaque, `frame ${index} empty`).toBeGreaterThan(0);
+      // whole-object inset: nothing touches the left/right/top cell borders (that
+      // would mean cropping). The bottom row is the feet baseline and may be touched
+      // by design for feet-anchored sheets.
+      expect(box.minX, `frame ${index} inset left`).toBeGreaterThanOrEqual(1);
+      expect(box.minY, `frame ${index} inset top`).toBeGreaterThanOrEqual(1);
+      expect(box.maxX, `frame ${index} inset right`).toBeLessThanOrEqual(22);
+      expect(box.maxY, `frame ${index} inset bottom`).toBeLessThanOrEqual(23);
+    }
+    // pose 0: the 3x3 speck at (160, 90) must not stretch the bounding box
+    expect(boxes[0]!.w / boxes[0]!.h).toBeGreaterThan(1.25);
+    expect(boxes[0]!.w / boxes[0]!.h).toBeLessThan(1.7);
+    // pose 1: the whole cross-boundary body survives with its wide 190x70 aspect
+    expect(boxes[1]!.w / boxes[1]!.h).toBeGreaterThan(2.2);
+    expect(boxes[1]!.w / boxes[1]!.h).toBeLessThan(3.1);
+    // pose 2: both islands are present (a per-component splitter would keep only one)
+    const frame2 = output.frames[2]!;
+    const seen = new Uint8Array(frame2.w * frame2.h);
+    const sizes: number[] = [];
+    for (let start = 0; start < frame2.w * frame2.h; start++) {
+      if (seen[start]) continue;
+      if (
+        data[
+          ((frame2.y + Math.floor(start / frame2.w)) * info.width + frame2.x + (start % frame2.w)) *
+            info.channels +
+            3
+        ] === 0
+      ) {
+        seen[start] = 1;
+        continue;
+      }
+      const queue = [start];
+      seen[start] = 1;
+      let size = 0;
+      for (let cursor = 0; cursor < queue.length; cursor++) {
+        const pixel = queue[cursor]!;
+        size++;
+        const x = pixel % frame2.w;
+        const y = Math.floor(pixel / frame2.w);
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= frame2.w || ny >= frame2.h) continue;
+            const next = ny * frame2.w + nx;
+            if (seen[next]) continue;
+            if (data[((frame2.y + ny) * info.width + frame2.x + nx) * info.channels + 3] === 0) {
+              seen[next] = 1;
+              continue;
+            }
+            seen[next] = 1;
+            queue.push(next);
+          }
+      }
+      sizes.push(size);
+    }
+    expect(sizes.filter((size) => size > 2).length).toBeGreaterThanOrEqual(2);
+    await assertPaletteOnly(join(sheetOut, 'battle-grid.png'), 'main');
+  });
+
+  it('floods near-background blend pixels away so grey keys never survive at edges', async () => {
+    const source = join(sheetBase, 'grey-fringe.png');
+    const width = 60;
+    const height = 60;
+    const pixels = await sharp({
+      create: { width, height, channels: 4 as const, background: '#b0b0ae' },
+    })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    // dark core with a 2px ring blended *part way* toward the grey background:
+    // distance 30 from bg — outside the flood tolerance (18), inside the boundary
+    // blend limit (34), so only blend elimination can remove the ring
+    for (let y = 12; y < 48; y++)
+      for (let x = 16; x < 44; x++) {
+        const offset = (y * width + x) * 4;
+        const ring = y <= 13 || y >= 46 || x <= 17 || x >= 42;
+        pixels[offset] = ring ? 206 : 30;
+        pixels[offset + 1] = ring ? 204 : 50;
+        pixels[offset + 2] = ring ? 196 : 70;
+      }
+    await sharp(pixels, { raw: { width, height, channels: 4 } })
+      .png()
+      .toFile(source);
+    await buildSheet(
+      {
+        name: 'grey-fringe',
+        source: 'grey-fringe.png',
+        frames: 1,
+        cell: { width: 24, height: 24 },
+        split: 'grid',
+        noiseFloor: 10,
+        background: { color: [176, 176, 174], tolerance: 18 },
+        animations: {},
+      },
+      sheetBase,
+      sheetOut,
+    );
+    const { data } = await sharp(join(sheetOut, 'grey-fringe.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    let opaque = 0;
+    let halo = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      if ((data[index + 3] ?? 0) === 0) continue;
+      opaque++;
+      const [r, g, b] = [data[index] ?? 0, data[index + 1] ?? 0, data[index + 2] ?? 0];
+      // neutral-light pixels: the bg grey blend quantises to palette #a89b9b / #d1c1bb,
+      // so a surviving blend ring shows up as a washed-out red channel (r >= 140
+      // while the green/blue channels stay dark)
+      if (r >= 140 && Math.max(r, g, b) - Math.min(r, g, b) <= 40) halo++;
+    }
+    expect(opaque).toBeGreaterThan(80);
+    expect(halo, 'neutral-light halo pixels surviving at edges').toBe(0);
+  });
+});
+
+describe('battle frame consistency regressions', () => {
+  const boxes = async (name: string, frames: number, cell: number) => {
+    const { data, info } = await sharp(join(sheetOut, `${name}.png`))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    return Array.from({ length: frames }, (_, frame) => {
+      let minY = cell;
+      let maxY = -1;
+      let red = 0;
+      for (let y = 0; y < cell; y++)
+        for (let x = 0; x < cell; x++) {
+          const i = (y * info.width + frame * cell + x) * 4;
+          if (data[i + 3] === 0) continue;
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+          if (data[i] === 0xe8 && data[i + 1] === 0x41 && data[i + 2] === 0x42) red++;
+        }
+      return { height: maxY - minY + 1, red };
+    });
+  };
+
+  it('preserves the relative height of same-height poses across a wide strike', async () => {
+    const source = join(sheetBase, 'wide-strike.png');
+    await sharp({ create: { width: 450, height: 100, channels: 4, background: '#b0b0ae' } })
+      .composite(
+        [20, 150, 320].map((left, index) => ({
+          input: {
+            create: {
+              width: index === 1 ? 120 : 60,
+              height: 50,
+              channels: 4 as const,
+              background: '#206040',
+            },
+          },
+          left,
+          top: 20,
+        })),
+      )
+      .png()
+      .toFile(source);
+    await buildSheet(
+      {
+        name: 'wide-strike',
+        source,
+        frames: 3,
+        cell: { width: 32, height: 32 },
+        split: 'grid',
+        noiseFloor: 10,
+        background: { color: [176, 176, 174], tolerance: 18 },
+        animations: { attack: { from: 0, to: 2, fps: 10, loop: false } },
+      },
+      sheetBase,
+      sheetOut,
+    );
+    const heights = (await boxes('wide-strike', 3, 32)).map((box) => box.height);
+    expect(
+      Math.max(...heights) - Math.min(...heights),
+      `pose heights ${heights}`,
+    ).toBeLessThanOrEqual(2);
+  });
+
+  it('uses measured frame ranges to keep a detached accent with its irregularly spaced pose', async () => {
+    const source = join(sheetBase, 'irregular-fx.png');
+    await sharp({ create: { width: 160, height: 60, channels: 4, background: '#f10ef1' } })
+      .composite([
+        ...[5, 45, 111, 145].map((left) => ({
+          input: { create: { width: 11, height: 25, channels: 4 as const, background: '#206040' } },
+          left,
+          top: 15,
+        })),
+        {
+          input: { create: { width: 7, height: 7, channels: 4 as const, background: '#e84142' } },
+          left: 81,
+          top: 20,
+        },
+      ])
+      .png()
+      .toFile(source);
+    await buildSheet(
+      {
+        name: 'irregular-fx',
+        source,
+        frames: 4,
+        cell: { width: 32, height: 32 },
+        split: 'grid',
+        sourceRanges: [
+          [0, 36],
+          [37, 90],
+          [91, 133],
+          [134, 159],
+        ],
+        noiseFloor: 10,
+        background: { color: [241, 14, 241], tolerance: 18 },
+        anchor: 'center',
+        animations: {},
+      },
+      sheetBase,
+      sheetOut,
+    );
+    const result = await boxes('irregular-fx', 4, 32);
+    expect(
+      result.map((box) => box.red),
+      'accent belongs to pose 1 only',
+    ).toEqual([0, expect.any(Number), 0, 0]);
+    expect(result[1]!.red).toBeGreaterThan(0);
+  });
+
+  it('despills near-magenta keyed edges before they quantise to palette red', async () => {
+    const source = join(sheetBase, 'near-magenta.png');
+    const width = 40,
+      height = 40;
+    const pixels = await sharp({ create: { width, height, channels: 4, background: '#f10ef1' } })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    for (let y = 5; y < 35; y++)
+      for (let x = 5; x < 35; x++) {
+        const i = (y * width + x) * 4;
+        const blend = x === 5 || x === 34 || y === 5 || y === 34 ? 0.5 : 0;
+        pixels[i] = Math.round(152 * (1 - blend) + 241 * blend);
+        pixels[i + 1] = Math.round(95 * (1 - blend) + 14 * blend);
+        pixels[i + 2] = Math.round(59 * (1 - blend) + 241 * blend);
+      }
+    await sharp(pixels, { raw: { width, height, channels: 4 } })
+      .png()
+      .toFile(source);
+    await buildSheet(
+      {
+        name: 'near-magenta',
+        source,
+        frames: 1,
+        cell: { width: 32, height: 32 },
+        split: 'grid',
+        noiseFloor: 10,
+        background: { color: [241, 14, 241], tolerance: 18 },
+        animations: {},
+      },
+      sheetBase,
+      sheetOut,
+    );
+    expect((await boxes('near-magenta', 1, 32))[0]!.red, 'key-red edge pixels').toBe(0);
+  });
+});
+
+describe('full-frame mode (backdrops)', () => {
+  it('downscales the entire image without keying or trimming', async () => {
+    const source = join(sheetBase, 'scene.png');
+    const width = 40;
+    const height = 20;
+    const pixels = Buffer.alloc(width * height * 4);
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        const offset = (y * width + x) * 4;
+        pixels[offset] = Math.round((x / width) * 200);
+        pixels[offset + 1] = 60;
+        pixels[offset + 2] = Math.round((y / height) * 160);
+        pixels[offset + 3] = 255;
+      }
+    await sharp(pixels, { raw: { width, height, channels: 4 } })
+      .png()
+      .toFile(source);
+    const atlas = await buildSheet(
+      {
+        name: 'scene',
+        source: 'scene.png',
+        frames: 1,
+        cell: { width: 8, height: 4 },
+        fullFrame: true,
+        palette: 'backdrop',
+        anchor: 'center',
+        animations: {},
+      },
+      sheetBase,
+      sheetOut,
+    );
+    expect(atlas.frames).toHaveLength(1);
+    expect(atlas.frames[0]).toEqual({ x: 0, y: 0, w: 8, h: 4 });
+    const { data } = await sharp(join(sheetOut, 'scene.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    let opaque = 0;
+    const colours = new Set<string>();
+    for (let index = 0; index < data.length; index += 4) {
+      expect(data[index + 3]).toBe(255);
+      opaque++;
+      colours.add(`${data[index]},${data[index + 1]},${data[index + 2]}`);
+    }
+    expect(opaque).toBe(8 * 4);
+    expect(colours.size).toBeGreaterThan(4);
+    await assertPaletteOnly(join(sheetOut, 'scene.png'), 'backdrop');
+  });
+});
+
 describe('components mode', () => {
   it('de-fringes anti-aliased magenta halos so edges never quantise to key-red', async () => {
     const source = join(sheetBase, 'fringe.png');
