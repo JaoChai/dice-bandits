@@ -1,6 +1,6 @@
 import { legalActions } from '@dice-bandits/engine';
 import { describe, expect, it } from 'vitest';
-import { createRoom, nextRoomAlarmAt } from '../src/model';
+import { createRoom, nextRoomAlarmAt, publicSeat } from '../src/model';
 import { roomStep } from '../src/roomStep';
 import type { Room } from '../src/model';
 import type { RoomInput } from '../src/roomStep';
@@ -113,15 +113,14 @@ describe('room timers and control transfer', () => {
     ).toBe(true);
   });
 
-  it('sends a public game view to a visitor so they can claim a taken-over human seat', () => {
+  it('sends a visitor only the public seat list, never the game state', () => {
     const room = playingRoom();
     const result = roomStep(room, { kind: 'connect', seat: null, conn: 'visitor' }, 600);
-    expect(result.out).toContainEqual(
-      expect.objectContaining({
-        to: { conn: 'visitor' },
-        msg: expect.objectContaining({ type: 'view' }),
-      }),
+    const toVisitor = result.out.filter(
+      (item) => typeof item.to === 'object' && item.to.conn === 'visitor',
     );
+    expect(toVisitor).toHaveLength(1);
+    expect(toVisitor[0]!.msg).toEqual({ type: 'seats', seats: room.seats.map(publicSeat) });
   });
 
   it('starts a fresh idle timer when the seat reclaims mid-game', () => {

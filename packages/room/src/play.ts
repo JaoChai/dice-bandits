@@ -43,18 +43,8 @@ export function viewForSeat(room: Room, seat: number): ServerMsg {
   };
 }
 
-export function viewForVisitor(room: Room): ServerMsg {
-  const game = room.game!;
-  const redacted = redactGameState(game, -1);
-  return {
-    type: 'view',
-    turn: room.turn,
-    state: redacted.state,
-    you: -1,
-    legal: [],
-    seats: room.seats.map(publicSeat),
-    opponentPicked: redacted.opponentPicked,
-  };
+export function seatsForVisitor(room: Room): ServerMsg {
+  return { type: 'seats', seats: room.seats.map(publicSeat) };
 }
 
 function views(room: Room): Outbound[] {

@@ -22,6 +22,8 @@ export type ServerMsg =
       opponentPicked: boolean;
     }
   | { type: 'events'; turn: number; events: GameEvent[] }
+  /** Sent to an unseated visitor of a started game: enough to offer a claim, no game state. */
+  | { type: 'seats'; seats: PublicSeat[] }
   | { type: 'error'; key: string };
 
 const CLASS_IDS: readonly ClassId[] = ['knight', 'thief', 'mage', 'cleric'];

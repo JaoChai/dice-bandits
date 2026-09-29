@@ -220,11 +220,11 @@ test('creates, plays, disconnects, reclaims, claims, and rejects an unknown onli
       await expect(charliePage.getByTestId('screen-board')).toBeVisible();
       const reclaimedBobPage = await bobContext.newPage();
       await reclaimedBobPage.goto(`${onlineOrigin}/r/${code}?speed=0`);
-      await expect(reclaimedBobPage.getByTestId('online-error')).toBeVisible({ timeout: 15_000 });
+      await expect(reclaimedBobPage.getByTestId('online-error')).not.toBeEmpty({ timeout: 15_000 });
 
       const unknownPage = await charlieContext.newPage();
       await unknownPage.goto(`${onlineOrigin}/r/${testCode}?speed=0`);
-      await expect(unknownPage.getByTestId('online-error')).toBeVisible();
+      await expect(unknownPage.getByTestId('online-error')).not.toBeEmpty();
     } finally {
       await charlieContext.close();
     }

@@ -210,15 +210,7 @@ describe('online screens', () => {
       onStartGame: vi.fn(),
       initialCode: 'ABCDE',
     });
-    socket.receive({
-      type: 'view',
-      turn: 1,
-      state: {} as never,
-      you: 0,
-      legal: [],
-      seats: [seat({ controller: 'botTakeover' })],
-      opponentPicked: false,
-    });
+    socket.receive({ type: 'seats', seats: [seat({ controller: 'botTakeover' })] });
     expect(document.querySelector('[data-testid="screen-claim"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="claim-seat-0"]')).not.toBeNull();
 
@@ -228,18 +220,27 @@ describe('online screens', () => {
       onStartGame: vi.fn(),
       initialCode: 'FGHJK',
     });
-    socket.receive({
-      type: 'view',
-      turn: 1,
-      state: {} as never,
-      you: 0,
-      legal: [],
-      seats: [seat({ kind: 'bot', controller: 'bot' })],
-      opponentPicked: false,
-    });
+    socket.receive({ type: 'seats', seats: [seat({ kind: 'bot', controller: 'bot' })] });
     expect(document.querySelector('[data-testid="screen-claim"]')?.textContent).toContain(
       t('online.claim.none'),
     );
+  });
+
+  it('tells a device whose saved seat was claimed elsewhere, and forgets that seat', () => {
+    saveSession({ code: 'ABCDE', seat: 1, token: 'old-token', name: 'Bo' });
+    showOnlineScreens({
+      fetcher: vi.fn(),
+      socketFactory,
+      onStartGame: vi.fn(),
+      initialCode: 'ABCDE',
+    });
+    // A rejected token makes the server treat this device as an unseated visitor.
+    socket.receive({ type: 'seats', seats: [seat({ seat: 1, name: 'Cy' })] });
+    expect(document.querySelector('[data-testid="online-error"]')?.textContent).toContain(
+      t('online.error.openedElsewhere'),
+    );
+    expect(document.querySelector('[data-testid="screen-claim"]')).toBeNull();
+    expect(localStorage.getItem('dice-bandits:room:ABCDE')).toBeNull();
   });
 
   it.each(['en', 'th'] as const)('renders translated errors in %s', (language) => {

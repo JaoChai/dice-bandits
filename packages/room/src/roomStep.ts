@@ -8,7 +8,7 @@ import {
   playAction,
   runBotChain,
   viewForSeat,
-  viewForVisitor,
+  seatsForVisitor,
 } from './play';
 import { reclaimSeat, startTakeover, syncIdleDeadlines } from './timers';
 import type { ClientMsg, ServerMsg } from './protocol';
@@ -160,7 +160,7 @@ function connectedRoom(
     nextRoom.status === 'lobby'
       ? [lobbyBroadcast(nextRoom)]
       : seatNumber === null
-        ? [{ to: { conn }, msg: viewForVisitor(nextRoom) }]
+        ? [{ to: { conn }, msg: seatsForVisitor(nextRoom) }]
         : gameViews(nextRoom),
     now,
   );

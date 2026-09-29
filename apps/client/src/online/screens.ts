@@ -1,4 +1,4 @@
-import type { ClientMsg, ServerMsg } from '@dice-bandits/room';
+import type { ClientMsg, PublicSeat, ServerMsg } from '@dice-bandits/room';
 import type { RoomSession } from './session';
 import { clearSession, loadSession, saveSession } from './session';
 import { RoomSocket, type RoomSocketOptions, type RoomSocketHandlers } from './socket';
@@ -33,7 +33,7 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
   let socket: OnlineSocket | null = null;
   let session: RoomSession | null = null;
   let lobby: Extract<ServerMsg, { type: 'lobby' }> | null = null;
-  let gameView: Extract<ServerMsg, { type: 'view' }> | null = null;
+  let claimSeats: PublicSeat[] | null = null;
   let errorKey = '';
   let mode: 'join' | 'claim' | null = options.initialCode
     ? 'join'
@@ -61,7 +61,7 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
     root.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', showTitle);
   };
   const renderClaim = (): void => {
-    const candidates = (gameView?.seats ?? []).filter(
+    const candidates = (claimSeats ?? []).filter(
       (item) => item.kind === 'human' && item.controller === 'botTakeover',
     );
     root.innerHTML = `<main class="screen online-screen" data-testid="screen-claim"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><h1 class="pixel">${t('online.claim.title')}</h1><p>${t('online.claim.instructions')}</p><div class="online-list">${candidates.map((item) => `<button class="secondary" data-testid="claim-seat-${item.seat}" data-seat="${item.seat}">${escapeHtml(item.name)} · ${t(`class.${item.classId}`)}</button>`).join('')}</div>${candidates.length ? '' : `<p data-testid="online-claim-none">${t('online.claim.none')}</p>`}</main>`;
@@ -101,7 +101,7 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
   };
   const render = (): void => {
     if (errorKey) return errorView();
-    if (mode === 'claim') return gameView ? renderClaim() : renderForm();
+    if (mode === 'claim') return claimSeats ? renderClaim() : renderForm();
     if (lobby) return renderLobby();
     renderForm();
   };
@@ -131,13 +131,21 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
       mode = null;
       saveSession(session);
       renderLobby();
+    } else if (message.type === 'seats') {
+      if (session?.token) {
+        // Our saved token no longer matches a seat: another device claimed it.
+        clearSession(session.code);
+        session = null;
+        errorKey = 'online.error.openedElsewhere';
+        render();
+        return;
+      }
+      claimSeats = message.seats;
+      mode = 'claim';
+      renderClaim();
     } else if (message.type === 'view') {
-      gameView = message;
       if (session && message.you === session.seat) {
         options.onStartGame(socket!, session, message);
-      } else if (!session || mode === 'claim') {
-        mode = 'claim';
-        renderClaim();
       }
     } else if (message.type === 'error') {
       errorKey = message.key;
@@ -151,7 +159,7 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
     session = nextSession;
     errorKey = '';
     lobby = null;
-    gameView = null;
+    claimSeats = null;
     mode = nextSession ? null : joinName ? 'join' : mode;
     const tokenParam = nextSession ? `?token=${encodeURIComponent(nextSession.token)}` : '';
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
