@@ -15,5 +15,5 @@ export function needsPassScreen(state: GameState, side: BattleSide): boolean {
 }
 
 export function passDeviceMarkup(name: string): string {
-  return `<div class="dialog-shade pass-device" data-testid="pass-screen"><section class="game-dialog" role="dialog" aria-modal="true"><h2>${name}</h2><p data-i18n="battle.passDevice"></p><button class="primary" data-testid="pass-ready" data-i18n="battle.ready"></button></section></div>`;
+  return `<div class="dialog-shade pass-device" data-testid="pass-screen"><section class="game-dialog frame" role="dialog" aria-modal="true"><h2>${name}</h2><p data-i18n="battle.passDevice"></p><button class="primary" data-testid="pass-ready" data-i18n="battle.ready"></button></section></div>`;
 }

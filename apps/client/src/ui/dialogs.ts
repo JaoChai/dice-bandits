@@ -36,7 +36,7 @@ export function showPhaseDialog(
   const dialog = document.createElement('div');
   dialog.className = 'dialog-shade';
   const title = state.phase.kind === 'levelUp' ? t('perk.title') : t('shop.title');
-  dialog.innerHTML = `<section class="game-dialog phase-dialog" role="dialog" aria-modal="true"><h2>${title}</h2><div class="phase-choices">${actions.map((action, index) => `<button data-testid="${phaseTestId(action)}" data-choice="${index}"${disabled ? ' disabled' : ''}>${phaseLabel(action)}</button>`).join('')}</div></section>`;
+  dialog.innerHTML = `<section class="game-dialog phase-dialog frame" role="dialog" aria-modal="true"><h2>${title}</h2><div class="phase-choices">${actions.map((action, index) => `<button data-testid="${phaseTestId(action)}" data-choice="${index}"${disabled ? ' disabled' : ''}>${phaseLabel(action)}</button>`).join('')}</div></section>`;
   dialog.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) => {
     button.addEventListener('click', () => {
       const action = actions[Number(button.dataset.choice)];
@@ -71,7 +71,7 @@ export function showActionDialog(
   if (!choices.length) return;
   const dialog = document.createElement('div');
   dialog.className = 'dialog-shade';
-  dialog.innerHTML = `<section class="game-dialog" role="dialog" aria-modal="true"><h2>${t('board.reward')}</h2>${choices.map((choice, index) => `<button data-choice="${index}"${disabled ? ' disabled' : ''}>${rewardLabel(choice as Extract<Action, { type: 'pvpReward' }>)}</button>`).join('')}</section>`;
+  dialog.innerHTML = `<section class="game-dialog frame" role="dialog" aria-modal="true"><h2>${t('board.reward')}</h2>${choices.map((choice, index) => `<button data-choice="${index}"${disabled ? ' disabled' : ''}>${rewardLabel(choice as Extract<Action, { type: 'pvpReward' }>)}</button>`).join('')}</section>`;
   dialog.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) => {
     button.addEventListener('click', () => {
       const choice = choices[Number(button.dataset.choice)];
