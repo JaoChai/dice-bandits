@@ -283,6 +283,18 @@ afterEach(async () => {
 });
 
 describe('spritesheet mode', () => {
+  it('writes a sorted deterministic atlas manifest when emitting sheets', async () => {
+    await buildSheet({ ...sheetEntry, name: 'z-sheet' }, sheetBase, sheetOut);
+    await buildSheet({ ...sheetEntry, name: 'a-sheet' }, sheetBase, sheetOut);
+    expect(JSON.parse(await readFile(join(sheetOut, 'atlases.json'), 'utf8'))).toEqual({
+      atlases: ['a-sheet', 'z-sheet'],
+    });
+    await buildSheet({ ...sheetEntry, name: 'z-sheet' }, sheetBase, sheetOut);
+    expect(await readFile(join(sheetOut, 'atlases.json'), 'utf8')).toBe(
+      '{\n  "atlases": [\n    "a-sheet",\n    "z-sheet"\n  ]\n}\n',
+    );
+  });
+
   it('slices a row sheet into equal cells with feet anchor and animation frames', async () => {
     const atlas = await buildSheet(sheetEntry, sheetBase, sheetOut);
     expect(atlas.frames).toHaveLength(3);

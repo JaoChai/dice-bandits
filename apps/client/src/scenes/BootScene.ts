@@ -40,6 +40,7 @@ function fallbackTextureKey(key: string): string {
 export default class BootScene extends Phaser.Scene {
   private readonly failedAtlases = new Set<string>();
   private readonly warnedAtlases = new Set<string>();
+  private readonly activeAtlases = new Set<string>();
 
   constructor() {
     super('BootScene');
@@ -50,15 +51,23 @@ export default class BootScene extends Phaser.Scene {
     for (const hero of classes) this.load.image(`hero-${hero}`, `/sprites/hero-${hero}.png`);
     this.load.image('icons', '/sprites/icons.png');
 
-    for (const key of atlasKeys) {
-      this.load.json(key, `/sprites/${key}.json`);
-      this.load.image(`${key}-atlas-image`, `/sprites/${key}.png`);
-    }
+    this.load.on(
+      'filecomplete-text-atlas-manifest',
+      (_key: string, _type: string, data: string) => {
+        const manifest = this.parseAtlasManifest(data);
+        for (const key of manifest) {
+          this.activeAtlases.add(key);
+          this.load.json(key, `/sprites/${key}.json`);
+          this.load.image(`${key}-atlas-image`, `/sprites/${key}.png`);
+        }
+      },
+    );
 
     this.load.on('loaderror', (file: { key: string }) => {
+      if (file.key === 'atlas-manifest') return;
       const atlasKey = atlasImageKeys.has(file.key)
         ? file.key.slice(0, -'-atlas-image'.length)
-        : atlasKeys.includes(file.key)
+        : this.activeAtlases.has(file.key)
           ? file.key
           : undefined;
       if (atlasKey) {
@@ -71,11 +80,33 @@ export default class BootScene extends Phaser.Scene {
       }
       if (legacyImageKeys.has(file.key)) this.showAssetError();
     });
+
+    this.load.text('atlas-manifest', '/sprites/atlases.json');
+  }
+
+  private parseAtlasManifest(data: string): string[] {
+    try {
+      const manifest = JSON.parse(data) as { atlases?: unknown };
+      if (!Array.isArray(manifest.atlases)) return [];
+      return [
+        ...new Set(
+          manifest.atlases.filter(
+            (key): key is string => typeof key === 'string' && atlasKeys.includes(key),
+          ),
+        ),
+      ];
+    } catch {
+      return [];
+    }
   }
 
   create(): void {
+    const fallbackKeys = atlasKeys.filter((key) => !this.activeAtlases.has(key));
+    if (fallbackKeys.length > 0) {
+      console.info('[art] using M1 sprites for', fallbackKeys.length, 'keys');
+    }
     for (const key of atlasKeys) {
-      if (this.failedAtlases.has(key)) {
+      if (this.failedAtlases.has(key) || !this.activeAtlases.has(key)) {
         const fallback = this.textures.get(fallbackTextureKey(key));
         if (!this.textures.exists(key) && fallback) {
           this.textures.addImage(key, fallback.getSourceImage() as HTMLImageElement);

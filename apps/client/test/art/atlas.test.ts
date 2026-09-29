@@ -54,7 +54,107 @@ describe('atlas runtime', () => {
     expect(hasAnim(scene, 'hero-knight', 'hop')).toBe(false);
   });
 
-  it('warns and aliases a missing atlas to its legacy M1 region image without fatal UI', () => {
+  it('loads no atlas assets when the manifest is empty and silently aliases M1 fallbacks', () => {
+    const events = new Map<string, (key: string, type: string, data: string) => void>();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const image = vi.fn();
+    const json = vi.fn();
+    const text = vi.fn();
+    const boot = Object.assign(Object.create(BootScene.prototype), {
+      failedAtlases: new Set<string>(),
+      warnedAtlases: new Set<string>(),
+      activeAtlases: new Set<string>(),
+      load: {
+        image,
+        json,
+        text,
+        on: vi.fn((event: string, callback: (key: string, type: string, data: string) => void) =>
+          events.set(event, callback),
+        ),
+      },
+      textures: {
+        get: vi.fn(() => ({ getSourceImage: () => 'legacy' })),
+        exists: vi.fn(() => false),
+        addImage: vi.fn(),
+      },
+      cache: { json: { get: vi.fn() } },
+      scene: { start: vi.fn() },
+    }) as BootScene;
+
+    boot.preload();
+    expect(text).toHaveBeenCalledWith('atlas-manifest', '/sprites/atlases.json');
+    events.get('filecomplete-text-atlas-manifest')?.('atlas-manifest', 'text', '{"atlases":[]}');
+    expect(json).not.toHaveBeenCalled();
+    expect(image.mock.calls.map(([key]) => key)).not.toContain('hero-knight-atlas-image');
+    boot.create();
+
+    expect(info).toHaveBeenCalledWith('[art] using M1 sprites for', 29, 'keys');
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    info.mockRestore();
+    warn.mockRestore();
+    error.mockRestore();
+  });
+
+  it('loads only manifest-listed atlas files', () => {
+    const events = new Map<string, (key: string, type: string, data: string) => void>();
+    const image = vi.fn();
+    const json = vi.fn();
+    const boot = Object.assign(Object.create(BootScene.prototype), {
+      failedAtlases: new Set<string>(),
+      warnedAtlases: new Set<string>(),
+      activeAtlases: new Set<string>(),
+      load: {
+        image,
+        json,
+        text: vi.fn(),
+        on: vi.fn((event: string, callback: (key: string, type: string, data: string) => void) =>
+          events.set(event, callback),
+        ),
+      },
+    }) as BootScene;
+    boot.preload();
+    events.get('filecomplete-text-atlas-manifest')?.(
+      'atlas-manifest',
+      'text',
+      '{"atlases":["hero-knight"]}',
+    );
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(json).toHaveBeenCalledWith('hero-knight', '/sprites/hero-knight.json');
+    expect(image).toHaveBeenCalledWith('hero-knight-atlas-image', '/sprites/hero-knight.png');
+    expect(json.mock.calls.map(([key]) => key)).toEqual(['hero-knight']);
+  });
+
+  it('treats invalid manifest JSON as empty without logging errors', () => {
+    const events = new Map<string, (key: string, type: string, data: string) => void>();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const json = vi.fn();
+    const boot = Object.assign(Object.create(BootScene.prototype), {
+      failedAtlases: new Set<string>(),
+      warnedAtlases: new Set<string>(),
+      activeAtlases: new Set<string>(),
+      load: {
+        image: vi.fn(),
+        text: vi.fn(),
+        json,
+        on: vi.fn((event: string, callback: (key: string, type: string, data: string) => void) =>
+          events.set(event, callback),
+        ),
+      },
+    }) as BootScene;
+    boot.preload();
+    events.get('filecomplete-text-atlas-manifest')?.('atlas-manifest', 'text', '<!doctype html>');
+    expect(json).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    error.mockRestore();
+    warn.mockRestore();
+  });
+
+  it('warns and aliases a missing listed atlas to its legacy M1 region image without fatal UI', () => {
     const loaderror: { callback?: (file: { key: string }) => void } = {};
     const legacyTexture = { getSourceImage: () => 'legacy-image' };
     const addImage = vi.fn();
@@ -65,11 +165,13 @@ describe('atlas runtime', () => {
     const boot = Object.assign(Object.create(BootScene.prototype), {
       failedAtlases: new Set<string>(),
       warnedAtlases: new Set<string>(),
+      activeAtlases: new Set(['board-meadow']),
       load: {
         image: vi.fn(),
+        text: vi.fn(),
         json: vi.fn(),
-        on: vi.fn((_event: string, callback: (file: { key: string }) => void) => {
-          loaderror.callback = callback;
+        on: vi.fn((event: string, callback: (file: { key: string }) => void) => {
+          if (event === 'loaderror') loaderror.callback = callback;
         }),
       },
       textures: {

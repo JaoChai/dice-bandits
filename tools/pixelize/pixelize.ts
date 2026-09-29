@@ -443,6 +443,24 @@ export async function buildSheet(
     .png({ compressionLevel: 9 })
     .toFile(join(outDir, atlas.image));
   await writeFile(join(outDir, `${entry.name}.json`), `${JSON.stringify(atlas, null, 2)}\n`);
+  const manifestPath = join(outDir, 'atlases.json');
+  let existing: unknown;
+  try {
+    existing = JSON.parse(await readFile(manifestPath, 'utf8'));
+  } catch {
+    existing = undefined;
+  }
+  const names =
+    existing &&
+    typeof existing === 'object' &&
+    'atlases' in existing &&
+    Array.isArray(existing.atlases)
+      ? existing.atlases.filter((name): name is string => typeof name === 'string')
+      : [];
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify({ atlases: [...new Set([...names, entry.name])].sort() }, null, 2)}\n`,
+  );
   return atlas;
 }
 
