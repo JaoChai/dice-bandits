@@ -2,6 +2,7 @@ import type { ClassId, GameConfig, Personality } from '@dice-bandits/engine';
 import { getLang, setLang, t } from '../i18n';
 import { loadGame, onSaveToast } from '../save';
 import { testHooks } from '../testHooks';
+import { latestSession } from '../online/session';
 
 const classes: ClassId[] = ['knight', 'thief', 'mage', 'cleric'];
 const personalities: Personality[] = ['greedy', 'vengeful', 'cowardly'];
@@ -31,7 +32,10 @@ function bindLanguageToggle(root: HTMLElement, rerender: () => void): void {
   });
 }
 
-export function showTitle(onNewGame: () => void = () => {}): void {
+export function showTitle(
+  onNewGame: () => void = () => {},
+  online: { create?: () => void; join?: () => void; back?: (code: string) => void } = {},
+): void {
   const root = document.querySelector<HTMLElement>('#app');
   if (!root) throw new Error('Missing #app mount element');
   const render = (): void => {
@@ -40,8 +44,9 @@ export function showTitle(onNewGame: () => void = () => {}): void {
       discarded = true;
     });
     const saved = loadGame();
+    const room = latestSession();
     unsubscribe();
-    root.innerHTML = `<main class="screen title-screen" data-testid="screen-title"><header>${languageToggle()}</header><div class="title-art" aria-hidden="true">🎲</div><h1 class="pixel">${t('title.gameName')}</h1><p>${t('title.subtitle')}</p><div class="title-actions"><button class="primary pixel" data-action="new">${t('title.newGame')}</button>${saved ? `<button class="secondary" data-action="continue">${t('title.continue')}</button>` : ''}</div></main>`;
+    root.innerHTML = `<main class="screen title-screen" data-testid="screen-title"><header>${languageToggle()}</header><div class="title-art" aria-hidden="true">🎲</div><h1 class="pixel">${t('title.gameName')}</h1><p>${t('title.subtitle')}</p><div class="title-actions"><button class="primary pixel" data-action="new">${t('title.newGame')}</button>${saved ? `<button class="secondary" data-action="continue">${t('title.continue')}</button>` : ''}<button class="secondary" data-testid="online-create">${t('online.create')}</button><button class="secondary" data-testid="online-join">${t('online.join')}</button>${room ? `<button class="secondary" data-testid="online-back">${t('online.backToRoom', { code: room.code })}</button>` : ''}</div></main>`;
     if (discarded) {
       const toast = document.createElement('div');
       toast.className = 'toast';
@@ -51,6 +56,36 @@ export function showTitle(onNewGame: () => void = () => {}): void {
     }
     bindLanguageToggle(root, render);
     root.querySelector('[data-action="new"]')?.addEventListener('click', onNewGame);
+    root
+      .querySelector('[data-testid="online-create"]')
+      ?.addEventListener(
+        'click',
+        online.create ??
+          (() =>
+            root.dispatchEvent(
+              new CustomEvent('dice-bandits:online', { detail: { mode: 'create' } }),
+            )),
+      );
+    root
+      .querySelector('[data-testid="online-join"]')
+      ?.addEventListener(
+        'click',
+        online.join ??
+          (() =>
+            root.dispatchEvent(
+              new CustomEvent('dice-bandits:online', { detail: { mode: 'join' } }),
+            )),
+      );
+    root.querySelector('[data-testid="online-back"]')?.addEventListener('click', () => {
+      const current = latestSession();
+      if (current) {
+        if (online.back) online.back(current.code);
+        else
+          root.dispatchEvent(
+            new CustomEvent('dice-bandits:online', { detail: { code: current.code } }),
+          );
+      }
+    });
     root.querySelector('[data-action="continue"]')?.addEventListener('click', () => {
       root.dispatchEvent(new CustomEvent('dice-bandits:continue', { detail: saved }));
     });

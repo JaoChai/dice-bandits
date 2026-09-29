@@ -2,6 +2,25 @@ import { describe, expect, it, vi } from 'vitest';
 import worker, { type WorkerEnv } from '../worker/index';
 
 describe('Worker fetch handler', () => {
+  it('returns online.error.badName for an invalid room name', async () => {
+    const env = {
+      DB: { prepare: vi.fn() },
+      ASSETS: { fetch: vi.fn() },
+      ROOM: { getByName: vi.fn() },
+    };
+    const response = await worker.fetch(
+      new Request('https://example.com/api/rooms', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: '   ' }),
+      }),
+      env as unknown as WorkerEnv,
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'online.error.badName' });
+    expect(env.ROOM.getByName).not.toHaveBeenCalled();
+  });
+
   it('returns a successful health response with the D1 probe result', async () => {
     const env = {
       DB: { prepare: vi.fn(() => ({ first: vi.fn().mockResolvedValue({ ok: 1 }) })) },

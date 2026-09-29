@@ -24,10 +24,19 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: 'VITE_TEST_HOOKS=1 npm run build && npm run preview -- --port 4173 --strictPort',
-    url: 'http://localhost:4173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: 'npm run preview -- --port 4173 --strictPort',
+      url: 'http://localhost:4173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command:
+        'npx wrangler dev --config dist/dice_bandits/wrangler.json --var ROOM_IDLE_MS:3000 --port 8787 --ip 127.0.0.1',
+      url: 'http://127.0.0.1:8787/api/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+  ],
 });

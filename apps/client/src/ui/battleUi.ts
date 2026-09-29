@@ -12,6 +12,7 @@ export function renderBattleUi(
   dispatch: (action: Action) => void,
   actionName: (action: Action) => string,
   humanPicker: boolean,
+  onlineMode = false,
 ): boolean {
   if (state.phase.kind !== 'battle') {
     readyPasses.clear();
@@ -21,7 +22,10 @@ export function renderBattleUi(
   const side = pendingSide(state);
   const passKey = battlePassKey(state, side);
   const passNeeded =
-    battleSeat !== undefined && needsPassScreen(state, side) && !readyPasses.has(passKey);
+    battleSeat !== undefined &&
+    !onlineMode &&
+    needsPassScreen(state, side) &&
+    !readyPasses.has(passKey);
   const shownActions = passNeeded ? [] : actions;
   const pickerActions = humanPicker
     ? shownActions.filter((action) => action.type === 'battlePick' || action.type === 'useItem')
@@ -47,7 +51,16 @@ export function renderBattleUi(
     );
     root.querySelector('[data-testid="pass-ready"]')?.addEventListener('click', () => {
       readyPasses.add(passKey);
-      renderBattleUi(root, state, actions, battleSeat, dispatch, actionName, humanPicker);
+      renderBattleUi(
+        root,
+        state,
+        actions,
+        battleSeat,
+        dispatch,
+        actionName,
+        humanPicker,
+        onlineMode,
+      );
     });
   }
   root.querySelectorAll<HTMLButtonElement>('[data-action-index]').forEach((button) => {

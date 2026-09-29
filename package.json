@@ -8,14 +8,17 @@
   "workspaces": [
     "packages/*",
     "apps/*",
-    "tools/*"
+    "tools/*",
+    "tests/worker"
   ],
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "test": "npm run test --workspaces --if-present",
+    "test:worker": "npm run test:worker -w @dice-bandits/worker-tests",
     "sim": "npm run sim -w @dice-bandits/engine --",
+    "sim:room": "npm run sim:room -w @dice-bandits/room --",
     "build": "npm run build --workspaces --if-present",
     "e2e": "npm run e2e -w @dice-bandits/client",
     "deploy": "npm run deploy -w @dice-bandits/client"
