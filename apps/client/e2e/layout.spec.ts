@@ -2,8 +2,78 @@ import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
+import { assertInside, assertMinFont, assertNoEllipsis, playUntil, startTestGame } from './helpers';
 
-const screenshotDir = join(process.env.TMPDIR ?? tmpdir(), 'm4a-fix27');
+// The original four-seat overlap test below is retained unchanged.
+test('board and battle fit the viewport without truncation', async ({ page }) => {
+  await startTestGame(page);
+  for (const lang of ['en', 'th'] as const) {
+    await page.locator(`.game-topline [data-lang="${lang}"]`).click();
+    await assertInside(page, '[data-testid="screen-board"] *:visible');
+    await assertNoEllipsis(page, '[data-testid="event-banner"]');
+    await assertMinFont(page, '.seat-card', 12);
+  }
+  await playUntil(page, (state) => state.phase.kind === 'battle');
+  await expect(page.locator('.battle-panel')).toBeVisible();
+  await assertInside(page, '.battle-panel *:visible', '.battle-panel');
+  const expected = await page.evaluate(() => {
+    const state = window.__db!.getState();
+    if (state.phase.kind !== 'battle') throw new Error('not in battle');
+    const fighter = state.phase.battle.a;
+    return `${fighter.hp}/${fighter.stats.maxHp}`;
+  });
+  await expect(page.locator('[data-testid="hp-left"]')).toHaveText(expected);
+});
+
+test('reduced motion disables shake and ambient loops', async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  try {
+    const page = await context.newPage();
+    await startTestGame(page);
+    await expect.poll(() => page.evaluate(() => window.__db!.art.ambientRunning)).toBe(false);
+    await playUntil(page, (state) => state.phase.kind === 'battle');
+    expect(await page.evaluate(() => window.__db!.art.shakeCount)).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('mobile battle trace measures animation frame cadence', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-landscape', 'mobile emulation only');
+  await startTestGame(page);
+  await playUntil(page, (state) => state.phase.kind === 'battle');
+  const measurement = page.evaluate(
+    () =>
+      new Promise<{ frames: number; seconds: number; fps: number }>((resolve) => {
+        let first = 0;
+        let frames = 0;
+        const sample = (time: number) => {
+          if (!first) first = time;
+          frames += 1;
+          if (time - first < 2_000) requestAnimationFrame(sample);
+          else {
+            const seconds = (time - first) / 1_000;
+            resolve({ frames, seconds, fps: (frames - 1) / seconds });
+          }
+        };
+        requestAnimationFrame(sample);
+      }),
+  );
+  // Switch from instant setup to animated combat while the frame sample runs.
+  await page.evaluate(() => {
+    window.diceBanditsSpeed = 1;
+  });
+  const choice = page.locator('[data-testid^="pick-"]:visible:enabled').first();
+  if (await choice.count()) await choice.click();
+  const result = await measurement;
+  testInfo.annotations.push({ type: 'battle-raf-fps', description: JSON.stringify(result) });
+  console.log(
+    `Mobile battle rAF cadence: ${result.fps.toFixed(1)} FPS (${result.frames} callbacks / ${result.seconds.toFixed(3)} s)`,
+  );
+  expect(result.fps).toBeGreaterThanOrEqual(30);
+});
+
+const screenshotDir = join(process.env.TMPDIR ?? tmpdir(), 'm4a', 'layout');
 
 test('four-player hot-seat HUD controls fit without overlap at readable sizes', async ({
   page,

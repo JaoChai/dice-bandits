@@ -163,7 +163,10 @@ export function startOnlineGame(
       showTitle(startSetup);
     });
     if (import.meta.env.VITE_TEST_HOOKS === '1') {
-      window.__db = { getState: () => controller.state };
+      window.__db = {
+        getState: () => controller.state,
+        art: { ambientRunning: false, shakeCount: 0 },
+      };
     }
     window.addEventListener('dice-bandits:lang', renderOnlineHud);
   });
@@ -285,7 +288,10 @@ function startGame(state: GameState): void {
     showTitle(startSetup);
   });
   if (import.meta.env.VITE_TEST_HOOKS === '1') {
-    window.__db = { getState: () => controller.state };
+    window.__db = {
+      getState: () => controller.state,
+      art: { ambientRunning: false, shakeCount: 0 },
+    };
   }
   window.addEventListener('dice-bandits:lang', () => renderHud(app, controller.state, dispatch));
   saveGame(controller.state);
@@ -298,7 +304,7 @@ app.addEventListener('dice-bandits:continue', (event) => {
 
 declare global {
   interface Window {
-    __db?: { getState: () => GameState };
+    __db?: { getState: () => GameState; art: { ambientRunning: boolean; shakeCount: number } };
     diceBanditsText: (key: string) => string;
     diceBanditsSpeed: number;
   }

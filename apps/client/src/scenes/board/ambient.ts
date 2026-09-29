@@ -28,8 +28,10 @@ export function drawAmbients(
       .sprite(ambient.x, ambient.y, key, 0)
       .setScale(ambientScale)
       .setDepth(depth);
-    if (hasLoop(scene, key) && !reducedMotion()) {
+    if (hasLoop(scene, key) && !reducedMotion() && window.diceBanditsSpeed > 0) {
       sprite.play(`${key}:loop`);
+      if (import.meta.env.VITE_TEST_HOOKS === '1' && window.__db)
+        window.__db.art.ambientRunning = true;
     }
     sprites.push(sprite);
   }

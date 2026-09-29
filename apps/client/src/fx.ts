@@ -56,6 +56,7 @@ export function dustPuff(scene: Phaser.Scene, x: number, y: number, speed: numbe
 }
 
 export function shake(scene: Phaser.Scene, speed: number): void {
-  if (speed <= 0) return;
+  if (speed <= 0 || reducedMotion()) return;
   scene.cameras.main.shake(220 * speed, 0.008);
+  if (import.meta.env.VITE_TEST_HOOKS === '1' && window.__db) window.__db.art.shakeCount += 1;
 }

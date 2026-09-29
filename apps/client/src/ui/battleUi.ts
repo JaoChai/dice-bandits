@@ -19,11 +19,13 @@ export function renderBattleUi(
   if (state.phase.kind !== 'battle') {
     readyPasses.clear();
     shell?.classList.remove('battle-mode');
+    shell?.querySelector('.board-stage')?.classList.remove('battle-panel');
     shell?.querySelector('.battle-hud')?.remove();
     return false;
   }
 
   shell?.classList.add('battle-mode');
+  shell?.querySelector('.board-stage')?.classList.add('battle-panel');
   const exit = shell?.querySelector<HTMLButtonElement>('.game-topline [data-action="exit"]');
   if (exit) exit.textContent = t('setup.back');
   const battle = state.phase.battle;

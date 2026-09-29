@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { motionScale, reducedMotion } from '../../src/art/motion';
+import { shake } from '../../src/fx';
+import type Phaser from 'phaser';
 
 describe('art motion policy', () => {
   afterEach(() => {
@@ -24,5 +26,18 @@ describe('art motion policy', () => {
 
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     expect(reducedMotion()).toBe(false);
+  });
+
+  it('never shakes with reduced motion or instant speed', () => {
+    const cameraShake = vi.fn();
+    const scene = { cameras: { main: { shake: cameraShake } } } as unknown as Phaser.Scene;
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
+    shake(scene, 1);
+    expect(cameraShake).not.toHaveBeenCalled();
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
+    shake(scene, 0);
+    expect(cameraShake).not.toHaveBeenCalled();
+    shake(scene, 1);
+    expect(cameraShake).toHaveBeenCalledOnce();
   });
 });

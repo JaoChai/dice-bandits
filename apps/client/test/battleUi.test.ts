@@ -80,6 +80,26 @@ function render(state = battleState(), awaitingView = false) {
 afterEach(() => setLang('en'));
 
 describe('renderBattleUi', () => {
+  it('marks the board stage as the contained battle panel only during battle', () => {
+    const state = battleState();
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<section class="game-shell"><div class="board-stage"></div><nav class="action-bar"></nav></section>';
+    const args = [root, state, actions, 0, vi.fn(), () => 'pick', true, true] as const;
+    renderBattleUi(...args);
+    expect(root.querySelector('.board-stage')?.classList.contains('battle-panel')).toBe(true);
+    state.phase = createGame({
+      seed: 'panel-reset',
+      rounds: 12,
+      seats: [
+        { name: 'Hero', classId: 'knight', control: 'human', personality: null },
+        { name: 'Rival', classId: 'thief', control: 'bot', personality: null },
+      ],
+    }).phase;
+    renderBattleUi(...args);
+    expect(root.querySelector('.board-stage')?.classList.contains('battle-panel')).toBe(false);
+  });
+
   it('shows exact HP from both combatants as DOM text, not canvas glyphs', () => {
     const state = battleState();
     if (state.phase.kind !== 'battle') throw new Error('expected battle');
