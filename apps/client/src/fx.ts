@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { reducedMotion } from './art/motion';
 
 export function hop(scene: Phaser.Scene, object: Phaser.GameObjects.Image, speed: number): void {
   if (speed <= 0) return;
@@ -28,6 +29,23 @@ export function coinBurst(
     alpha: 0,
     duration: 360 * speed,
     onComplete: () => burst.destroy(),
+  });
+}
+
+export function dustPuff(scene: Phaser.Scene, x: number, y: number, speed: number): void {
+  if (speed <= 0 || reducedMotion()) return;
+  const puff = scene.add.graphics().setDepth(3);
+  puff.fillStyle(0xe8dcc3, 0.9);
+  puff.fillCircle(x - 4, y, 2);
+  puff.fillCircle(x, y - 1, 3);
+  puff.fillCircle(x + 4, y, 2);
+  scene.tweens.add({
+    targets: puff,
+    y: y - 4,
+    alpha: 0,
+    scale: 1.35,
+    duration: 220 * speed,
+    onComplete: () => puff.destroy(),
   });
 }
 

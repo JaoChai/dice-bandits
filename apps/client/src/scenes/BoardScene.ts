@@ -1,9 +1,12 @@
 import Phaser from 'phaser';
 import type { GameState, GameEvent, Region } from '@dice-bandits/engine';
-import { coinBurst, dice, shake } from '../fx';
+import { coinBurst, dice, dustPuff, shake } from '../fx';
+import { reducedMotion } from '../art/motion';
+import { hasAnim } from '../art/atlas';
+import { createHeroToken, tokenOffsets } from './board/tokens';
 
 export default class BoardScene extends Phaser.Scene {
-  private tokenObjects = new Map<number, Phaser.GameObjects.Image>();
+  private tokenObjects = new Map<number, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>();
   private spacePositions = new Map<number, { x: number; y: number }>();
 
   constructor() {
@@ -26,29 +29,49 @@ export default class BoardScene extends Phaser.Scene {
         await wait(350 * speed);
       } else if (event.type === 'Moved' && token) {
         const destination = this.spacePositions.get(Number(event.params.to));
-        if (destination && speed > 0) {
-          const middleX = (token.x + destination.x) / 2;
-          await new Promise<void>((resolve) => {
-            this.tweens.add({
-              targets: token,
-              x: middleX,
-              y: destination.y - 8,
-              duration: 100 * speed,
-              ease: 'Sine.easeOut',
-              onComplete: () => {
-                this.tweens.add({
-                  targets: token,
-                  x: destination.x,
-                  y: destination.y,
-                  duration: 100 * speed,
-                  ease: 'Sine.easeIn',
-                  onComplete: () => resolve(),
-                });
-              },
+        if (destination) {
+          const movingLeft = destination.x < token.x;
+          token.setFlipX(movingLeft);
+          if (speed > 0) {
+            const middleX = (token.x + destination.x) / 2;
+            const sprite =
+              token instanceof Phaser.GameObjects.Sprite && hasAnim(this, token.texture.key, 'hop')
+                ? token
+                : undefined;
+            sprite?.play(`${sprite.texture.key}:hop`);
+            await new Promise<void>((resolve) => {
+              this.tweens.add({
+                targets: token,
+                x: middleX,
+                y: destination.y - 8,
+                duration: 100 * speed,
+                ease: 'Sine.easeOut',
+                onComplete: () => {
+                  this.tweens.add({
+                    targets: token,
+                    x: destination.x,
+                    y: destination.y,
+                    duration: 100 * speed,
+                    ease: 'Sine.easeIn',
+                    onComplete: () => {
+                      if (sprite) {
+                        if (!reducedMotion() && hasAnim(this, sprite.texture.key, 'idle')) {
+                          sprite.play(`${sprite.texture.key}:idle`);
+                        } else {
+                          sprite.anims.stop();
+                          sprite.setFrame(0);
+                        }
+                      }
+                      dustPuff(this, destination.x, destination.y, speed);
+                      resolve();
+                    },
+                  });
+                },
+              });
             });
-          });
-        } else if (destination) {
-          token.setPosition(destination.x, destination.y);
+          } else {
+            token.setPosition(destination.x, destination.y);
+          }
         }
       } else if (event.type === 'GoldStolen' && token) {
         coinBurst(this, token, speed);
@@ -106,14 +129,10 @@ export default class BoardScene extends Phaser.Scene {
       if (!point) continue;
       const index = countAtSpace.get(player.pos) ?? 0;
       countAtSpace.set(player.pos, index + 1);
-      const angle = (index * Math.PI) / 2;
-      const fanRadius = index === 0 ? 0 : 3;
-      const x = point.x + Math.cos(angle) * fanRadius;
-      const y = point.y + Math.sin(angle) * fanRadius;
-      const token = this.add
-        .image(x, y, `hero-${player.classId}`)
-        .setDisplaySize(14, 14)
-        .setDepth(4);
+      const offset = tokenOffsets(index + 1)[index]!;
+      const x = point.x + offset.x;
+      const y = point.y + offset.y;
+      const token = createHeroToken(this, player.classId, x, y, !reducedMotion());
       this.tokenObjects.set(player.seat, token);
       const decorations = this.add.graphics().setDepth(5);
       decorations.lineStyle(
