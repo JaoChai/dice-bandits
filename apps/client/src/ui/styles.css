@@ -817,23 +817,35 @@ h1 {
   image-rendering: pixelated;
 }
 .game-topline {
-  inset: 8px 12px auto;
-  justify-content: flex-end;
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  inset: 62px auto auto 50%;
+  transform: translateX(-50%);
+  justify-content: center;
+  gap: 8px;
   pointer-events: none;
+}
+.game-topline > .pixel,
+.game-topline > .round-label,
+.game-topline > .world-chip {
+  display: none;
 }
 .game-topline > * {
   pointer-events: auto;
 }
-.game-topline > .round-label,
-.game-topline > .world-chip {
-  display: none;
+.game-topline .language-toggle button,
+.game-topline .text-button {
+  min-height: 32px;
+  font-size: 12px;
 }
 .event-banner {
   position: absolute;
   z-index: 4;
   top: 8px;
   left: 50%;
-  width: min(52vw, 620px);
+  width: min(48vw, 620px);
   min-height: 48px;
   padding: 5px 12px;
   transform: translateX(-50%);
@@ -1061,10 +1073,9 @@ h1 {
     font-size: 12px;
   }
   .game-topline {
-    inset: auto 6px 68px;
-  }
-  .game-topline .language-toggle {
-    display: none;
+    inset: 62px auto auto 50%;
+    transform: translateX(-50%);
+    justify-content: center;
   }
   .action-tray {
     bottom: 6px;
