@@ -81,7 +81,18 @@ async function playUntilEachHumanActsThreeTimes(
     }
 
     const before = await Promise.all(pages.map(gameStamp));
-    expect(await clickFirstAction(pages[actor]!)).toBe(true);
+    if (acted[0]! + acted[1]! === 0) {
+      const actionButton = pages[actor]!.locator(enabledActionSelector).first();
+      expect(await actionButton.count()).toBeGreaterThan(0);
+      await actionButton.evaluate((element) => {
+        (element as HTMLButtonElement).click();
+        (element as HTMLButtonElement).click();
+      });
+      await expect(pages[actor]!.getByTestId('screen-board')).toBeVisible();
+      await expect(pages[actor]!.getByTestId('online-error')).toHaveCount(0);
+    } else {
+      expect(await clickFirstAction(pages[actor]!)).toBe(true);
+    }
     acted[actor] = acted[actor]! + 1;
     await expect
       .poll(

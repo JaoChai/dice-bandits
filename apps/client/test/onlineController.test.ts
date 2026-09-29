@@ -93,6 +93,62 @@ function makeController(
 }
 
 describe('OnlineController', () => {
+  it('disables actions after dispatch until the next view and ignores duplicate dispatches', async () => {
+    const { controller, socket } = makeController();
+    await controller.handleMessage(view());
+    const root = document.createElement('div');
+    document.body.append(root);
+    const render = () =>
+      renderHud(root, controller.state, (action) => void controller.dispatch(action), {
+        legal: controller.legal,
+        online: controller.hudOnlineState,
+      });
+    render();
+
+    root.querySelector<HTMLButtonElement>('[data-testid="action-endTurn"]')!.click();
+    render();
+    expect(root.querySelector<HTMLButtonElement>('[data-testid="action-endTurn"]')?.disabled).toBe(
+      true,
+    );
+    root.querySelector<HTMLButtonElement>('[data-testid="action-endTurn"]')!.click();
+    expect(socket.sent).toHaveLength(1);
+
+    await controller.handleMessage(view({ turn: 13 }));
+    render();
+    expect(root.querySelector<HTMLButtonElement>('[data-testid="action-endTurn"]')?.disabled).toBe(
+      false,
+    );
+    root.remove();
+  });
+
+  it('disables actions on events until the following view is applied', async () => {
+    const { controller, socket } = makeController();
+    await controller.handleMessage(view());
+    const root = document.createElement('div');
+    document.body.append(root);
+    const render = () =>
+      renderHud(root, controller.state, (action) => void controller.dispatch(action), {
+        legal: controller.legal,
+        online: controller.hudOnlineState,
+      });
+    render();
+
+    await controller.handleMessage({ type: 'events', turn: 13, events: [] });
+    render();
+    expect(root.querySelector<HTMLButtonElement>('[data-testid="action-endTurn"]')?.disabled).toBe(
+      true,
+    );
+    root.querySelector<HTMLButtonElement>('[data-testid="action-endTurn"]')!.click();
+    expect(socket.sent).toHaveLength(0);
+
+    await controller.handleMessage(view({ turn: 13 }));
+    render();
+    expect(root.querySelector<HTMLButtonElement>('[data-testid="action-endTurn"]')?.disabled).toBe(
+      false,
+    );
+    root.remove();
+  });
+
   it('uses only server-provided legal actions in the HUD and sends them with the current turn', async () => {
     const { controller, socket } = makeController();
     await controller.handleMessage(view({ legal: [{ type: 'endTurn' }] }));

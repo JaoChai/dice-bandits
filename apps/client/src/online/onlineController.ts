@@ -11,6 +11,7 @@ export interface OnlineControllerOptions {
   state: GameState;
   socket: OnlineTransport;
   onEvents: (events: GameEvent[], state: GameState) => Promise<void>;
+  onAwaitingViewChange?: (awaiting: boolean) => void;
 }
 
 export class OnlineController {
@@ -22,14 +23,19 @@ export class OnlineController {
   private currentOpponentPicked = false;
   private socketStatus: RoomSocketStatus = 'open';
   private pendingEvents: GameEvent[] = [];
+  private waitingForView = false;
   private readonly socket: OnlineTransport;
   private readonly onEvents: OnlineControllerOptions['onEvents'];
+  private readonly onAwaitingViewChange: NonNullable<
+    OnlineControllerOptions['onAwaitingViewChange']
+  >;
   private messageQueue: Promise<void> = Promise.resolve();
 
   constructor(options: OnlineControllerOptions) {
     this.currentState = options.state;
     this.socket = options.socket;
     this.onEvents = options.onEvents;
+    this.onAwaitingViewChange = options.onAwaitingViewChange ?? (() => undefined);
   }
 
   get state(): GameState {
@@ -62,11 +68,14 @@ export class OnlineController {
       seats: this.currentSeats,
       opponentPicked: this.currentOpponentPicked,
       socketStatus: this.socketStatus,
+      awaitingView: this.waitingForView,
       reclaim: () => this.reclaim(),
     };
   }
 
   async dispatch(action: Action): Promise<void> {
+    if (this.waitingForView) return;
+    this.setWaitingForView(true);
     this.socket.send({ type: 'action', action, turn: this.currentTurn });
   }
 
@@ -84,8 +93,15 @@ export class OnlineController {
     return queued;
   }
 
+  private setWaitingForView(waiting: boolean): void {
+    if (this.waitingForView === waiting) return;
+    this.waitingForView = waiting;
+    this.onAwaitingViewChange(waiting);
+  }
+
   private async applyMessage(message: ServerMsg): Promise<void> {
     if (message.type === 'events') {
+      this.setWaitingForView(true);
       this.pendingEvents.push(...message.events);
       return;
     }
@@ -102,5 +118,6 @@ export class OnlineController {
     this.currentLegal = message.legal;
     this.currentSeats = message.seats;
     this.currentOpponentPicked = message.opponentPicked;
+    this.setWaitingForView(false);
   }
 }

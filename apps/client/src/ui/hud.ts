@@ -11,6 +11,7 @@ type HudOnlineState = {
   seats: PublicSeat[];
   opponentPicked: boolean;
   socketStatus: RoomSocketStatus;
+  awaitingView: boolean;
   reclaim: () => void;
 };
 
@@ -58,7 +59,7 @@ export function renderHud(
     ? actions
         .map(
           (action, index) =>
-            `<button class="action-button" data-testid="${testId(action)}" data-action-index="${index}">${escapeHtml(actionName(action))}</button>`,
+            `<button class="action-button" data-testid="${testId(action)}" data-action-index="${index}"${online?.awaitingView ? ' disabled' : ''}>${escapeHtml(actionName(action))}</button>`,
         )
         .join('')
     : '';
@@ -123,6 +124,7 @@ export function renderHud(
     actionName,
     canAct,
     online !== undefined,
+    online?.awaitingView ?? false,
   );
   if (!isBattle) {
     actionBar.setAttribute('aria-label', t('board.actions'));
@@ -133,9 +135,10 @@ export function renderHud(
       if (action) button.addEventListener('click', () => dispatch(action));
     });
   }
-  if (state.phase.kind === 'pvpReward') showActionDialog(root, actions, dispatch);
+  if (state.phase.kind === 'pvpReward')
+    showActionDialog(root, actions, dispatch, online?.awaitingView);
   else if (state.phase.kind === 'levelUp' || state.phase.kind === 'shop')
-    showPhaseDialog(root, state, actions, dispatch);
+    showPhaseDialog(root, state, actions, dispatch, online?.awaitingView);
 }
 
 function playerCard(state: GameState, player: Player, seats?: PublicSeat[]): string {

@@ -98,12 +98,25 @@ export function startOnlineGame(
         },
       );
     },
+    onAwaitingViewChange: () => renderOnlineHud(),
   });
 
+  const showOnlineNotice = (key: string): void => {
+    app.querySelector('[data-testid="online-notice"]')?.remove();
+    const notice = document.createElement('div');
+    notice.className = 'game-toast';
+    notice.dataset.testid = 'online-notice';
+    notice.setAttribute('role', 'status');
+    notice.textContent = t(key);
+    app.append(notice);
+    window.setTimeout(() => notice.remove(), 3000);
+  };
   const handleMessage = (message: ServerMsg): void => {
     if (message.type === 'error') {
-      if (message.key === 'online.error.notFound') clearSession(session.code);
-      showOnlineError(message.key);
+      if (message.key === 'online.error.notFound') {
+        clearSession(session.code);
+        showOnlineError(message.key);
+      } else showOnlineNotice(message.key);
       return;
     }
     void controller.handleMessage(message).then(() => {

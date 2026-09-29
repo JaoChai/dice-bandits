@@ -13,6 +13,7 @@ export function renderBattleUi(
   actionName: (action: Action) => string,
   humanPicker: boolean,
   onlineMode = false,
+  awaitingView = false,
 ): boolean {
   if (state.phase.kind !== 'battle') {
     readyPasses.clear();
@@ -33,7 +34,7 @@ export function renderBattleUi(
   const buttons = pickerActions
     .map(
       (action, index) =>
-        `<button class="action-button" data-testid="${battleActionTestId(action)}" data-action-index="${index}">${escapeHtml(actionName(action))}</button>`,
+        `<button class="action-button" data-testid="${battleActionTestId(action)}" data-action-index="${index}"${awaitingView ? ' disabled' : ''}>${escapeHtml(actionName(action))}</button>`,
     )
     .join('');
 
@@ -60,6 +61,7 @@ export function renderBattleUi(
         actionName,
         humanPicker,
         onlineMode,
+        awaitingView,
       );
     });
   }
