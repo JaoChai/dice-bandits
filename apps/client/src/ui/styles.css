@@ -1085,3 +1085,166 @@ h1 {
     padding: 4px 7px;
   }
 }
+
+/* Battle UI follows the 640×360 canvas composition; HP stays readable DOM text. */
+.battle-mode .event-banner {
+  display: none;
+}
+.battle-mode .seat-card {
+  display: none;
+}
+.battle-mode .seat-card:has([data-testid^='seat-takeover-']) {
+  display: flex;
+  width: 215px;
+  min-height: 52px;
+  padding: 4px;
+}
+.battle-mode .seat-card.corner-tl,
+.battle-mode .seat-card.corner-tr {
+  top: 72px;
+}
+.battle-mode .seat-card.corner-bl,
+.battle-mode .seat-card.corner-br {
+  bottom: 100px;
+}
+.battle-mode .battle-hud {
+  position: absolute;
+  z-index: 7;
+  inset: 8px 10px auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+.battle-hp-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  width: min(31vw, 250px);
+  min-width: 150px;
+  padding: 5px 9px;
+  background: #1b2140ee;
+  border: 2px solid #e8a53c;
+  color: #fff4dc;
+  font:
+    700 14px/1.2 'Chakra Petch',
+    sans-serif;
+  text-shadow: 1px 1px #080a14;
+}
+.battle-hp-card strong {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  line-height: 1.1;
+}
+.battle-hp-track {
+  height: 12px;
+  border: 2px solid #0c1020;
+  background: #472e43;
+}
+.battle-hp-track span {
+  display: block;
+  height: 100%;
+  background: #71cb77;
+}
+.battle-hp-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+.battle-mode .action-tray {
+  bottom: 6px;
+  width: max-content;
+  max-width: calc(100vw - 20px);
+  min-height: 0;
+  overflow: visible;
+  gap: 6px;
+  padding: 5px;
+  background: #1b2140ee;
+}
+.battle-mode .command-card,
+.battle-mode .item-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  width: clamp(82px, 9vw, 112px);
+  min-height: 80px;
+  padding: 3px 6px;
+  border: 2px solid #e8a53c;
+  border-radius: 0;
+  background: #302c4b;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  line-height: 1.15;
+  box-shadow: inset 0 0 0 2px #171324;
+}
+.battle-mode .item-card {
+  width: clamp(75px, 8vw, 94px);
+  border-color: #a7b3d0;
+}
+.battle-mode .command-card.selected,
+.battle-mode .command-card:focus-visible,
+.battle-mode .item-card:focus-visible {
+  outline: 3px solid #fff4dc;
+  box-shadow: 0 0 10px #e8a53c;
+}
+.battle-mode .card-cursor {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff4dc;
+  font:
+    700 13px/1 'Chakra Petch',
+    sans-serif;
+  text-shadow: 0 1px #171324;
+  pointer-events: none;
+}
+.battle-mode .command-card:disabled,
+.battle-mode .item-card:disabled {
+  opacity: 0.6;
+  filter: grayscale(0.5);
+  cursor: not-allowed;
+}
+.card-icon {
+  display: block;
+  flex: 0 0 44px;
+  width: 44px;
+  background-image: url('/sprites/cards.png');
+  background-size: 600% 100%;
+  background-position: calc(var(--card-frame) * 20%) 0;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.card-label {
+  display: block;
+  width: 100%;
+  font-size: 12px;
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .battle-hp-card {
+    padding: 3px 6px;
+    font-size: 12px;
+  }
+  .battle-mode .command-card,
+  .battle-mode .item-card {
+    width: 74px;
+    min-height: 67px;
+    padding: 2px 4px;
+  }
+  .battle-mode .item-card {
+    width: 68px;
+  }
+  .battle-mode .card-icon {
+    flex-basis: 36px;
+    width: 36px;
+  }
+  .battle-mode .action-tray {
+    gap: 4px;
+    bottom: 4px;
+  }
+}
