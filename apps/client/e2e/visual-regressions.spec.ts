@@ -4,9 +4,9 @@ import { playUntil } from './helpers';
 test('reward dialog frame stays inside the viewport with all choices scrollable', async ({
   page,
 }) => {
-  // Reaching this deterministic reward takes 66 full UI actions; its layout
-  // assertion should not depend on the speed of a software-rendered runner.
-  test.setTimeout(60_000);
+  // Reaching this deterministic reward takes 66 full UI actions. CI traces show
+  // ~0.55 s per click on a slow runner (~62 s total), so budget for runner variance.
+  test.setTimeout(150_000);
   await page.goto('/?seed=review-m4a&speed=0');
   await page.locator('[data-action="new"]').click();
   for (let seat = 1; seat < 4; seat++)
@@ -35,7 +35,7 @@ for (const [region, seed] of [
 ] as const) {
   test(`${region} battle renders its own backdrop without a page error`, async ({ page }) => {
     // This visual journey traverses many actions before the regional battle.
-    test.setTimeout(60_000);
+    test.setTimeout(150_000);
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(`/?seed=${seed}&speed=0`);

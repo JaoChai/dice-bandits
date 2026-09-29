@@ -33,7 +33,7 @@ export default defineConfig({
     },
     {
       command:
-        'node e2e/e2e-wrangler-config.mjs && npx wrangler dev --config dist/dice_bandits/wrangler.e2e.json --var ROOM_IDLE_MS:3000 --port 8787 --ip 127.0.0.1',
+        'node e2e/e2e-wrangler-config.mjs && npx wrangler dev --config dist/dice_bandits/wrangler.e2e.json --var ROOM_IDLE_MS:15000 --port 8787 --ip 127.0.0.1',
       url: 'http://127.0.0.1:8787/api/health',
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

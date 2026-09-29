@@ -37,7 +37,9 @@ async function clickFirstAction(page: Page): Promise<boolean> {
   const action =
     (await modalAction.count()) > 0 ? modalAction : page.locator(enabledActionSelector).first();
   if ((await action.count()) === 0) return false;
-  await action.click();
+  // A bounded click: if the room moved on (e.g. a bot finished the game), fail
+  // fast with a clear locator error instead of waiting for the test timeout.
+  await action.click({ timeout: 15_000 });
   return true;
 }
 
@@ -198,13 +200,13 @@ test('creates, plays, disconnects, reclaims, claims, and rejects an unknown onli
     expect(actions.bob).toBeGreaterThanOrEqual(3);
 
     await alicePage.close();
-    await expect(bobPage.getByTestId('seat-takeover-0')).toBeVisible({ timeout: 10_000 });
+    await expect(bobPage.getByTestId('seat-takeover-0')).toBeVisible({ timeout: 30_000 });
     const beforeTakeoverProgress = await gameStamp(bobPage);
     await expect
       .poll(
         async () =>
           (await gameStamp(bobPage)) !== beforeTakeoverProgress || (await visibleAction(bobPage)),
-        { timeout: 10_000 },
+        { timeout: 30_000 },
       )
       .toBe(true);
     if ((await gameStamp(bobPage)) === beforeTakeoverProgress) {
@@ -221,7 +223,7 @@ test('creates, plays, disconnects, reclaims, claims, and rejects an unknown onli
     await expect(alicePage.getByTestId('online-takeover')).toHaveCount(0);
 
     await bobPage.close();
-    await expect(alicePage.getByTestId('seat-takeover-1')).toBeVisible({ timeout: 10_000 });
+    await expect(alicePage.getByTestId('seat-takeover-1')).toBeVisible({ timeout: 30_000 });
     const charlieContext = await newContext(browser, false);
     const charliePage = await charlieContext.newPage();
     try {
