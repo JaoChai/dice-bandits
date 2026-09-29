@@ -18,11 +18,10 @@ export function sheetKey(
 
 export function registerAtlas(scene: Phaser.Scene, key: string, atlas: Atlas): void {
   if (scene.textures.exists(key)) scene.textures.remove(key);
-  const source = scene.textures.get(`${key}-atlas-image`);
-  const texture = scene.textures.addSpriteSheet(key, source, {
-    frameWidth: atlas.cell.width,
-    frameHeight: atlas.cell.height,
-  });
+  // Passing a Texture to addSpriteSheet makes Phaser keep source.key, so `key`
+  // would never exist. Register the raw image under `key` and add frames.
+  const source = scene.textures.get(`${key}-atlas-image`).getSourceImage() as HTMLImageElement;
+  const texture = scene.textures.addImage(key, source);
   if (!texture) throw new Error(`Could not register atlas: ${key}`);
 
   atlas.frames.forEach((frame, index) => {

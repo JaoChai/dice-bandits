@@ -20,13 +20,16 @@ describe('atlas runtime', () => {
     expect(sheetKey('token', 'mage')).toBe('token-mage');
   });
 
-  it('registers frames and namespaced animations', () => {
+  it('registers frames and namespaced animations under the atlas key', () => {
     const texture = { add: vi.fn() };
-    const sourceTexture = { getSourceImage: () => 'image' };
-    const addSpriteSheet = vi.fn().mockReturnValue(texture);
+    const image = { width: 64, height: 32 };
+    const sourceTexture = { key: 'hero-knight-atlas-image', getSourceImage: () => image };
+    const addImage = vi.fn().mockReturnValue(texture);
+    const addSpriteSheet = vi.fn();
     const create = vi.fn();
     const scene = {
       textures: {
+        addImage,
         addSpriteSheet,
         exists: vi.fn().mockReturnValue(false),
         get: vi.fn().mockReturnValue(sourceTexture),
@@ -36,11 +39,12 @@ describe('atlas runtime', () => {
 
     registerAtlas(scene, 'hero-knight', atlas);
 
-    expect(addSpriteSheet).toHaveBeenCalledWith('hero-knight', sourceTexture, {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    expect(texture.add).toHaveBeenCalledTimes(2);
+    // A Texture passed to addSpriteSheet makes Phaser reuse source.key, so the
+    // atlas key never exists; register the raw image under the atlas key instead.
+    expect(addSpriteSheet).not.toHaveBeenCalled();
+    expect(addImage).toHaveBeenCalledWith('hero-knight', image);
+    expect(texture.add).toHaveBeenNthCalledWith(1, 0, 0, 0, 0, 32, 32);
+    expect(texture.add).toHaveBeenNthCalledWith(2, 1, 0, 32, 0, 32, 32);
     expect(create).toHaveBeenCalledWith({
       key: 'hero-knight:idle',
       frames: [
