@@ -20,6 +20,39 @@ afterEach(() => {
 });
 
 describe('GameController', () => {
+  it('does not process a second human action while the first event animation is pending', async () => {
+    const state = createGame({ ...config, seed: 'review-m4a' });
+    let releaseAnimation!: () => void;
+    let animationStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      animationStarted = resolve;
+    });
+    const animation = new Promise<void>((resolve) => {
+      releaseAnimation = resolve;
+    });
+    const seen: string[] = [];
+    const controller = new GameController({
+      state,
+      speed: 0,
+      onEvents: async (_events, nextState) => {
+        seen.push(nextState.phase.kind);
+        if (seen.length === 1) {
+          animationStarted();
+          await animation;
+        }
+      },
+    });
+    const first = controller.dispatch(legalActions(state, 0)[0]!);
+    await started;
+    const actionDuringAnimation = legalActions(controller.state, 0)[0]!;
+    expect(actionDuringAnimation).toBeDefined();
+    await controller.dispatch(actionDuringAnimation);
+    expect(seen).toEqual(['battle']);
+    releaseAnimation();
+    await first;
+    expect(seen).toEqual(['battle']);
+  });
+
   it('runs a human and three bots to game over, autosaving every action', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const phases = new Set<string>(['awaitRoll']);
