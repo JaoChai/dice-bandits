@@ -151,11 +151,12 @@ export function renderHud(
   );
   if (!isBattle) {
     actionBar.setAttribute('aria-label', t('board.actions'));
-    actionBar.innerHTML = buttons || `<span>${t('board.botThinking')}</span>`;
+    const markup = buttons || `<span>${t('board.botThinking')}</span>`;
+    if (actionBar.innerHTML !== markup) actionBar.innerHTML = markup;
     root.querySelector('.dialog-shade')?.remove();
     root.querySelectorAll<HTMLButtonElement>('[data-action-index]').forEach((button) => {
       const action = actions[Number(button.dataset.actionIndex)];
-      if (action) button.addEventListener('click', () => dispatch(action));
+      if (action) button.onclick = () => dispatch(action);
     });
   }
   if (state.phase.kind === 'pvpReward')

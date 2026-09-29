@@ -78,7 +78,8 @@ export function renderBattleUi(
       battle.pending.attack !== null && battle.pending.defense === null
         ? '<span class="chosen-card" data-testid="chosen-card" aria-hidden="true">?</span>'
         : '';
-    actionBar.innerHTML = chosen + (buttons || `<span>${t('board.botThinking')}</span>`);
+    const markup = chosen + (buttons || `<span>${t('board.botThinking')}</span>`);
+    if (actionBar.innerHTML !== markup) actionBar.innerHTML = markup;
   }
   root.querySelector('.dialog-shade')?.remove();
   if (passNeeded && battleSeat !== undefined) {
@@ -104,7 +105,7 @@ export function renderBattleUi(
   }
   root.querySelectorAll<HTMLButtonElement>('[data-action-index]').forEach((button) => {
     const action = pickerActions[Number(button.dataset.actionIndex)];
-    if (action) button.addEventListener('click', () => dispatch(action));
+    if (action) button.onclick = () => dispatch(action);
   });
   return true;
 }

@@ -154,6 +154,31 @@ describe('renderBattleUi', () => {
     expect(defender.querySelectorAll('.command-card.selected')).toHaveLength(0);
   });
 
+  it('keeps a playable pick mounted across repeated online snapshots', () => {
+    const state = battleState();
+    const { root, dispatch } = render(state);
+    const pick = root.querySelector<HTMLButtonElement>('[data-testid="pick-attack"]')!;
+    const draw = () =>
+      renderBattleUi(
+        root,
+        state,
+        actions,
+        0,
+        dispatch,
+        (action) =>
+          action.type === 'battlePick'
+            ? t(`action.${action.pick}`)
+            : `${t('action.item')} · ${t('item.potion')}`,
+        true,
+        true,
+      );
+    draw();
+    draw();
+    expect(root.querySelector('[data-testid="pick-attack"]')).toBe(pick);
+    pick.click();
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
   it('updates the battle exit control when switching to Thai', () => {
     setLang('th');
     const { root } = render();

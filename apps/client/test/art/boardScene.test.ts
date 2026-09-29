@@ -201,6 +201,16 @@ describe('BoardScene layering', () => {
     expect(objects.filter((o) => o.texture?.startsWith('ambient-'))).toHaveLength(0);
   });
 
+  it('does not rebuild hundreds of static sprites for nonvisual battle state changes', () => {
+    const { scene, objects } = makeScene();
+    const state = gameFor('a');
+    scene.renderBoard(state);
+    const drawn = objects.length;
+    const updated = { ...state, phase: { kind: 'gameOver' as const } } as GameState;
+    scene.renderBoard(updated);
+    expect(objects).toHaveLength(drawn);
+  });
+
   it('passes the HUD rectangles as decoration exclusion zones', () => {
     const { scene } = makeScene();
     (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(gameFor('a'));

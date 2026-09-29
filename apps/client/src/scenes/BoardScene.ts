@@ -17,6 +17,7 @@ const CANVAS = { width: 640, height: 360 };
 export default class BoardScene extends Phaser.Scene {
   private tokenObjects = new Map<number, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>();
   private spacePositions = new Map<number, { x: number; y: number }>();
+  private renderSignature = '';
 
   constructor() {
     super('BoardScene');
@@ -93,6 +94,20 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   private renderBoard(state: GameState): void {
+    // Combat picks and other nonvisual updates can arrive several times per
+    // second. Recreating the entire tiled board for each one overwhelms
+    // software-rendered Chromium and starves DOM input on CI machines.
+    const signature = JSON.stringify([
+      state.config.seed,
+      state.turnSeat,
+      richestSeat(state),
+      state.players.map((player) => [player.pos, player.classId, !!player.prank]),
+      state.towns.map((town) => [town.spaceId, town.owner]),
+      reducedMotion(),
+      window.diceBanditsSpeed,
+    ]);
+    if (signature === this.renderSignature) return;
+    this.renderSignature = signature;
     this.children.removeAll(true);
     this.tokenObjects.clear();
     this.spacePositions.clear();
