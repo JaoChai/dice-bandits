@@ -139,6 +139,45 @@ describe('startOnlineGame', () => {
     expect(fakeGame).not.toHaveBeenCalled();
   });
 
+  it('keeps the board after a recoverable error and applies the following view', async () => {
+    const { setLang } = await import('../src/i18n');
+    setLang('en');
+    const socket = new FakeSocket();
+    startOnlineGame(socket, { code: 'ABCDE', seat: 0, token: 'token', name: 'Ada' }, makeView());
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-testid="screen-board"]')).not.toBeNull(),
+    );
+
+    socket.receive({ type: 'error', key: 'online.error.staleAction' });
+    socket.receive(makeView({ turn: 24, legal: [] }));
+
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-testid="online-notice"]')).not.toBeNull(),
+    );
+    expect(document.querySelector('[data-testid="screen-board"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="online-notice"]')?.textContent).toContain(
+      'That action is out of date',
+    );
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-testid="action-endTurn"]')).toBeNull(),
+    );
+  });
+
+  it('shows a not-found error and clears the session', async () => {
+    const { saveSession, loadSession } = await import('../src/online/session');
+    saveSession({ code: 'ABCDE', seat: 0, token: 'token', name: 'Ada' });
+    const socket = new FakeSocket();
+    startOnlineGame(socket, { code: 'ABCDE', seat: 0, token: 'token', name: 'Ada' }, makeView());
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-testid="screen-board"]')).not.toBeNull(),
+    );
+
+    socket.receive({ type: 'error', key: 'online.error.notFound' });
+
+    expect(document.querySelector('[data-testid="screen-online-error"]')).not.toBeNull();
+    expect(loadSession('ABCDE')).toBeNull();
+  });
+
   it('shows terminal socket errors and clears the session for a missing room', async () => {
     const { saveSession, loadSession } = await import('../src/online/session');
     saveSession({ code: 'ABCDE', seat: 0, token: 'token', name: 'Ada' });
