@@ -1,9 +1,9 @@
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
-import { buildSprites } from './pixelize.js';
+import { assertPaletteOnly, buildSheet, buildSprites, type SheetEntry } from './pixelize.js';
 
 const root = new URL('../../', import.meta.url).pathname;
 const configPath = join(root, 'tools/pixelize/crops.json');
@@ -235,5 +235,102 @@ describe('pixelize outputs', () => {
     expect(await readFile(join(firstOut, 'icons.json'))).toEqual(
       await readFile(join(secondOut, 'icons.json')),
     );
+  });
+});
+
+const sheetEntry: SheetEntry = {
+  name: 't3',
+  source: 'sheet-3.png',
+  frames: 3,
+  cell: { width: 16, height: 16 },
+  animations: { idle: { from: 0, to: 2, fps: 6, loop: true } },
+};
+let sheetBase: string;
+let sheetOut: string;
+let sheetOut2: string;
+
+beforeEach(async () => {
+  sheetBase = await mkdtemp(join(tmpdir(), 'dice-bandits-sheet-source-'));
+  sheetOut = await mkdtemp(join(tmpdir(), 'dice-bandits-sheet-a-'));
+  sheetOut2 = await mkdtemp(join(tmpdir(), 'dice-bandits-sheet-b-'));
+  const blobs = [
+    {
+      input: { create: { width: 12, height: 20, channels: 4 as const, background: '#ff0000' } },
+      left: 3,
+      top: 8,
+    },
+    {
+      input: { create: { width: 12, height: 14, channels: 4 as const, background: '#00ff00' } },
+      left: 39,
+      top: 14,
+    },
+    {
+      input: { create: { width: 12, height: 26, channels: 4 as const, background: '#0000ff' } },
+      left: 69,
+      top: 2,
+    },
+  ];
+  await sharp({ create: { width: 90, height: 30, channels: 4, background: '#808080' } })
+    .composite(blobs)
+    .png()
+    .toFile(join(sheetBase, 'sheet-3.png'));
+});
+
+afterEach(async () => {
+  await Promise.all(
+    [sheetBase, sheetOut, sheetOut2].map((path) => rm(path, { recursive: true, force: true })),
+  );
+});
+
+describe('spritesheet mode', () => {
+  it('slices a row sheet into equal cells with feet anchor and animation frames', async () => {
+    const atlas = await buildSheet(sheetEntry, sheetBase, sheetOut);
+    expect(atlas.frames).toHaveLength(3);
+    expect(atlas.frames.every((frame) => frame.w === 16 && frame.h === 16)).toBe(true);
+    expect(atlas.anchor).toEqual({ x: 8, y: 16 });
+    expect(atlas.animations.idle).toEqual({ frames: [0, 1, 2], fps: 6, loop: true });
+    expect(JSON.parse(await readFile(join(sheetOut, 't3.json'), 'utf8'))).toEqual(atlas);
+  });
+
+  it('uses only main-palette colors or full transparency', async () => {
+    await buildSheet(sheetEntry, sheetBase, sheetOut);
+    await assertPaletteOnly(join(sheetOut, 't3.png'), 'main');
+  });
+
+  it('is deterministic across repeated builds', async () => {
+    await buildSheet(sheetEntry, sheetBase, sheetOut);
+    await buildSheet(sheetEntry, sheetBase, sheetOut2);
+    expect(await readFile(join(sheetOut, 't3.png'))).toEqual(
+      await readFile(join(sheetOut2, 't3.png')),
+    );
+    expect(await readFile(join(sheetOut, 't3.json'), 'utf8')).toBe(
+      await readFile(join(sheetOut2, 't3.json'), 'utf8'),
+    );
+  });
+
+  it('baseline-aligns every frame at the cell bottom', async () => {
+    const atlas = await buildSheet(sheetEntry, sheetBase, sheetOut);
+    const { data, info } = await sharp(join(sheetOut, 't3.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const lowest = atlas.frames.map((frame) => {
+      for (let y = frame.y + frame.h - 1; y >= frame.y; y--) {
+        for (let x = frame.x; x < frame.x + frame.w; x++) {
+          if (data[(y * info.width + x) * info.channels + 3] === 255) return y - frame.y;
+        }
+      }
+      return -1;
+    });
+    expect(new Set(lowest).size).toBe(1);
+    expect(lowest[0]).toBe(atlas.cell.height - 1);
+  });
+
+  it('reports the first out-of-palette pixel with its coordinates', async () => {
+    const badPng = join(sheetOut, 'bad.png');
+    await sharp({ create: { width: 2, height: 1, channels: 4, background: '#ff00ff' } })
+      .png()
+      .toFile(badPng);
+    await expect(assertPaletteOnly(badPng, 'main')).rejects.toThrow(/\(0, 0\)/);
   });
 });

@@ -213,6 +213,239 @@ async function processCrop(
     .toBuffer();
 }
 
+export type SheetEntry = {
+  name: string;
+  source: string;
+  frames: number;
+  cell: { width: number; height: number };
+  palette?: 'main' | 'backdrop';
+  animations: Record<string, { from: number; to: number; fps: number; loop: boolean }>;
+  anchor?: 'feet' | 'center';
+};
+
+export type Atlas = {
+  image: string;
+  cell: { width: number; height: number };
+  frames: { x: number; y: number; w: number; h: number }[];
+  anchor: { x: number; y: number };
+  animations: Record<string, { frames: number[]; fps: number; loop: boolean }>;
+};
+
+export async function assertPaletteOnly(
+  pngPath: string,
+  paletteName: 'main' | 'backdrop',
+): Promise<void> {
+  const palettePath = join(
+    toolDir,
+    paletteName === 'main' ? 'palette.json' : 'palette-backdrop.json',
+  );
+  const palette = new Set(
+    (await readFile(palettePath, 'utf8')).toLowerCase().match(/#[0-9a-f]{6}/g),
+  );
+  if (palette.size !== 32) throw new Error(`Palette must contain 32 colors: ${palettePath}`);
+  const { data, info } = await sharp(pngPath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      const offset = (y * info.width + x) * info.channels;
+      const alpha = data[offset + 3];
+      if (alpha !== 0 && alpha !== 255) {
+        throw new Error(`Invalid alpha ${alpha} at (${x}, ${y}) in ${pngPath}`);
+      }
+      if (alpha === 255) {
+        const pixel = `#${[data[offset], data[offset + 1], data[offset + 2]]
+          .map((channel) => channel.toString(16).padStart(2, '0'))
+          .join('')}`;
+        if (!palette.has(pixel))
+          throw new Error(
+            `Color ${pixel} outside ${paletteName} palette at (${x}, ${y}) in ${pngPath}`,
+          );
+      }
+    }
+  }
+}
+
+export async function buildSheet(
+  entry: SheetEntry,
+  baseDir: string,
+  outDir: string,
+): Promise<Atlas> {
+  if (!Number.isInteger(entry.frames) || entry.frames < 1)
+    throw new Error('frames must be a positive integer');
+  if (
+    !Number.isInteger(entry.cell.width) ||
+    entry.cell.width < 1 ||
+    !Number.isInteger(entry.cell.height) ||
+    entry.cell.height < 1
+  ) {
+    throw new Error('cell dimensions must be positive integers');
+  }
+  if (!/^[a-z0-9][a-z0-9-]*$/i.test(entry.name))
+    throw new Error(`Invalid sheet name: ${entry.name}`);
+  const sourcePath = isAbsolute(entry.source) ? entry.source : resolve(baseDir, entry.source);
+  const { data: source, info } = await sharp(sourcePath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  if (info.width % entry.frames !== 0)
+    throw new Error(`Source width must divide evenly into ${entry.frames} frames: ${sourcePath}`);
+  const frameWidth = info.width / entry.frames;
+  const frames: Buffer[] = [];
+  let minX = frameWidth;
+  let minY = info.height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let frameIndex = 0; frameIndex < entry.frames; frameIndex++) {
+    const left = frameIndex * frameWidth;
+    const framePixels = Buffer.alloc(frameWidth * info.height * 4);
+    for (let y = 0; y < info.height; y++) {
+      for (let x = 0; x < frameWidth; x++) {
+        const from = (y * info.width + left + x) * info.channels;
+        const to = (y * frameWidth + x) * 4;
+        source.copy(framePixels, to, from, from + 4);
+      }
+    }
+    const cutout = await removeFloodBackground(framePixels, frameWidth, info.height);
+    frames.push(cutout);
+    for (let y = 0; y < info.height; y++) {
+      for (let x = 0; x < frameWidth; x++) {
+        if (cutout[(y * frameWidth + x) * 4 + 3] > 0) {
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+      }
+    }
+  }
+  if (maxX < minX || maxY < minY) throw new Error(`No foreground pixels found in ${sourcePath}`);
+  const cropWidth = maxX - minX + 1;
+  const cropHeight = maxY - minY + 1;
+  const paletteFile = entry.palette === 'backdrop' ? 'palette-backdrop.json' : 'palette.json';
+  const palette = await readPalette(join(toolDir, paletteFile));
+  const processed: Buffer[] = [];
+  for (const frame of frames) {
+    const crop = Buffer.alloc(cropWidth * cropHeight * 4);
+    for (let y = 0; y < cropHeight; y++) {
+      const from = ((minY + y) * frameWidth + minX) * 4;
+      frame.copy(crop, y * cropWidth * 4, from, from + cropWidth * 4);
+    }
+    const scale = Math.min(
+      1,
+      (entry.cell.width * 2) / cropWidth,
+      (entry.cell.height * 2) / cropHeight,
+    );
+    const preWidth = Math.max(1, Math.floor(cropWidth * scale));
+    const preHeight = Math.max(1, Math.floor(cropHeight * scale));
+    const shrunk = areaAverage(crop, cropWidth, cropHeight, preWidth, preHeight);
+    const resized = await sharp(shrunk, {
+      raw: { width: preWidth, height: preHeight, channels: 4 },
+    })
+      .resize(entry.cell.width, entry.cell.height, {
+        fit: 'contain',
+        kernel: 'nearest',
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    for (let index = 0; index < resized.length; index += 4) {
+      if (resized[index + 3] < 128) {
+        resized.fill(0, index, index + 4);
+      } else {
+        const nearest = nearestPaletteColor(
+          resized[index],
+          resized[index + 1],
+          resized[index + 2],
+          palette,
+        );
+        resized[index] = nearest[0];
+        resized[index + 1] = nearest[1];
+        resized[index + 2] = nearest[2];
+        resized[index + 3] = 255;
+      }
+    }
+    if ((entry.anchor ?? 'feet') === 'feet') {
+      let lowest = -1;
+      for (let y = entry.cell.height - 1; y >= 0 && lowest < 0; y--) {
+        for (let x = 0; x < entry.cell.width; x++) {
+          if (resized[(y * entry.cell.width + x) * 4 + 3] === 255) {
+            lowest = y;
+            break;
+          }
+        }
+      }
+      if (lowest >= 0 && lowest < entry.cell.height - 1) {
+        const shift = (entry.cell.height - 1 - lowest) * entry.cell.width * 4;
+        const aligned = Buffer.alloc(resized.length);
+        resized.copy(aligned, shift, 0, resized.length - shift);
+        processed.push(aligned);
+        continue;
+      }
+    }
+    processed.push(resized);
+  }
+  const atlasPixels = Buffer.alloc(entry.frames * entry.cell.width * entry.cell.height * 4);
+  processed.forEach((frame, index) => {
+    for (let y = 0; y < entry.cell.height; y++) {
+      frame.copy(
+        atlasPixels,
+        (y * entry.frames * entry.cell.width + index * entry.cell.width) * 4,
+        y * entry.cell.width * 4,
+        (y + 1) * entry.cell.width * 4,
+      );
+    }
+  });
+  const animations: Atlas['animations'] = {};
+  for (const [name, animation] of Object.entries(entry.animations)) {
+    if (
+      !Number.isInteger(animation.from) ||
+      !Number.isInteger(animation.to) ||
+      animation.from < 0 ||
+      animation.to < animation.from ||
+      animation.to >= entry.frames ||
+      !Number.isFinite(animation.fps) ||
+      animation.fps <= 0
+    ) {
+      throw new Error(`Invalid animation ${name} in sheet ${entry.name}`);
+    }
+    animations[name] = {
+      frames: Array.from(
+        { length: animation.to - animation.from + 1 },
+        (_, i) => animation.from + i,
+      ),
+      fps: animation.fps,
+      loop: animation.loop,
+    };
+  }
+  const atlas: Atlas = {
+    image: `${entry.name}.png`,
+    cell: { width: entry.cell.width, height: entry.cell.height },
+    frames: Array.from({ length: entry.frames }, (_, index) => ({
+      x: index * entry.cell.width,
+      y: 0,
+      w: entry.cell.width,
+      h: entry.cell.height,
+    })),
+    anchor: {
+      x: Math.floor(entry.cell.width / 2),
+      y:
+        (entry.anchor ?? 'feet') === 'feet' ? entry.cell.height : Math.floor(entry.cell.height / 2),
+    },
+    animations,
+  };
+  await mkdir(outDir, { recursive: true });
+  await sharp(atlasPixels, {
+    raw: { width: entry.frames * entry.cell.width, height: entry.cell.height, channels: 4 },
+  })
+    .png({ compressionLevel: 9 })
+    .toFile(join(outDir, atlas.image));
+  await writeFile(join(outDir, `${entry.name}.json`), `${JSON.stringify(atlas, null, 2)}\n`);
+  return atlas;
+}
+
 async function makeVolcanoTile(
   width: number,
   height: number,
@@ -496,6 +729,28 @@ async function main(args: string[]): Promise<void> {
     const imagePath = resolve(args[1] ?? 'docs/concepts/style_16bit.png');
     const outputPath = resolve(args[2] ?? 'tools/pixelize/palette.json');
     await extractPalette(imagePath, outputPath);
+    return;
+  }
+  const sheetsIndex = args.indexOf('--sheets');
+  if (sheetsIndex >= 0) {
+    const outIndex = args.indexOf('--out');
+    const onlyIndex = args.indexOf('--only');
+    if (!args[sheetsIndex + 1] || outIndex < 0 || !args[outIndex + 1]) {
+      throw new Error(
+        'Usage: tsx pixelize.ts --sheets <sheets.json> --out <directory> [--only <name>]',
+      );
+    }
+    const configPath = resolve(args[sheetsIndex + 1]);
+    const outDir = resolve(args[outIndex + 1]);
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { sheets: SheetEntry[] };
+    if (!Array.isArray(config.sheets)) throw new Error(`Invalid sheets manifest: ${configPath}`);
+    const selected =
+      onlyIndex >= 0
+        ? config.sheets.filter((sheet) => sheet.name === args[onlyIndex + 1])
+        : config.sheets;
+    if (onlyIndex >= 0 && selected.length === 0)
+      throw new Error(`Unknown sheet: ${args[onlyIndex + 1]}`);
+    for (const entry of selected) await buildSheet(entry, dirname(configPath), outDir);
     return;
   }
   const configIndex = args.indexOf('--config');
