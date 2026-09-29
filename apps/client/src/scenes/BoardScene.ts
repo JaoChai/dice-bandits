@@ -138,11 +138,6 @@ export default class BoardScene extends Phaser.Scene {
       glow.lineStyle(2, 0xffdc72, 0.9);
       glow.strokeCircle(point.x, point.y, 15);
     }
-    if (state.round >= 10) {
-      const banner = this.add.graphics().setDepth(8);
-      banner.fillStyle(0x9b3547, 0.9);
-      banner.fillRoundedRect(205, 3, 230, 22, 5);
-    }
   }
 }
 

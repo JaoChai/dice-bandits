@@ -9,13 +9,21 @@ export function renderEventToast(root: HTMLElement, events: GameEvent[]): void {
       ['GoldStolen', 'FrenzyStarted', 'TownClaimed', 'BattleEnded'].includes(item.type),
     );
   if (!event) return;
-  const toast = document.createElement('div');
-  toast.className = 'game-toast';
-  toast.setAttribute('role', 'status');
-  toast.textContent = t(`event.${event.type}`);
+  const toast = root.querySelector<HTMLElement>('[data-testid="event-banner"]');
+  if (toast) {
+    const text = toast.querySelector<HTMLElement>('.event-text');
+    if (!text) return;
+    text.textContent = t(`event.${event.type}`);
+    toast.setAttribute('title', text.textContent);
+    return;
+  }
+  const legacyToast = document.createElement('div');
+  legacyToast.className = 'game-toast';
+  legacyToast.setAttribute('role', 'status');
+  legacyToast.textContent = t(`event.${event.type}`);
   root.querySelector('.game-toast')?.remove();
-  root.append(toast);
-  window.setTimeout(() => toast.remove(), 2400);
+  root.append(legacyToast);
+  window.setTimeout(() => legacyToast.remove(), 2400);
 }
 
 export function showPhaseDialog(
