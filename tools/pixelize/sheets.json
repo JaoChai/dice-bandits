@@ -1,131 +1,124 @@
 {
   "sheets": [
     {
-      "name": "hero-knight",
-      "source": "../../docs/concepts/m4/heroes/hero-knight.png",
-      "frames": 8,
-      "cell": { "width": 64, "height": 64 },
-      "animations": {
-        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
-        "hop": { "from": 2, "to": 3, "fps": 8, "loop": true },
-        "attack": { "from": 4, "to": 6, "fps": 10, "loop": false },
-        "hurt": { "from": 7, "to": 7, "fps": 1, "loop": false }
-      }
-    },
-    {
-      "name": "hero-thief",
-      "source": "../../docs/concepts/m4/heroes/hero-thief.png",
-      "frames": 8,
-      "cell": { "width": 64, "height": 64 },
-      "animations": {
-        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
-        "hop": { "from": 2, "to": 3, "fps": 8, "loop": true },
-        "attack": { "from": 4, "to": 6, "fps": 10, "loop": false },
-        "hurt": { "from": 7, "to": 7, "fps": 1, "loop": false }
-      }
-    },
-    {
-      "name": "hero-mage",
-      "source": "../../docs/concepts/m4/heroes/hero-mage.png",
-      "frames": 8,
-      "cell": { "width": 64, "height": 64 },
-      "animations": {
-        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
-        "hop": { "from": 2, "to": 3, "fps": 8, "loop": true },
-        "attack": { "from": 4, "to": 6, "fps": 10, "loop": false },
-        "hurt": { "from": 7, "to": 7, "fps": 1, "loop": false }
-      }
-    },
-    {
-      "name": "hero-cleric",
-      "source": "../../docs/concepts/m4/heroes/hero-cleric.png",
-      "frames": 8,
-      "cell": { "width": 64, "height": 64 },
-      "animations": {
-        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
-        "hop": { "from": 2, "to": 3, "fps": 8, "loop": true },
-        "attack": { "from": 4, "to": 6, "fps": 10, "loop": false },
-        "hurt": { "from": 7, "to": 7, "fps": 1, "loop": false }
-      }
-    },
-    {
-      "name": "token-knight",
-      "source": "../../docs/concepts/m4/heroes/hero-knight.png",
-      "frames": 8,
+      "name": "ground-meadow",
+      "source": "../../docs/concepts/m4/board/ground-meadow.png",
+      "frames": 2,
       "cell": { "width": 32, "height": 32 },
-      "animations": {
-        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
-        "hop": { "from": 2, "to": 3, "fps": 8, "loop": true },
-        "attack": { "from": 4, "to": 6, "fps": 10, "loop": false },
-        "hurt": { "from": 7, "to": 7, "fps": 1, "loop": false }
-      }
-    },
-    {
-      "name": "token-thief",
-      "source": "../../docs/concepts/m4/heroes/hero-thief.png",
-      "frames": 8,
-      "cell": { "width": 32, "height": 32 },
-      "animations": {
-        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
-        "hop": { "from": 2, "to": 3, "fps": 8, "loop": true },
-        "attack": { "from": 4, "to": 6, "fps": 10, "loop": false },
-        "hurt": { "from": 7, "to": 7, "fps": 1, "loop": false }
-      }
-    },
-    {
-      "name": "token-mage",
-      "source": "../../docs/concepts/m4/heroes/hero-mage.png",
-      "frames": 8,
-      "cell": { "width": 32, "height": 32 },
-      "animations": {
-        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
-        "hop": { "from": 2, "to": 3, "fps": 8, "loop": true },
-        "attack": { "from": 4, "to": 6, "fps": 10, "loop": false },
-        "hurt": { "from": 7, "to": 7, "fps": 1, "loop": false }
-      }
-    },
-    {
-      "name": "token-cleric",
-      "source": "../../docs/concepts/m4/heroes/hero-cleric.png",
-      "frames": 8,
-      "cell": { "width": 32, "height": 32 },
-      "animations": {
-        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
-        "hop": { "from": 2, "to": 3, "fps": 8, "loop": true },
-        "attack": { "from": 4, "to": 6, "fps": 10, "loop": false },
-        "hurt": { "from": 7, "to": 7, "fps": 1, "loop": false }
-      }
-    },
-    {
-      "name": "portrait-knight",
-      "source": "../../docs/concepts/m4/heroes/portraits.png",
-      "frames": 4,
-      "select": [0],
-      "cell": { "width": 32, "height": 32 },
+      "ground": true,
+      "anchor": "center",
       "animations": {}
     },
     {
-      "name": "portrait-thief",
-      "source": "../../docs/concepts/m4/heroes/portraits.png",
-      "frames": 4,
-      "select": [1],
+      "name": "props-meadow",
+      "source": "../../docs/concepts/m4/board/props-meadow.png",
+      "frames": 8,
       "cell": { "width": 32, "height": 32 },
+      "split": "components",
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "feet",
       "animations": {}
     },
     {
-      "name": "portrait-mage",
-      "source": "../../docs/concepts/m4/heroes/portraits.png",
+      "name": "ambient-meadow",
+      "source": "../../docs/concepts/m4/board/ambient-meadow.png",
       "frames": 4,
-      "select": [2],
       "cell": { "width": 32, "height": 32 },
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "center",
+      "animations": { "loop": { "from": 0, "to": 3, "fps": 6, "loop": true } }
+    },
+    {
+      "name": "ground-desert",
+      "source": "../../docs/concepts/m4/board/ground-desert.png",
+      "frames": 2,
+      "cell": { "width": 32, "height": 32 },
+      "ground": true,
+      "anchor": "center",
       "animations": {}
     },
     {
-      "name": "portrait-cleric",
-      "source": "../../docs/concepts/m4/heroes/portraits.png",
-      "frames": 4,
-      "select": [3],
+      "name": "props-desert",
+      "source": "../../docs/concepts/m4/board/props-desert.png",
+      "frames": 8,
       "cell": { "width": 32, "height": 32 },
+      "split": "components",
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {}
+    },
+    {
+      "name": "ambient-desert",
+      "source": "../../docs/concepts/m4/board/ambient-desert.png",
+      "frames": 4,
+      "cell": { "width": 32, "height": 32 },
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "center",
+      "animations": { "loop": { "from": 0, "to": 3, "fps": 6, "loop": true } }
+    },
+    {
+      "name": "ground-snow",
+      "source": "../../docs/concepts/m4/board/ground-snow.png",
+      "frames": 2,
+      "cell": { "width": 32, "height": 32 },
+      "ground": true,
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "props-snow",
+      "source": "../../docs/concepts/m4/board/props-snow.png",
+      "frames": 8,
+      "cell": { "width": 32, "height": 32 },
+      "split": "components",
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {}
+    },
+    {
+      "name": "ambient-snow",
+      "source": "../../docs/concepts/m4/board/ambient-snow.png",
+      "frames": 4,
+      "cell": { "width": 32, "height": 32 },
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "center",
+      "animations": { "loop": { "from": 0, "to": 3, "fps": 6, "loop": true } }
+    },
+    {
+      "name": "ground-volcano",
+      "source": "../../docs/concepts/m4/board/ground-volcano.png",
+      "frames": 2,
+      "cell": { "width": 32, "height": 32 },
+      "ground": true,
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "props-volcano",
+      "source": "../../docs/concepts/m4/board/props-volcano.png",
+      "frames": 8,
+      "cell": { "width": 32, "height": 32 },
+      "split": "components",
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {}
+    },
+    {
+      "name": "ambient-volcano",
+      "source": "../../docs/concepts/m4/board/ambient-volcano.png",
+      "frames": 4,
+      "cell": { "width": 32, "height": 32 },
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "center",
+      "animations": { "loop": { "from": 0, "to": 3, "fps": 6, "loop": true } }
+    },
+    {
+      "name": "tiles",
+      "source": "../../docs/concepts/m4/board/space-tiles.png",
+      "frames": 7,
+      "cell": { "width": 24, "height": 24 },
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "center",
       "animations": {}
     }
   ]

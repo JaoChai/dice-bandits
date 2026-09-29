@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import sharp from 'sharp';
+import sharp, { type OverlayOptions } from 'sharp';
 import { assertPaletteOnly, buildSheet, buildSprites, type SheetEntry } from './pixelize.js';
 
 const root = new URL('../../', import.meta.url).pathname;
@@ -338,6 +338,66 @@ afterEach(async () => {
 });
 
 describe('spritesheet mode', () => {
+  it('splits irregularly spaced connected props into ordered frames and drops stray specks', async () => {
+    const source = join(sheetBase, 'components.png');
+    const props = [
+      { left: 8, top: 4, width: 8, height: 18 },
+      { left: 28, top: 8, width: 13, height: 14 },
+      { left: 52, top: 5, width: 9, height: 17 },
+      { left: 76, top: 10, width: 11, height: 12 },
+      { left: 101, top: 3, width: 7, height: 19 },
+      { left: 124, top: 9, width: 14, height: 13 },
+      { left: 155, top: 5, width: 10, height: 17 },
+      { left: 180, top: 7, width: 12, height: 15 },
+    ];
+    const overlays: OverlayOptions[] = props.map((rect, index) => ({
+      input: {
+        create: {
+          width: rect.width,
+          height: rect.height,
+          channels: 4,
+          background: ['#202020', '#40a040', '#a04040'][index % 3],
+        },
+      },
+      left: rect.left,
+      top: rect.top,
+    }));
+    overlays.push({
+      input: { create: { width: 1, height: 1, channels: 4, background: '#101010' } },
+      left: 3,
+      top: 27,
+    });
+    await sharp({ create: { width: 204, height: 28, channels: 4, background: '#ff00ff' } })
+      .composite(overlays)
+      .png()
+      .toFile(source);
+    const output = await buildSheet(
+      {
+        name: 'component-props',
+        source: 'components.png',
+        frames: 8,
+        cell: { width: 32, height: 32 },
+        split: 'components',
+        animations: {},
+      },
+      sheetBase,
+      sheetOut,
+    );
+    expect(output.frames).toHaveLength(8);
+    const { data, info } = await sharp(join(sheetOut, 'component-props.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    for (const frame of output.frames) {
+      let opaque = 0;
+      for (let y = 0; y < frame.h; y++)
+        for (let x = 0; x < frame.w; x++) {
+          if (data[((frame.y + y) * info.width + frame.x + x) * info.channels + 3] > 0) opaque++;
+        }
+      expect(opaque).toBeGreaterThan(0);
+    }
+  });
+
   it('writes a sorted deterministic atlas manifest when emitting sheets', async () => {
     await buildSheet({ ...sheetEntry, name: 'z-sheet' }, sheetBase, sheetOut);
     await buildSheet({ ...sheetEntry, name: 'a-sheet' }, sheetBase, sheetOut);

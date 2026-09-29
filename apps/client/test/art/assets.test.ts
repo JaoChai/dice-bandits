@@ -8,7 +8,7 @@ import sharp from 'sharp';
 type Atlas = {
   image: string;
   cell: { width: number; height: number };
-  frames: unknown[];
+  frames: { x: number; y: number; w: number; h: number }[];
   animations: Record<string, { frames: number[]; fps: number; loop: boolean }>;
 };
 
@@ -101,5 +101,113 @@ describe('hero sprite assets', () => {
     const total = bytes.reduce((sum, size) => sum + size, 0);
     console.info(`Sprite PNG total: ${total} bytes`);
     expect(total).toBeLessThanOrEqual(1_500_000);
+  });
+});
+
+describe('board art atlases', () => {
+  const regions = ['meadow', 'desert', 'snow', 'volcano'] as const;
+  const expected = [
+    ...regions.flatMap((region) => [`ground-${region}`, `props-${region}`, `ambient-${region}`]),
+    'tiles',
+  ];
+
+  it('ships every board atlas with the required frame counts, cell sizes, and animations', async () => {
+    const manifest = JSON.parse(await readFile(join(spritesDir, 'atlases.json'), 'utf8')) as {
+      atlases: string[];
+    };
+    expect(manifest.atlases).toEqual(expect.arrayContaining(expected));
+    for (const region of regions) {
+      const ground = await readAtlas(`ground-${region}`);
+      expect(ground.cell).toEqual({ width: 32, height: 32 });
+      expect(ground.frames.length).toBeGreaterThanOrEqual(2);
+      const props = await readAtlas(`props-${region}`);
+      expect(props.cell).toEqual({ width: 32, height: 32 });
+      expect(props.frames).toHaveLength(8);
+      const ambient = await readAtlas(`ambient-${region}`);
+      expect(ambient.cell).toEqual({ width: 32, height: 32 });
+      expect(ambient.frames).toHaveLength(4);
+      expect(ambient.animations.loop).toEqual({ frames: [0, 1, 2, 3], fps: 6, loop: true });
+    }
+    const tiles = await readAtlas('tiles');
+    expect(tiles.cell).toEqual({ width: 24, height: 24 });
+    expect(tiles.frames).toHaveLength(7);
+  });
+
+  it('keeps every board atlas palette-locked with no magenta remnants', async () => {
+    const toolUrl = pathToFileURL(resolve(process.cwd(), '../../tools/pixelize/pixelize.ts')).href;
+    for (const name of expected) {
+      const pngPath = join(spritesDir, `${name}.png`);
+      const script = `import { assertPaletteOnly } from ${JSON.stringify(toolUrl)}; await assertPaletteOnly(${JSON.stringify(pngPath)}, 'main');`;
+      execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script]);
+      const { data, info } = await sharp(pngPath)
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      for (let i = 0; i < data.length; i += info.channels) {
+        if (data[i + 3] === 0) continue;
+        expect((data[i] ?? 0) > 200 && (data[i + 1] ?? 0) < 80 && (data[i + 2] ?? 0) > 200).toBe(
+          false,
+        );
+      }
+    }
+  });
+
+  it('keeps props substantial and inset, and ground tiles seamless on opposite edges', async () => {
+    for (const region of regions) {
+      const name = `props-${region}`;
+      const atlas = await readAtlas(name);
+      const { data, info } = await sharp(join(spritesDir, atlas.image))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      for (const frame of atlas.frames) {
+        let opaque = 0;
+        let touchesLeft = false,
+          touchesRight = false,
+          touchesTop = false,
+          touchesBottom = false;
+        for (let y = 0; y < frame.h; y++)
+          for (let x = 0; x < frame.w; x++) {
+            if (data[((frame.y + y) * info.width + frame.x + x) * info.channels + 3] === 0)
+              continue;
+            opaque++;
+            if (x === 0) touchesLeft = true;
+            if (x === frame.w - 1) touchesRight = true;
+            if (y === 0) touchesTop = true;
+            if (y === frame.h - 1) touchesBottom = true;
+          }
+        expect(opaque / (frame.w * frame.h), name).toBeGreaterThanOrEqual(0.15);
+        expect([touchesLeft, touchesRight, touchesTop, touchesBottom].every(Boolean), name).toBe(
+          false,
+        );
+      }
+      const ground = await readAtlas(`ground-${region}`);
+      const tile = await sharp(join(spritesDir, ground.image))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      for (const frame of ground.frames) {
+        for (let y = 0; y < frame.h; y++) {
+          const left = ((frame.y + y) * tile.info.width + frame.x) * tile.info.channels;
+          const right =
+            ((frame.y + y) * tile.info.width + frame.x + frame.w - 1) * tile.info.channels;
+          const edgeDifference =
+            Math.abs((tile.data[left] ?? 0) - (tile.data[right] ?? 0)) +
+            Math.abs((tile.data[left + 1] ?? 0) - (tile.data[right + 1] ?? 0)) +
+            Math.abs((tile.data[left + 2] ?? 0) - (tile.data[right + 2] ?? 0));
+          expect(edgeDifference).toBeLessThanOrEqual(60);
+        }
+        for (let x = 0; x < frame.w; x++) {
+          const top = (frame.y * tile.info.width + frame.x + x) * tile.info.channels;
+          const bottom =
+            ((frame.y + frame.h - 1) * tile.info.width + frame.x + x) * tile.info.channels;
+          const edgeDifference =
+            Math.abs((tile.data[top] ?? 0) - (tile.data[bottom] ?? 0)) +
+            Math.abs((tile.data[top + 1] ?? 0) - (tile.data[bottom + 1] ?? 0)) +
+            Math.abs((tile.data[top + 2] ?? 0) - (tile.data[bottom + 2] ?? 0));
+          expect(edgeDifference).toBeLessThanOrEqual(60);
+        }
+      }
+    }
   });
 });

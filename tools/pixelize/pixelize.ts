@@ -66,11 +66,13 @@ async function removeFloodBackground(
   input: Buffer,
   width: number,
   height: number,
+  backgroundColor?: [number, number, number],
+  tolerance = backgroundTolerance,
 ): Promise<Buffer> {
   const data = Buffer.from(input);
   const visited = new Uint8Array(width * height);
   const queue = new Int32Array(width * height);
-  const background = [data[0], data[1], data[2]];
+  const background = backgroundColor ?? [data[0], data[1], data[2]];
   let read = 0;
   let write = 0;
   const enqueue = (x: number, y: number): void => {
@@ -83,7 +85,7 @@ async function removeFloodBackground(
         Math.abs(data[offset] - background[0]),
         Math.abs(data[offset + 1] - background[1]),
         Math.abs(data[offset + 2] - background[2]),
-      ) > backgroundTolerance
+      ) > tolerance
     )
       return;
     visited[pixel] = 1;
@@ -220,6 +222,9 @@ export type SheetEntry = {
   cell: { width: number; height: number };
   palette?: 'main' | 'backdrop';
   select?: number[];
+  split?: 'components';
+  background?: { color: [number, number, number]; tolerance: number };
+  ground?: boolean;
   animations: Record<string, { from: number; to: number; fps: number; loop: boolean }>;
   anchor?: 'feet' | 'center';
 };
@@ -268,6 +273,322 @@ export async function assertPaletteOnly(
   }
 }
 
+type Component = {
+  pixels: Buffer;
+  width: number;
+  height: number;
+  left: number;
+  top: number;
+  size: number;
+};
+
+function foregroundComponents(pixels: Buffer, width: number, height: number): Component[] {
+  const seen = new Uint8Array(width * height);
+  const components: Component[] = [];
+  for (let start = 0; start < seen.length; start++) {
+    if (seen[start] || pixels[start * 4 + 3] === 0) continue;
+    const queue = [start];
+    seen[start] = 1;
+    let minX = width,
+      minY = height,
+      maxX = -1,
+      maxY = -1;
+    for (let cursor = 0; cursor < queue.length; cursor++) {
+      const pixel = queue[cursor];
+      if (pixel === undefined) continue;
+      const x = pixel % width,
+        y = Math.floor(pixel / width);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = x + dx,
+            ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const next = ny * width + nx;
+          if (!seen[next] && pixels[next * 4 + 3] > 0) {
+            seen[next] = 1;
+            queue.push(next);
+          }
+        }
+    }
+    const w = maxX - minX + 1,
+      h = maxY - minY + 1;
+    const crop = Buffer.alloc(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const from = ((minY + y) * width + minX + x) * 4;
+        pixels.copy(crop, (y * w + x) * 4, from, from + 4);
+      }
+    }
+    components.push({
+      pixels: crop,
+      width: w,
+      height: h,
+      left: minX,
+      top: minY,
+      size: queue.length,
+    });
+  }
+  return components;
+}
+
+async function buildSpecialSheet(
+  entry: SheetEntry,
+  sourcePath: string,
+  outDir: string,
+): Promise<Atlas> {
+  const { data: source, info } = await sharp(sourcePath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const palette = await readPalette(
+    join(toolDir, entry.palette === 'backdrop' ? 'palette-backdrop.json' : 'palette.json'),
+  );
+  const sourceFrames: Array<{ pixels: Buffer; width: number; height: number }> = [];
+  if (entry.ground) {
+    const side = Math.min(info.width, info.height);
+    for (let frame = 0; frame < entry.frames; frame++) {
+      const left = Math.floor((frame * (info.width - side)) / Math.max(entry.frames - 1, 1));
+      const raw = await sharp(sourcePath)
+        .extract({ left, top: Math.floor((info.height - side) / 2), width: side, height: side })
+        .resize(entry.cell.width, entry.cell.height, { fit: 'fill', kernel: 'lanczos3' })
+        .ensureAlpha()
+        .raw()
+        .toBuffer();
+      sourceFrames.push({ pixels: raw, width: entry.cell.width, height: entry.cell.height });
+    }
+  } else {
+    const cutout = await removeFloodBackground(
+      source,
+      info.width,
+      info.height,
+      entry.background?.color,
+      entry.background?.tolerance ?? backgroundTolerance,
+    );
+    const all = foregroundComponents(cutout, info.width, info.height);
+    const threshold = Math.ceil(info.width * info.height * 0.001);
+    const substantial = all.filter((component) => component.size >= threshold);
+    const specks = all.filter((component) => component.size < threshold);
+    if (substantial.length < entry.frames)
+      throw new Error(
+        `Expected ${entry.frames} components in ${entry.name}, found ${substantial.length}`,
+      );
+    const selected = substantial.sort((a, b) => a.left - b.left).slice(0, entry.frames);
+    const groups = selected.map((component) => [component]);
+    for (const speck of specks) {
+      let nearest = 0,
+        distance = Number.POSITIVE_INFINITY;
+      selected.forEach((component, index) => {
+        const dx = speck.left + speck.width / 2 - (component.left + component.width / 2);
+        const dy = speck.top + speck.height / 2 - (component.top + component.height / 2);
+        const next = dx * dx + dy * dy;
+        if (next < distance) {
+          distance = next;
+          nearest = index;
+        }
+      });
+      groups[nearest]?.push(speck);
+    }
+    for (const group of groups) {
+      const left = Math.min(...group.map((c) => c.left)),
+        top = Math.min(...group.map((c) => c.top));
+      const right = Math.max(...group.map((c) => c.left + c.width)),
+        bottom = Math.max(...group.map((c) => c.top + c.height));
+      const width = right - left,
+        height = bottom - top,
+        pixels = Buffer.alloc(width * height * 4);
+      for (let y = 0; y < height; y++)
+        cutout.copy(
+          pixels,
+          y * width * 4,
+          ((top + y) * info.width + left) * 4,
+          ((top + y) * info.width + right) * 4,
+        );
+      sourceFrames.push({ pixels, width, height });
+    }
+  }
+  const processed: Buffer[] = [];
+  for (const frame of sourceFrames) {
+    const inset = entry.split === 'components' ? 1 : 0;
+    const scaled = await sharp(frame.pixels, {
+      raw: { width: frame.width, height: frame.height, channels: 4 },
+    })
+      .resize(entry.cell.width - inset * 2, entry.cell.height - inset * 2, {
+        fit: 'contain',
+        kernel: 'nearest',
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png()
+      .toBuffer();
+    const resized = await sharp({
+      create: {
+        width: entry.cell.width,
+        height: entry.cell.height,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
+    })
+      .composite([{ input: scaled, left: inset, top: inset }])
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    for (let i = 0; i < resized.length; i += 4) {
+      if (resized[i + 3] < 128) resized.fill(0, i, i + 4);
+      else {
+        const color = nearestPaletteColor(
+          resized[i] ?? 0,
+          resized[i + 1] ?? 0,
+          resized[i + 2] ?? 0,
+          palette,
+        );
+        resized[i] = color[0] ?? 0;
+        resized[i + 1] = color[1] ?? 0;
+        resized[i + 2] = color[2] ?? 0;
+        resized[i + 3] = 255;
+      }
+    }
+    if (entry.split === 'components') {
+      let opaque = 0;
+      for (let i = 3; i < resized.length; i += 4) if (resized[i] === 255) opaque++;
+      for (
+        let pass = 0;
+        opaque / (entry.cell.width * entry.cell.height) < 0.15 && pass < 4;
+        pass++
+      ) {
+        const previous = Buffer.from(resized);
+        for (let y = 1; y < entry.cell.height - 1; y++)
+          for (let x = 1; x < entry.cell.width - 1; x++) {
+            const offset = (y * entry.cell.width + x) * 4;
+            if (previous[offset + 3] === 255) continue;
+            let found = -1;
+            for (let dy = -1; dy <= 1 && found < 0; dy++)
+              for (let dx = -1; dx <= 1; dx++) {
+                const neighbor = ((y + dy) * entry.cell.width + x + dx) * 4;
+                if (previous[neighbor + 3] === 255) {
+                  found = neighbor;
+                  break;
+                }
+              }
+            if (found >= 0) {
+              resized.copy(resized, offset, found, found + 4);
+              opaque++;
+            }
+          }
+      }
+    }
+    if (entry.ground) {
+      for (let y = 0; y < entry.cell.height; y++) {
+        const a = y * entry.cell.width * 4,
+          b = (y * entry.cell.width + entry.cell.width - 1) * 4;
+        const color = nearestPaletteColor(
+          Math.round(((resized[a] ?? 0) + (resized[b] ?? 0)) / 2),
+          Math.round(((resized[a + 1] ?? 0) + (resized[b + 1] ?? 0)) / 2),
+          Math.round(((resized[a + 2] ?? 0) + (resized[b + 2] ?? 0)) / 2),
+          palette,
+        );
+        for (const x of [a, b]) {
+          resized[x] = color[0] ?? 0;
+          resized[x + 1] = color[1] ?? 0;
+          resized[x + 2] = color[2] ?? 0;
+        }
+      }
+      for (let x = 0; x < entry.cell.width; x++) {
+        const a = x * 4,
+          b = ((entry.cell.height - 1) * entry.cell.width + x) * 4;
+        const color = nearestPaletteColor(
+          Math.round(((resized[a] ?? 0) + (resized[b] ?? 0)) / 2),
+          Math.round(((resized[a + 1] ?? 0) + (resized[b + 1] ?? 0)) / 2),
+          Math.round(((resized[a + 2] ?? 0) + (resized[b + 2] ?? 0)) / 2),
+          palette,
+        );
+        for (const y of [a, b]) {
+          resized[y] = color[0] ?? 0;
+          resized[y + 1] = color[1] ?? 0;
+          resized[y + 2] = color[2] ?? 0;
+        }
+      }
+    }
+    if ((entry.anchor ?? 'feet') === 'feet') {
+      let lowest = -1;
+      for (let y = entry.cell.height - 1; y >= 0 && lowest < 0; y--)
+        for (let x = 0; x < entry.cell.width; x++)
+          if (resized[(y * entry.cell.width + x) * 4 + 3] === 255) {
+            lowest = y;
+            break;
+          }
+      if (lowest >= 0 && lowest < entry.cell.height - 1) {
+        const shift = (entry.cell.height - 1 - lowest) * entry.cell.width * 4;
+        const aligned = Buffer.alloc(resized.length);
+        resized.copy(aligned, shift, 0, resized.length - shift);
+        processed.push(aligned);
+        continue;
+      }
+    }
+    processed.push(resized);
+  }
+  const atlasPixels = Buffer.alloc(processed.length * entry.cell.width * entry.cell.height * 4);
+  processed.forEach((frame, index) => {
+    for (let y = 0; y < entry.cell.height; y++)
+      frame.copy(
+        atlasPixels,
+        (y * processed.length * entry.cell.width + index * entry.cell.width) * 4,
+        y * entry.cell.width * 4,
+        (y + 1) * entry.cell.width * 4,
+      );
+  });
+  const animations: Atlas['animations'] = {};
+  for (const [name, animation] of Object.entries(entry.animations))
+    animations[name] = {
+      frames: Array.from(
+        { length: animation.to - animation.from + 1 },
+        (_, i) => animation.from + i,
+      ),
+      fps: animation.fps,
+      loop: animation.loop,
+    };
+  const atlas: Atlas = {
+    image: `${entry.name}.png`,
+    cell: entry.cell,
+    frames: processed.map((_, index) => ({
+      x: index * entry.cell.width,
+      y: 0,
+      w: entry.cell.width,
+      h: entry.cell.height,
+    })),
+    anchor: {
+      x: Math.floor(entry.cell.width / 2),
+      y:
+        (entry.anchor ?? 'feet') === 'feet' ? entry.cell.height : Math.floor(entry.cell.height / 2),
+    },
+    animations,
+  };
+  await mkdir(outDir, { recursive: true });
+  await sharp(atlasPixels, {
+    raw: { width: processed.length * entry.cell.width, height: entry.cell.height, channels: 4 },
+  })
+    .png({ compressionLevel: 9 })
+    .toFile(join(outDir, atlas.image));
+  await writeFile(join(outDir, `${entry.name}.json`), `${JSON.stringify(atlas, null, 2)}\n`);
+  const manifestPath = join(outDir, 'atlases.json');
+  let names: string[] = [];
+  try {
+    const existing = JSON.parse(await readFile(manifestPath, 'utf8')) as { atlases?: unknown };
+    if (Array.isArray(existing.atlases))
+      names = existing.atlases.filter((name): name is string => typeof name === 'string');
+  } catch {
+    /* first atlas */
+  }
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify({ atlases: [...new Set([...names, entry.name])].sort() }, null, 2)}\n`,
+  );
+  return atlas;
+}
+
 export async function buildSheet(
   entry: SheetEntry,
   baseDir: string,
@@ -286,6 +607,8 @@ export async function buildSheet(
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(entry.name))
     throw new Error(`Invalid sheet name: ${entry.name}`);
   const sourcePath = isAbsolute(entry.source) ? entry.source : resolve(baseDir, entry.source);
+  if (entry.ground || entry.split === 'components')
+    return buildSpecialSheet(entry, sourcePath, outDir);
   const { data: source, info } = await sharp(sourcePath)
     .ensureAlpha()
     .raw()
@@ -322,7 +645,13 @@ export async function buildSheet(
         source.copy(framePixels, to, from, from + 4);
       }
     }
-    const cutout = await removeFloodBackground(framePixels, frameWidth, info.height);
+    const cutout = await removeFloodBackground(
+      framePixels,
+      frameWidth,
+      info.height,
+      entry.background?.color,
+      entry.background?.tolerance ?? backgroundTolerance,
+    );
     frames.push({ pixels: cutout, width: frameWidth });
     for (let y = 0; y < info.height; y++) {
       for (let x = 0; x < frameWidth; x++) {
