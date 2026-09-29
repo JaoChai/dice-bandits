@@ -113,7 +113,7 @@ function makeScene() {
     },
     textures: {
       exists: vi.fn((key: string) => key.startsWith('ambient-')),
-      get: vi.fn(() => undefined),
+      get: vi.fn(() => ({ has: () => true })),
     },
     anims: { exists: vi.fn(() => true) },
     cache: { json: { get: vi.fn(() => undefined) } },

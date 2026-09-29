@@ -71,7 +71,7 @@ export function showActionDialog(
   if (!choices.length) return;
   const dialog = document.createElement('div');
   dialog.className = 'dialog-shade';
-  dialog.innerHTML = `<section class="game-dialog frame" role="dialog" aria-modal="true"><h2>${t('board.reward')}</h2>${choices.map((choice, index) => `<button data-choice="${index}"${disabled ? ' disabled' : ''}>${rewardLabel(choice as Extract<Action, { type: 'pvpReward' }>)}</button>`).join('')}</section>`;
+  dialog.innerHTML = `<section class="game-dialog frame reward-dialog" role="dialog" aria-modal="true"><h2>${t('board.reward')}</h2>${choices.map((choice, index) => `<button data-choice="${index}"${disabled ? ' disabled' : ''}>${rewardLabel(choice as Extract<Action, { type: 'pvpReward' }>)}</button>`).join('')}</section>`;
   dialog.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) => {
     button.addEventListener('click', () => {
       const choice = choices[Number(button.dataset.choice)];

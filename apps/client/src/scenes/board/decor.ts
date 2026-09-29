@@ -25,10 +25,11 @@ export function drawDecor(
   for (const prop of sorted) {
     const key = REGION_VISUALS[prop.region as keyof typeof REGION_VISUALS]?.props;
     const depth = DEPTH_DECOR_MIN + prop.y / 1000;
-    if (key && scene.textures.exists(key)) {
+    const frame = PROP_FRAMES[prop.prop] ?? 0;
+    if (key && scene.textures.exists(key) && scene.textures.get(key).has(String(frame))) {
       images.push(
         scene.add
-          .image(prop.x, prop.y, key, PROP_FRAMES[prop.prop] ?? 0)
+          .image(prop.x, prop.y, key, frame)
           .setOrigin(0.5, 1)
           .setScale(propScale)
           .setDepth(depth),

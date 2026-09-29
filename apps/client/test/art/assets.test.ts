@@ -129,7 +129,7 @@ describe('board art atlases', () => {
       expect(ambient.animations.loop).toEqual({ frames: [0, 1, 2, 3], fps: 6, loop: true });
     }
     const tiles = await readAtlas('tiles');
-    expect(tiles.cell).toEqual({ width: 24, height: 24 });
+    expect(tiles.cell).toEqual({ width: 16, height: 16 });
     expect(tiles.frames).toHaveLength(7);
   });
 
@@ -867,12 +867,12 @@ describe('battle art atlases', () => {
     // 4 counter (sword + parry arc), 5 item frame (blank).
     const cardNames = ['attack', 'strike', 'secret', 'defend', 'counter', 'item'] as const;
     const atlas = await readAtlas('cards');
-    expect(atlas.cell).toEqual({ width: 64, height: 64 });
+    expect(atlas.cell).toEqual({ width: 32, height: 32 });
     expect(atlas.frames).toHaveLength(cardNames.length);
     expect(atlas.animations).toEqual({});
     const image = await sharp(join(spritesDir, atlas.image)).metadata();
-    expect(image.width).toBe(64 * cardNames.length);
-    expect(image.height).toBe(64);
+    expect(image.width).toBe(32 * cardNames.length);
+    expect(image.height).toBe(32);
     const { data, info } = await sharp(join(spritesDir, atlas.image))
       .ensureAlpha()
       .raw()

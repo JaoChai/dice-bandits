@@ -22,9 +22,22 @@ import { animateThenRender } from './eventOrder';
 import { renderHud } from './ui/hud';
 import { renderEventToast } from './ui/dialogs';
 import { renderResults } from './ui/results';
+import { shake } from './fx';
 
 const app = getMount();
 let game: Phaser.Game | null = null;
+
+/** Test-only probe: exercise the real board shake at the configured speed. */
+function createArtProbe() {
+  return {
+    ambientRunning: false,
+    shakeCount: 0,
+    triggerShake: () => {
+      if (game?.scene.isActive('BoardScene'))
+        shake(game.scene.getScene('BoardScene'), window.diceBanditsSpeed);
+    },
+  };
+}
 
 export function startOnlineGame(
   socket: OnlineSocket,
@@ -91,7 +104,10 @@ export function startOnlineGame(
           game?.registry.set('state', nextState);
           game?.events.emit('game-state', nextState);
           if (nextState.phase.kind === 'battle') {
-            if (!game?.scene.isActive('BattleScene')) scene?.scene.launch('BattleScene');
+            // The DOM can advance while BootScene is still loading atlases.
+            // BootScene launches the current battle only after registration.
+            if (game?.scene.isActive('BoardScene') && !game.scene.isActive('BattleScene'))
+              scene?.scene.launch('BattleScene');
           } else if (game?.scene.isActive('BattleScene')) {
             scene?.scene.stop('BattleScene');
           }
@@ -165,7 +181,7 @@ export function startOnlineGame(
     if (import.meta.env.VITE_TEST_HOOKS === '1') {
       window.__db = {
         getState: () => controller.state,
-        art: { ambientRunning: false, shakeCount: 0 },
+        art: createArtProbe(),
       };
     }
     window.addEventListener('dice-bandits:lang', renderOnlineHud);
@@ -247,7 +263,10 @@ function startGame(state: GameState): void {
           game?.registry.set('state', nextState);
           game?.events.emit('game-state', nextState);
           if (nextState.phase.kind === 'battle') {
-            if (!game?.scene.isActive('BattleScene')) scene?.scene.launch('BattleScene');
+            // The DOM can advance while BootScene is still loading atlases.
+            // BootScene launches the current battle only after registration.
+            if (game?.scene.isActive('BoardScene') && !game.scene.isActive('BattleScene'))
+              scene?.scene.launch('BattleScene');
           } else if (game?.scene.isActive('BattleScene')) {
             scene?.scene.stop('BattleScene');
           }
@@ -290,7 +309,7 @@ function startGame(state: GameState): void {
   if (import.meta.env.VITE_TEST_HOOKS === '1') {
     window.__db = {
       getState: () => controller.state,
-      art: { ambientRunning: false, shakeCount: 0 },
+      art: createArtProbe(),
     };
   }
   window.addEventListener('dice-bandits:lang', () => renderHud(app, controller.state, dispatch));
@@ -304,7 +323,15 @@ app.addEventListener('dice-bandits:continue', (event) => {
 
 declare global {
   interface Window {
-    __db?: { getState: () => GameState; art: { ambientRunning: boolean; shakeCount: number } };
+    __db?: {
+      getState: () => GameState;
+      art: {
+        ambientRunning: boolean;
+        shakeCount: number;
+        backdropKey?: string;
+        triggerShake?: () => void;
+      };
+    };
     diceBanditsText: (key: string) => string;
     diceBanditsSpeed: number;
   }

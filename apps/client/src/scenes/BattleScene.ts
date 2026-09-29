@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import type { GameState } from '@dice-bandits/engine';
-import { t } from '../i18n';
+import { t, onLangChange } from '../i18n';
 import { drawBackdrop } from './battle/backdrop';
 import { drawDicePools, drawFighters, type BattleFighters } from './battle/fighters';
-import { playCoinBurst, playHit } from './battle/effects';
+import { playHit } from './battle/effects';
 import { BATTLE_EXCHANGE_Y, battleLayout } from './battle/layout';
 
 const layout = battleLayout();
@@ -11,6 +11,8 @@ const layout = battleLayout();
 export default class BattleScene extends Phaser.Scene {
   private fighters: BattleFighters | undefined;
   private combatantIds: [string | number, string | number] | undefined;
+  private exchangeLabel: Phaser.GameObjects.Text | undefined;
+  private exchange = 0;
 
   constructor() {
     super('BattleScene');
@@ -18,7 +20,13 @@ export default class BattleScene extends Phaser.Scene {
 
   create(): void {
     this.game.events.on('game-state', this.renderBattle, this);
-    this.events.once('shutdown', () => this.game.events.off('game-state', this.renderBattle, this));
+    const offLang = onLangChange(() => {
+      this.exchangeLabel?.setText(t('battle.exchange', { exchange: this.exchange }));
+    });
+    this.events.once('shutdown', () => {
+      this.game.events.off('game-state', this.renderBattle, this);
+      offLang();
+    });
     const initial = this.game.registry.get('state') as GameState | undefined;
     if (initial) this.renderBattle(initial);
   }
@@ -57,9 +65,6 @@ export default class BattleScene extends Phaser.Scene {
           this.combatantIds[1],
           speed,
         );
-      } else if (event.type === 'GoldStolen' && this.combatantIds) {
-        const side = event.seat === this.combatantIds[1] ? 'b' : 'a';
-        await playCoinBurst(this, layout, side, speed);
       }
     }
   }
@@ -106,8 +111,10 @@ export default class BattleScene extends Phaser.Scene {
   private renderBattle(state: GameState): void {
     this.children.removeAll(true);
     this.fighters = undefined;
+    this.exchangeLabel = undefined;
     if (state.phase.kind !== 'battle') return;
     const battle = state.phase.battle;
+    this.exchange = battle.exchange;
     drawBackdrop(this, state, battle.spaceId);
     this.fighters = drawFighters(this, state, layout);
     this.combatantIds = [
@@ -115,7 +122,7 @@ export default class BattleScene extends Phaser.Scene {
       battle.b.monsterId ?? battle.b.seat ?? -1,
     ];
     drawDicePools(this, state, layout);
-    this.add
+    this.exchangeLabel = this.add
       .text(320, BATTLE_EXCHANGE_Y, t('battle.exchange', { exchange: battle.exchange }), {
         fontFamily: 'Chakra Petch',
         fontSize: '18px',

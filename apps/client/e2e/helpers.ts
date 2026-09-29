@@ -80,8 +80,8 @@ export async function playUntil(
   throw new Error('Game did not reach requested phase within 300 actions');
 }
 
-export async function startTestGame(page: Page): Promise<void> {
-  await page.goto('/?seed=e2e-1&speed=0');
+export async function startTestGame(page: Page, speed = 0): Promise<void> {
+  await page.goto(`/?seed=e2e-1&speed=${speed}`);
   await page.locator('[data-action="new"]').click();
   for (let seat = 1; seat < 4; seat += 1) {
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');

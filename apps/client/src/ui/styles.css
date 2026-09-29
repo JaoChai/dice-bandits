@@ -440,6 +440,14 @@ h1 {
   padding: 14px;
   background: #302039;
 }
+.reward-dialog {
+  box-sizing: border-box;
+  width: min(92%, 480px);
+  max-height: min(calc(100% - 24px), calc(100dvh - 24px));
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+}
 .game-dialog h2 {
   margin: 0;
   color: #ffd477;
@@ -1204,6 +1212,16 @@ h1 {
   text-shadow: 0 1px #171324;
   pointer-events: none;
 }
+.battle-mode .chosen-card {
+  display: grid;
+  flex: 0 0 44px;
+  place-items: center;
+  min-height: 80px;
+  border: 2px solid #e8a53c;
+  background: #38264a;
+  color: #ffd477;
+  font-size: 22px;
+}
 .battle-mode .command-card:disabled,
 .battle-mode .item-card:disabled {
   opacity: 0.6;
@@ -1212,8 +1230,8 @@ h1 {
 }
 .card-icon {
   display: block;
-  flex: 0 0 44px;
-  width: 44px;
+  flex: 0 0 32px;
+  width: 32px;
   background-image: url('/sprites/cards.png');
   background-size: 600% 100%;
   background-position: calc(var(--card-frame) * 20%) 0;
@@ -1240,8 +1258,8 @@ h1 {
     width: 68px;
   }
   .battle-mode .card-icon {
-    flex-basis: 36px;
-    width: 36px;
+    flex-basis: 32px;
+    width: 32px;
   }
   .battle-mode .action-tray {
     gap: 4px;

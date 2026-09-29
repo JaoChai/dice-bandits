@@ -39,16 +39,9 @@ function effect(
   x: number,
   y: number,
 ): Phaser.GameObjects.Sprite | undefined {
-  if (!scene.textures.exists('fx')) return;
-  const sprite = scene.add
-    .sprite(
-      x,
-      y,
-      'fx',
-      scene.textures.get('fx').has('0') ? { slash: 0, spark: 3, coin: 6 }[name] : undefined,
-    )
-    .setScale(2)
-    .setDepth(12);
+  const frame = { slash: 0, spark: 3, coin: 6 }[name];
+  if (!scene.textures.exists('fx') || !scene.textures.get('fx').has(String(frame))) return;
+  const sprite = scene.add.sprite(x, y, 'fx', frame).setScale(2).setDepth(12);
   if (hasAnim(scene, 'fx', name) && !reducedMotion()) sprite.play(`fx:${name}`);
   return sprite;
 }

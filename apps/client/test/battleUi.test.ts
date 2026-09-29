@@ -132,7 +132,8 @@ describe('renderBattleUi', () => {
     if (state.phase.kind !== 'battle') throw new Error('expected battle');
     state.phase.battle.pending.attack = 'attack';
     const { root } = render(state);
-    expect(root.querySelector('[data-testid="pick-attack"].selected .card-cursor')).not.toBeNull();
+    expect(root.querySelector('[data-testid="chosen-card"]')).not.toBeNull();
+    expect(root.querySelector('.command-card.selected')).toBeNull();
     state.phase.battle.pending.attack = 'secret';
     const defender = document.createElement('div');
     defender.innerHTML = '<section class="game-shell"><nav class="action-bar"></nav></section>';

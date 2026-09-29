@@ -105,25 +105,27 @@ export default class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    const fallbackKeys = atlasKeys.filter((key) => !this.activeAtlases.has(key));
-    if (fallbackKeys.length > 0) {
-      console.info('[art] using M1 sprites for', fallbackKeys.length, 'keys');
-    }
     for (const key of atlasKeys) {
-      if (this.failedAtlases.has(key) || !this.activeAtlases.has(key)) {
-        // Missing decor atlases stay missing: ground/decor/ambient draw their
-        // own per-layer fallbacks. Never alias the __MISSING placeholder.
-        const fallbackKey = fallbackTextureKey(key);
-        const fallback = fallbackKey ? this.textures.get(fallbackKey) : undefined;
-        if (!this.textures.exists(key) && fallback && fallback.key !== '__MISSING') {
-          this.textures.addImage(key, fallback.getSourceImage() as HTMLImageElement);
-        }
-        continue;
+      const atlas =
+        this.failedAtlases.has(key) || !this.activeAtlases.has(key)
+          ? undefined
+          : (this.cache.json.get(key) as Atlas | undefined);
+      if (atlas && registerAtlas(this, key, atlas)) continue;
+      if (!atlas && !this.warnedAtlases.has(key)) {
+        console.warn('[art] fallback', key);
+        this.warnedAtlases.add(key);
       }
-      const atlas = this.cache.json.get(key) as Atlas | undefined;
-      if (atlas) registerAtlas(this, key, atlas);
+      // Missing decor atlases stay missing: ground/decor/ambient draw their
+      // own per-layer fallbacks. Never alias the __MISSING placeholder.
+      const fallbackKey = fallbackTextureKey(key);
+      const fallback = fallbackKey ? this.textures.get(fallbackKey) : undefined;
+      if (!this.textures.exists(key) && fallback && fallback.key !== '__MISSING') {
+        this.textures.addImage(key, fallback.getSourceImage() as HTMLImageElement);
+      }
     }
     this.scene.start('BoardScene');
+    const state = this.game?.registry?.get('state') as { phase?: { kind?: string } } | undefined;
+    if (state?.phase?.kind === 'battle') this.scene.launch('BattleScene');
   }
 
   private showAssetError(): void {

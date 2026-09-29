@@ -116,7 +116,7 @@
       "name": "tiles",
       "source": "../../docs/concepts/m4/board/space-tiles.png",
       "frames": 7,
-      "cell": { "width": 24, "height": 24 },
+      "cell": { "width": 16, "height": 16 },
       "background": { "color": [255, 0, 255], "tolerance": 18 },
       "anchor": "center",
       "animations": {}
@@ -291,7 +291,7 @@
       "name": "cards",
       "source": "../../docs/concepts/m4/battle/cards.png",
       "frames": 6,
-      "cell": { "width": 64, "height": 64 },
+      "cell": { "width": 32, "height": 32 },
       "split": "grid",
       "noiseFloor": 64,
       "background": { "color": [235, 13, 240], "tolerance": 18 },

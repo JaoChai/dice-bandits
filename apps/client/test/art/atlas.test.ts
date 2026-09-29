@@ -94,8 +94,9 @@ describe('atlas runtime', () => {
     expect(image.mock.calls.map(([key]) => key)).not.toContain('hero-knight-atlas-image');
     boot.create();
 
-    expect(info).toHaveBeenCalledWith('[art] using M1 sprites for', 37, 'keys');
-    expect(warn).not.toHaveBeenCalled();
+    expect(info).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(37);
+    expect(warn).toHaveBeenCalledWith('[art] fallback', 'hero-knight');
     expect(error).not.toHaveBeenCalled();
     info.mockRestore();
     warn.mockRestore();

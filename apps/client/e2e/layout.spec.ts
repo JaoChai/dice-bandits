@@ -29,10 +29,27 @@ test('reduced motion disables shake and ambient loops', async ({ browser }) => {
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   try {
     const page = await context.newPage();
-    await startTestGame(page);
+    await startTestGame(page, 1);
     await expect.poll(() => page.evaluate(() => window.__db!.art.ambientRunning)).toBe(false);
     await playUntil(page, (state) => state.phase.kind === 'battle');
+    await page.evaluate(() => window.__db!.art.triggerShake!());
     expect(await page.evaluate(() => window.__db!.art.shakeCount)).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('normal motion runs ambient loops at normal speed', async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: 'no-preference' });
+  try {
+    const page = await context.newPage();
+    await startTestGame(page, 1);
+    await expect.poll(() => page.evaluate(() => window.__db!.art.ambientRunning)).toBe(true);
+    await playUntil(page, (state) => state.phase.kind === 'battle');
+    expect(await page.evaluate(() => window.diceBanditsSpeed)).toBe(1);
+    expect(await page.evaluate(() => window.__db!.art.ambientRunning)).toBe(true);
+    await page.evaluate(() => window.__db!.art.triggerShake!());
+    expect(await page.evaluate(() => window.__db!.art.shakeCount)).toBeGreaterThan(0);
   } finally {
     await context.close();
   }

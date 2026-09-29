@@ -126,6 +126,32 @@ describe('placeDecorations', () => {
     }
   });
 
+  it('keeps the entire bottom-anchored prop sprite clear of every HUD rectangle', () => {
+    for (const seed of seeds) {
+      const state = games[seed]!;
+      const view = { ...viewFor(state), avoid: HUD_RECTS };
+      for (const prop of placeDecorations(state.board.spaces, seed, view)) {
+        const footprint = {
+          left: prop.x - 16,
+          right: prop.x + 16,
+          top: prop.y - 32,
+          bottom: prop.y,
+        };
+        for (const hud of HUD_RECTS) {
+          const intersects =
+            footprint.left < hud.x + hud.width &&
+            footprint.right > hud.x &&
+            footprint.top < hud.y + hud.height &&
+            footprint.bottom > hud.y;
+          expect(
+            intersects,
+            `${seed}: ${prop.prop} at ${prop.x},${prop.y} overlaps ${hud.kind}`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+
   it('keeps props and ambients out of excluded HUD rectangles', () => {
     const insideHud = (point: { x: number; y: number }): boolean =>
       HUD_RECTS.some(

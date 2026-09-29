@@ -17,7 +17,7 @@ export function drawAmbients(
   for (const ambient of [...placed].sort((a, b) => a.y - b.y)) {
     const key = REGION_VISUALS[ambient.region as keyof typeof REGION_VISUALS]?.ambient;
     const depth = DEPTH_AMBIENT_MIN + ambient.y / 1000;
-    if (!key || !scene.textures.exists(key)) {
+    if (!key || !scene.textures.exists(key) || !scene.textures.get(key).has('0')) {
       const g = scene.add.graphics().setDepth(depth);
       g.fillStyle(0x4aa5c8, 1);
       g.fillCircle(ambient.x, ambient.y, 6);

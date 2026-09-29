@@ -101,7 +101,7 @@ export function drawGround(
   const flat = scene.add.graphics().setDepth(DEPTH_GROUND);
   for (const cell of cells) {
     const key = REGION_VISUALS[cell.region].ground;
-    if (scene.textures.exists(key)) {
+    if (scene.textures.exists(key) && scene.textures.get(key).has(String(cell.variation))) {
       scene.add.image(cell.gx, cell.gy, key, cell.variation).setDepth(DEPTH_GROUND);
     } else {
       flat.fillStyle(GROUND_COLORS[cell.region], 1);

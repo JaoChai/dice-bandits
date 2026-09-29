@@ -65,17 +65,20 @@ export function renderBattleUi(
       const frame = { attack: 0, strike: 1, secret: 2, defend: 3, counter: 4, item: 5 }[pick];
       const label = escapeHtml(actionName(action));
       const className = action.type === 'battlePick' ? 'command-card' : 'item-card';
-      const selected =
-        action.type === 'battlePick' &&
-        battle.pending[action.side === battle.attackerSide ? 'attack' : 'defense'] === pick;
-      return `<button type="button" class="action-button ${className}${selected ? ' selected' : ''}" data-testid="${battleActionTestId(action)}" data-action-index="${index}"${selected ? ' aria-pressed="true"' : ''}${awaitingView ? ' disabled' : ''}><span class="card-icon" style="--card-frame:${frame}" aria-hidden="true"></span><span class="card-label">${label}</span>${selected ? '<span class="card-cursor" aria-hidden="true">▼</span>' : ''}</button>`;
+      return `<button type="button" class="action-button ${className}" data-testid="${battleActionTestId(action)}" data-action-index="${index}"${awaitingView ? ' disabled' : ''}><span class="card-icon" style="--card-frame:${frame}" aria-hidden="true"></span><span class="card-label">${label}</span></button>`;
     })
     .join('');
 
   const actionBar = root.querySelector<HTMLElement>('.action-bar');
   if (actionBar) {
     actionBar.setAttribute('aria-label', t('board.actions'));
-    actionBar.innerHTML = buttons || `<span>${t('board.botThinking')}</span>`;
+    // The attack is locked while the defender chooses; show its back, not the
+    // secret pick or a selection cursor on an action no longer offered.
+    const chosen =
+      battle.pending.attack !== null && battle.pending.defense === null
+        ? '<span class="chosen-card" data-testid="chosen-card" aria-hidden="true">?</span>'
+        : '';
+    actionBar.innerHTML = chosen + (buttons || `<span>${t('board.botThinking')}</span>`);
   }
   root.querySelector('.dialog-shade')?.remove();
   if (passNeeded && battleSeat !== undefined) {

@@ -42,8 +42,14 @@ type SpaceLike = {
 };
 
 function inAvoid(view: DecorView, x: number, y: number): boolean {
+  // All placed sprites use a 32x32 bottom-centred cell. The anchor may clear
+  // the HUD while the opaque top or side of the sprite still sits beneath it.
   return (view.avoid ?? []).some(
-    (rect) => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height,
+    (rect) =>
+      x - 16 < rect.x + rect.width &&
+      x + 16 > rect.x &&
+      y - 32 < rect.y + rect.height &&
+      y > rect.y,
   );
 }
 
