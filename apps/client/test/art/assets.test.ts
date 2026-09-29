@@ -53,6 +53,26 @@ describe('hero sprite assets', () => {
       const image = await sharp(join(spritesDir, atlas.image)).metadata();
       expect(image.width).toBe(32);
       expect(image.height).toBe(32);
+      const { data, info } = await sharp(join(spritesDir, atlas.image))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const opaqueRows = Array.from({ length: 32 }, (_, y) => {
+        let rowOpaque = false;
+        for (let x = 0; x < 32; x++) {
+          if ((data[(y * info.width + x) * info.channels + 3] ?? 0) > 0) rowOpaque = true;
+        }
+        return rowOpaque;
+      });
+      let opaque = 0;
+      for (let index = 3; index < data.length; index += info.channels) {
+        if ((data[index] ?? 0) > 0) opaque++;
+      }
+      expect(opaque / (32 * 32), classId).toBeGreaterThanOrEqual(0.3);
+      const first = opaqueRows.indexOf(true);
+      const last = opaqueRows.lastIndexOf(true);
+      expect(first, classId).toBeGreaterThanOrEqual(0);
+      expect(opaqueRows.slice(first, last + 1).every(Boolean), classId).toBe(true);
     }
   });
 

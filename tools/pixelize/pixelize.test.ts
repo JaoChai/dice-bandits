@@ -56,6 +56,61 @@ afterAll(async () => {
 });
 
 describe('pixelize outputs', () => {
+  it('packs selected frames with contiguous rows and preserves the unselected frame pixels', async () => {
+    const source = join(root, 'docs/concepts/m4/heroes/portraits.png');
+    const selectedOut = await mkdtemp(join(tmpdir(), 'dice-bandits-selected-'));
+    const fullOut = await mkdtemp(join(tmpdir(), 'dice-bandits-full-'));
+    const common = {
+      name: 'portrait-fixture',
+      source,
+      frames: 4,
+      cell: { width: 32, height: 32 },
+      animations: {},
+    } satisfies SheetEntry;
+    try {
+      await buildSheet({ ...common, select: [2] }, root, selectedOut);
+      await buildSheet(common, root, fullOut);
+      const selected = await sharp(join(selectedOut, 'portrait-fixture.png'))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const full = await sharp(join(fullOut, 'portrait-fixture.png'))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const selectedCell = Buffer.alloc(32 * 32 * 4);
+      const fullCell = Buffer.alloc(32 * 32 * 4);
+      for (let y = 0; y < 32; y++) {
+        selected.data.copy(
+          selectedCell,
+          y * 32 * 4,
+          y * selected.info.width * 4,
+          (y * selected.info.width + 32) * 4,
+        );
+        full.data.copy(
+          fullCell,
+          y * 32 * 4,
+          (y * full.info.width + 2 * 32) * 4,
+          (y * full.info.width + 3 * 32) * 4,
+        );
+      }
+      expect(selectedCell).toEqual(fullCell);
+      const { data, info } = selected;
+      const opaqueRows = Array.from({ length: info.height }, (_, y) =>
+        data.some(
+          (_, index) =>
+            index % 4 === 3 && Math.floor(index / (info.width * 4)) === y && data[index] > 0,
+        ),
+      );
+      const first = opaqueRows.indexOf(true);
+      const last = opaqueRows.lastIndexOf(true);
+      expect(first).toBeGreaterThanOrEqual(0);
+      expect(opaqueRows.slice(first, last + 1).every(Boolean)).toBe(true);
+    } finally {
+      await rm(selectedOut, { recursive: true, force: true });
+      await rm(fullOut, { recursive: true, force: true });
+    }
+  });
   it('writes every configured sprite and icon atlas at exact target dimensions', async () => {
     expect(
       Object.fromEntries(outputs.map(({ output, width, height }) => [output, [width, height]])),

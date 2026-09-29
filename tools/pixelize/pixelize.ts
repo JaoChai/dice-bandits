@@ -410,7 +410,7 @@ export async function buildSheet(
     for (let y = 0; y < entry.cell.height; y++) {
       frame.copy(
         atlasPixels,
-        (y * entry.frames * entry.cell.width + index * entry.cell.width) * 4,
+        (y * outputFrames * entry.cell.width + index * entry.cell.width) * 4,
         y * entry.cell.width * 4,
         (y + 1) * entry.cell.width * 4,
       );
