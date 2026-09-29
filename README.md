@@ -19,6 +19,13 @@ Runs entirely on Cloudflare.
    player with the highest net worth wins.
 5. The game saves in the browser. Reload and press **Continue** to carry on.
 
+## Play online
+
+1. Choose **Play online** → **Create room**, then share the 5-letter code or `/r/CODE` invite link.
+2. Players join the lobby, choose a class, and the host starts the game.
+3. After 60 seconds idle or disconnected, a bot takes your seat. Reopen the invite link on the same device to reclaim it; another device can claim a bot-held seat.
+4. Rooms expire after 24 hours.
+
 ## Development
 
 Requires Node.js 24 or newer.
