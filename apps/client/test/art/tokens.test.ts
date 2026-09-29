@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createHeroToken, tokenOffsets } from '../../src/scenes/board/tokens';
+import { createHeroToken, tokenLayout, tokenOffsets } from '../../src/scenes/board/tokens';
 
 describe('board hero tokens', () => {
   it('centres a single token on its space', () => {
@@ -25,6 +25,27 @@ describe('board hero tokens', () => {
         expect(Math.hypot(dx, dy)).toBeGreaterThanOrEqual(12);
       }
     }
+  });
+
+  it('lays out every token sharing a space with the offsets for the full count', () => {
+    const offsets = tokenLayout([7, 7, 7, 7]);
+    expect(offsets).toEqual(tokenOffsets(4));
+    for (let left = 0; left < offsets.length; left++) {
+      for (let right = left + 1; right < offsets.length; right++) {
+        const dx = offsets[left]!.x - offsets[right]!.x;
+        const dy = offsets[left]!.y - offsets[right]!.y;
+        expect(Math.hypot(dx, dy)).toBeGreaterThanOrEqual(12);
+      }
+    }
+  });
+
+  it('centres tokens that are alone on their space', () => {
+    expect(tokenLayout([1, 7, 1, 3])).toEqual([
+      { x: -6, y: 0 },
+      { x: 0, y: 0 },
+      { x: 6, y: 0 },
+      { x: 0, y: 0 },
+    ]);
   });
 
   it('creates an animated token sprite when its idle animation exists', () => {

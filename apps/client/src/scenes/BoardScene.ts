@@ -3,7 +3,7 @@ import type { GameState, GameEvent, Region } from '@dice-bandits/engine';
 import { coinBurst, dice, dustPuff, shake } from '../fx';
 import { reducedMotion } from '../art/motion';
 import { hasAnim } from '../art/atlas';
-import { createHeroToken, tokenOffsets } from './board/tokens';
+import { createHeroToken, tokenLayout } from './board/tokens';
 
 export default class BoardScene extends Phaser.Scene {
   private tokenObjects = new Map<number, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>();
@@ -88,7 +88,6 @@ export default class BoardScene extends Phaser.Scene {
     this.tokenObjects.clear();
     this.spacePositions.clear();
     const positions = new Map<number, { x: number; y: number }>();
-    const countAtSpace = new Map<number, number>();
     const minX = Math.min(...state.board.spaces.map((space) => space.x));
     const maxX = Math.max(...state.board.spaces.map((space) => space.x));
     const minY = Math.min(...state.board.spaces.map((space) => space.y));
@@ -124,12 +123,11 @@ export default class BoardScene extends Phaser.Scene {
       }
     }
     const leader = richestSeat(state);
-    for (const player of state.players) {
+    const offsets = tokenLayout(state.players.map((player) => player.pos));
+    for (const [playerIndex, player] of state.players.entries()) {
       const point = positions.get(player.pos);
       if (!point) continue;
-      const index = countAtSpace.get(player.pos) ?? 0;
-      countAtSpace.set(player.pos, index + 1);
-      const offset = tokenOffsets(index + 1)[index]!;
+      const offset = offsets[playerIndex]!;
       const x = point.x + offset.x;
       const y = point.y + offset.y;
       const token = createHeroToken(this, player.classId, x, y, !reducedMotion());

@@ -19,6 +19,18 @@ export function tokenOffsets(countAtSpace: number): { x: number; y: number }[] {
   ].slice(0, countAtSpace);
 }
 
+/** Offsets for tokens in seat order, spread by how many share each space. */
+export function tokenLayout(positions: number[]): { x: number; y: number }[] {
+  const totals = new Map<number, number>();
+  for (const pos of positions) totals.set(pos, (totals.get(pos) ?? 0) + 1);
+  const seen = new Map<number, number>();
+  return positions.map((pos) => {
+    const index = seen.get(pos) ?? 0;
+    seen.set(pos, index + 1);
+    return tokenOffsets(totals.get(pos)!)[index]!;
+  });
+}
+
 export function createHeroToken(
   scene: Phaser.Scene,
   classId: string,
