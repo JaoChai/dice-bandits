@@ -1,0 +1,302 @@
+{
+  "sheets": [
+    {
+      "name": "ground-meadow",
+      "source": "../../docs/concepts/m4/board/ground-meadow.png",
+      "frames": 2,
+      "cell": { "width": 32, "height": 32 },
+      "ground": true,
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "props-meadow",
+      "source": "../../docs/concepts/m4/board/props-meadow.png",
+      "frames": 8,
+      "cell": { "width": 32, "height": 32 },
+      "split": "components",
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {}
+    },
+    {
+      "name": "ambient-meadow",
+      "source": "../../docs/concepts/m4/board/ambient-meadow.png",
+      "frames": 4,
+      "cell": { "width": 32, "height": 32 },
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "center",
+      "animations": { "loop": { "from": 0, "to": 3, "fps": 6, "loop": true } }
+    },
+    {
+      "name": "ground-desert",
+      "source": "../../docs/concepts/m4/board/ground-desert.png",
+      "frames": 2,
+      "cell": { "width": 32, "height": 32 },
+      "ground": true,
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "props-desert",
+      "source": "../../docs/concepts/m4/board/props-desert.png",
+      "frames": 8,
+      "cell": { "width": 32, "height": 32 },
+      "split": "components",
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {}
+    },
+    {
+      "name": "ambient-desert",
+      "source": "../../docs/concepts/m4/board/ambient-desert.png",
+      "frames": 4,
+      "cell": { "width": 32, "height": 32 },
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "center",
+      "animations": { "loop": { "from": 0, "to": 3, "fps": 6, "loop": true } }
+    },
+    {
+      "name": "ground-snow",
+      "source": "../../docs/concepts/m4/board/ground-snow.png",
+      "frames": 2,
+      "cell": { "width": 32, "height": 32 },
+      "ground": true,
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "props-snow",
+      "source": "../../docs/concepts/m4/board/props-snow.png",
+      "frames": 8,
+      "cell": { "width": 32, "height": 32 },
+      "split": "components",
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {}
+    },
+    {
+      "name": "ambient-snow",
+      "source": "../../docs/concepts/m4/board/ambient-snow.png",
+      "frames": 4,
+      "cell": { "width": 32, "height": 32 },
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "center",
+      "animations": { "loop": { "from": 0, "to": 3, "fps": 6, "loop": true } }
+    },
+    {
+      "name": "ground-volcano",
+      "source": "../../docs/concepts/m4/board/ground-volcano.png",
+      "frames": 2,
+      "cell": { "width": 32, "height": 32 },
+      "ground": true,
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "props-volcano",
+      "source": "../../docs/concepts/m4/board/props-volcano.png",
+      "frames": 8,
+      "cell": { "width": 32, "height": 32 },
+      "split": "components",
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {}
+    },
+    {
+      "name": "ambient-volcano",
+      "source": "../../docs/concepts/m4/board/ambient-volcano.png",
+      "frames": 4,
+      "cell": { "width": 32, "height": 32 },
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "center",
+      "animations": { "loop": { "from": 0, "to": 3, "fps": 6, "loop": true } }
+    },
+    {
+      "name": "tiles",
+      "source": "../../docs/concepts/m4/board/space-tiles.png",
+      "frames": 7,
+      "cell": { "width": 16, "height": 16 },
+      "background": { "color": [255, 0, 255], "tolerance": 18 },
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "monster-goldSlime",
+      "source": "../../docs/concepts/m4/battle/monster-goldSlime.png",
+      "frames": 6,
+      "cell": { "width": 64, "height": 64 },
+      "split": "grid",
+      "noiseFloor": 64,
+      "background": { "color": [176, 176, 174], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {
+        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
+        "attack": { "from": 2, "to": 4, "fps": 10, "loop": false },
+        "hurt": { "from": 5, "to": 5, "fps": 1, "loop": false }
+      }
+    },
+    {
+      "name": "monster-mushroomBandit",
+      "source": "../../docs/concepts/m4/battle/monster-mushroomBandit.png",
+      "frames": 6,
+      "cell": { "width": 64, "height": 64 },
+      "split": "grid",
+      "noiseFloor": 64,
+      "background": { "color": [180, 179, 178], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {
+        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
+        "attack": { "from": 2, "to": 4, "fps": 10, "loop": false },
+        "hurt": { "from": 5, "to": 5, "fps": 1, "loop": false }
+      }
+    },
+    {
+      "name": "monster-lanternGhost",
+      "source": "../../docs/concepts/m4/battle/monster-lanternGhost.png",
+      "frames": 6,
+      "cell": { "width": 64, "height": 64 },
+      "split": "grid",
+      "noiseFloor": 64,
+      "background": { "color": [179, 179, 178], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {
+        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
+        "attack": { "from": 2, "to": 4, "fps": 10, "loop": false },
+        "hurt": { "from": 5, "to": 5, "fps": 1, "loop": false }
+      }
+    },
+    {
+      "name": "monster-mimic",
+      "source": "../../docs/concepts/m4/battle/monster-mimic.png",
+      "frames": 6,
+      "cell": { "width": 80, "height": 80 },
+      "split": "grid",
+      "noiseFloor": 64,
+      "background": { "color": [179, 178, 177], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {
+        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
+        "attack": { "from": 2, "to": 4, "fps": 10, "loop": false },
+        "hurt": { "from": 5, "to": 5, "fps": 1, "loop": false }
+      }
+    },
+    {
+      "name": "monster-rockGolem",
+      "source": "../../docs/concepts/m4/battle/monster-rockGolem.png",
+      "frames": 6,
+      "cell": { "width": 80, "height": 80 },
+      "split": "grid",
+      "noiseFloor": 64,
+      "background": { "color": [177, 177, 176], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {
+        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
+        "attack": { "from": 2, "to": 4, "fps": 10, "loop": false },
+        "hurt": { "from": 5, "to": 5, "fps": 1, "loop": false }
+      }
+    },
+    {
+      "name": "monster-shadowImp",
+      "source": "../../docs/concepts/m4/battle/monster-shadowImp.png",
+      "frames": 6,
+      "cell": { "width": 64, "height": 64 },
+      "split": "grid",
+      "noiseFloor": 64,
+      "background": { "color": [179, 179, 177], "tolerance": 18 },
+      "anchor": "feet",
+      "animations": {
+        "idle": { "from": 0, "to": 1, "fps": 3, "loop": true },
+        "attack": { "from": 2, "to": 4, "fps": 10, "loop": false },
+        "hurt": { "from": 5, "to": 5, "fps": 1, "loop": false }
+      }
+    },
+    {
+      "name": "backdrop-meadow",
+      "source": "../../docs/concepts/m4/battle/backdrop-meadow.png",
+      "frames": 1,
+      "cell": { "width": 640, "height": 360 },
+      "fullFrame": true,
+      "palette": "backdrop",
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "backdrop-desert",
+      "source": "../../docs/concepts/m4/battle/backdrop-desert.png",
+      "frames": 1,
+      "cell": { "width": 640, "height": 360 },
+      "fullFrame": true,
+      "palette": "backdrop",
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "backdrop-snow",
+      "source": "../../docs/concepts/m4/battle/backdrop-snow.png",
+      "frames": 1,
+      "cell": { "width": 640, "height": 360 },
+      "fullFrame": true,
+      "palette": "backdrop",
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "backdrop-volcano",
+      "source": "../../docs/concepts/m4/battle/backdrop-volcano.png",
+      "frames": 1,
+      "cell": { "width": 640, "height": 360 },
+      "fullFrame": true,
+      "palette": "backdrop",
+      "anchor": "center",
+      "animations": {}
+    },
+    {
+      "name": "fx",
+      "source": "../../docs/concepts/m4/battle/fx.png",
+      "frames": 16,
+      "cell": { "width": 64, "height": 64 },
+      "split": "grid",
+      "scaleBy": "animation",
+      "sourceRanges": [
+        [0, 117],
+        [118, 248],
+        [249, 430],
+        [431, 548],
+        [549, 696],
+        [697, 881],
+        [882, 1000],
+        [1001, 1120],
+        [1121, 1212],
+        [1213, 1328],
+        [1329, 1450],
+        [1451, 1580],
+        [1581, 1770],
+        [1771, 1875],
+        [1876, 2012],
+        [2013, 2171]
+      ],
+      "noiseFloor": 64,
+      "background": { "color": [241, 14, 241], "tolerance": 18 },
+      "anchor": "center",
+      "animations": {
+        "slash": { "from": 0, "to": 2, "fps": 12, "loop": false },
+        "spark": { "from": 3, "to": 5, "fps": 12, "loop": false },
+        "coin": { "from": 6, "to": 9, "fps": 10, "loop": true },
+        "dust": { "from": 10, "to": 12, "fps": 12, "loop": false },
+        "sparkle": { "from": 13, "to": 15, "fps": 12, "loop": false }
+      }
+    },
+    {
+      "name": "cards",
+      "source": "../../docs/concepts/m4/battle/cards.png",
+      "frames": 6,
+      "cell": { "width": 32, "height": 32 },
+      "split": "grid",
+      "noiseFloor": 64,
+      "background": { "color": [235, 13, 240], "tolerance": 18 },
+      "anchor": "center",
+      "animations": {}
+    }
+  ]
+}

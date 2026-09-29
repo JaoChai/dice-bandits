@@ -8,6 +8,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import { getLang, setLang, t } from '../src/i18n';
 import { renderHud } from '../src/ui/hud';
+import { renderEventToast } from '../src/ui/dialogs';
 
 const config: GameConfig = {
   seed: 'hud-test',
@@ -51,6 +52,74 @@ function pvpBattleWithSeatZeroPicking(): GameState {
 }
 
 describe('renderHud', () => {
+  it('positions each seat card in its seat-order corner with readable labeled stats', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame({
+      ...config,
+      seats: [0, 1, 2, 3].map((seat) => ({
+        name: `Player ${seat}`,
+        classId: ['knight', 'thief', 'mage', 'cleric'][seat]! as
+          'knight' | 'thief' | 'mage' | 'cleric',
+        control: 'human' as const,
+        personality: null,
+      })),
+    });
+    renderHud(root, state, () => undefined);
+
+    expect(
+      [...root.querySelectorAll('.seat-card')].map((card) =>
+        ['corner-tl', 'corner-tr', 'corner-bl', 'corner-br'].find((corner) =>
+          card.classList.contains(corner),
+        ),
+      ),
+    ).toEqual(['corner-tl', 'corner-tr', 'corner-bl', 'corner-br']);
+    const stats = root.querySelectorAll('.seat-card .seat-stats span');
+    expect(stats.length).toBeGreaterThanOrEqual(12);
+    expect([...stats].every((span) => Number(span.getAttribute('aria-label')?.length) > 0)).toBe(
+      true,
+    );
+    root.remove();
+  });
+
+  it('wraps action buttons in the centered action tray', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    renderHud(root, createGame(config), () => undefined);
+
+    expect(root.querySelector('[data-testid="action-tray"] .action-button')).not.toBeNull();
+    expect(root.querySelector('.action-bar')).not.toBeNull();
+    root.remove();
+  });
+
+  it('keeps full event text in the banner and expands it on tap', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    renderHud(root, createGame(config), () => undefined);
+    const banner = root.querySelector<HTMLElement>('[data-testid="event-banner"]')!;
+    renderEventToast(root, [{ type: 'FrenzyStarted', seat: null, params: {} }]);
+
+    expect(banner.querySelector('.event-text')?.textContent).toBe(t('event.FrenzyStarted'));
+    expect(banner.getAttribute('title')).toBe(t('event.FrenzyStarted'));
+    expect(banner.textContent).not.toContain('…');
+    banner.click();
+    expect(banner.classList.contains('expanded')).toBe(true);
+    root.remove();
+  });
+
+  it('shows the frenzy notice in the event banner rather than canvas decoration', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    state.round = 10;
+    renderHud(root, state, () => undefined);
+
+    expect(root.querySelector('[data-testid="event-banner"]')?.textContent).toContain(
+      t('event.FrenzyStarted'),
+    );
+    root.remove();
+  });
+
   it('switches in-game action labels when the language control is used', () => {
     const root = document.createElement('div');
     document.body.append(root);
@@ -159,9 +228,9 @@ describe('renderHud', () => {
     const state = createGame(config);
     setLang('th');
     renderHud(root, state, () => undefined);
-    const stats = root.querySelector('.seat-card span[title]');
+    const stats = root.querySelector('.seat-card .seat-stats span:nth-child(2)');
 
-    expect(stats?.textContent).toContain(`${t('board.levelShort')}${state.players[0]!.level}`);
+    expect(stats?.textContent).toContain(`${t('board.levelShort')} ${state.players[0]!.level}`);
     root.remove();
     setLang('en');
   });

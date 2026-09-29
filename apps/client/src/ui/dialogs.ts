@@ -9,13 +9,21 @@ export function renderEventToast(root: HTMLElement, events: GameEvent[]): void {
       ['GoldStolen', 'FrenzyStarted', 'TownClaimed', 'BattleEnded'].includes(item.type),
     );
   if (!event) return;
-  const toast = document.createElement('div');
-  toast.className = 'game-toast';
-  toast.setAttribute('role', 'status');
-  toast.textContent = t(`event.${event.type}`);
+  const toast = root.querySelector<HTMLElement>('[data-testid="event-banner"]');
+  if (toast) {
+    const text = toast.querySelector<HTMLElement>('.event-text');
+    if (!text) return;
+    text.textContent = t(`event.${event.type}`);
+    toast.setAttribute('title', text.textContent);
+    return;
+  }
+  const legacyToast = document.createElement('div');
+  legacyToast.className = 'game-toast';
+  legacyToast.setAttribute('role', 'status');
+  legacyToast.textContent = t(`event.${event.type}`);
   root.querySelector('.game-toast')?.remove();
-  root.append(toast);
-  window.setTimeout(() => toast.remove(), 2400);
+  root.append(legacyToast);
+  window.setTimeout(() => legacyToast.remove(), 2400);
 }
 
 export function showPhaseDialog(
@@ -28,7 +36,7 @@ export function showPhaseDialog(
   const dialog = document.createElement('div');
   dialog.className = 'dialog-shade';
   const title = state.phase.kind === 'levelUp' ? t('perk.title') : t('shop.title');
-  dialog.innerHTML = `<section class="game-dialog phase-dialog" role="dialog" aria-modal="true"><h2>${title}</h2><div class="phase-choices">${actions.map((action, index) => `<button data-testid="${phaseTestId(action)}" data-choice="${index}"${disabled ? ' disabled' : ''}>${phaseLabel(action)}</button>`).join('')}</div></section>`;
+  dialog.innerHTML = `<section class="game-dialog phase-dialog frame" role="dialog" aria-modal="true"><h2>${title}</h2><div class="phase-choices">${actions.map((action, index) => `<button data-testid="${phaseTestId(action)}" data-choice="${index}"${disabled ? ' disabled' : ''}>${phaseLabel(action)}</button>`).join('')}</div></section>`;
   dialog.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) => {
     button.addEventListener('click', () => {
       const action = actions[Number(button.dataset.choice)];
@@ -63,7 +71,7 @@ export function showActionDialog(
   if (!choices.length) return;
   const dialog = document.createElement('div');
   dialog.className = 'dialog-shade';
-  dialog.innerHTML = `<section class="game-dialog" role="dialog" aria-modal="true"><h2>${t('board.reward')}</h2>${choices.map((choice, index) => `<button data-choice="${index}"${disabled ? ' disabled' : ''}>${rewardLabel(choice as Extract<Action, { type: 'pvpReward' }>)}</button>`).join('')}</section>`;
+  dialog.innerHTML = `<section class="game-dialog frame reward-dialog" role="dialog" aria-modal="true"><h2>${t('board.reward')}</h2>${choices.map((choice, index) => `<button data-choice="${index}"${disabled ? ' disabled' : ''}>${rewardLabel(choice as Extract<Action, { type: 'pvpReward' }>)}</button>`).join('')}</section>`;
   dialog.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) => {
     button.addEventListener('click', () => {
       const choice = choices[Number(button.dataset.choice)];

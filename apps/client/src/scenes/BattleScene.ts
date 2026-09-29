@@ -1,14 +1,32 @@
 import Phaser from 'phaser';
 import type { GameState } from '@dice-bandits/engine';
-import { t } from '../i18n';
+import { t, onLangChange } from '../i18n';
+import { drawBackdrop } from './battle/backdrop';
+import { drawDicePools, drawFighters, type BattleFighters } from './battle/fighters';
+import { playHit } from './battle/effects';
+import { BATTLE_EXCHANGE_Y, battleLayout } from './battle/layout';
+
+const layout = battleLayout();
 
 export default class BattleScene extends Phaser.Scene {
+  private fighters: BattleFighters | undefined;
+  private combatantIds: [string | number, string | number] | undefined;
+  private exchangeLabel: Phaser.GameObjects.Text | undefined;
+  private exchange = 0;
+
   constructor() {
     super('BattleScene');
   }
 
   create(): void {
-    this.game.events.on('game-state', (state: GameState) => this.renderBattle(state));
+    this.game.events.on('game-state', this.renderBattle, this);
+    const offLang = onLangChange(() => {
+      this.exchangeLabel?.setText(t('battle.exchange', { exchange: this.exchange }));
+    });
+    this.events.once('shutdown', () => {
+      this.game.events.off('game-state', this.renderBattle, this);
+      offLang();
+    });
     const initial = this.game.registry.get('state') as GameState | undefined;
     if (initial) this.renderBattle(initial);
   }
@@ -20,45 +38,33 @@ export default class BattleScene extends Phaser.Scene {
     for (const event of events) {
       if (event.type === 'BattlePick' && event.params.pick === 'secret') {
         const side = event.params.side === 'b' ? 'b' : 'a';
+        const pos = layout[side === 'a' ? 'left' : 'right'];
         const card = this.add
-          .text(side === 'a' ? 175 : 465, 290, '?', {
+          .text(pos.x, 180, '?', {
             fontFamily: 'Chakra Petch',
-            fontSize: '25px',
+            fontSize: '24px',
             color: '#ffd477',
             backgroundColor: '#38264a',
             padding: { x: 10, y: 5 },
           })
-          .setOrigin(0.5);
+          .setOrigin(0.5)
+          .setDepth(15);
         await this.flipSecret(card, t('event.SecretUsed'), speed);
-      } else if (event.type === 'DamageDealt') {
-        const damage = Number(event.params.toAttacker) + Number(event.params.toDefender);
-        if (damage > 0) {
-          const number = this.add
-            .text(320, 145, t('battle.damage', { value: damage }), {
-              fontFamily: 'Chakra Petch',
-              fontSize: '24px',
-              color: '#ff7068',
-              fontStyle: 'bold',
-            })
-            .setOrigin(0.5);
-          if (speed > 0) {
-            await new Promise<void>((resolve) => window.setTimeout(resolve, 55 * speed));
-            this.cameras.main.flash(90 * speed, 255, 235, 225);
-            this.cameras.main.shake(110 * speed, 0.003);
-            await new Promise<void>((resolve) => {
-              this.tweens.add({
-                targets: number,
-                y: 112,
-                alpha: 0,
-                duration: 320 * speed,
-                onComplete: () => {
-                  number.destroy();
-                  resolve();
-                },
-              });
-            });
-          } else number.destroy();
-        }
+      } else if (event.type === 'DamageDealt' && this.fighters && this.combatantIds) {
+        await playHit(
+          this,
+          this.fighters,
+          layout,
+          {
+            attacker: event.params.attacker ?? -1,
+            defender: event.params.defender ?? -1,
+            toAttacker: Number(event.params.toAttacker),
+            toDefender: Number(event.params.toDefender),
+          },
+          this.combatantIds[0],
+          this.combatantIds[1],
+          speed,
+        );
       }
     }
   }
@@ -73,7 +79,7 @@ export default class BattleScene extends Phaser.Scene {
       card.destroy();
       return;
     }
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve) =>
       this.tweens.add({
         targets: card,
         scaleX: 0,
@@ -87,9 +93,9 @@ export default class BattleScene extends Phaser.Scene {
             onComplete: () => resolve(),
           });
         },
-      });
-    });
-    await new Promise<void>((resolve) => {
+      }),
+    );
+    await new Promise<void>((resolve) =>
       this.tweens.add({
         targets: card,
         alpha: 0,
@@ -98,51 +104,34 @@ export default class BattleScene extends Phaser.Scene {
           card.destroy();
           resolve();
         },
-      });
-    });
+      }),
+    );
   }
 
   private renderBattle(state: GameState): void {
     this.children.removeAll(true);
+    this.fighters = undefined;
+    this.exchangeLabel = undefined;
     if (state.phase.kind !== 'battle') return;
     const battle = state.phase.battle;
-    const fighters = [battle.a, battle.b] as const;
-    this.add.rectangle(320, 177, 550, 195, 0x181323, 0.93).setStrokeStyle(3, 0xe7aa57);
-    this.add
-      .text(320, 95, t('battle.exchange', { exchange: battle.exchange }), {
+    this.exchange = battle.exchange;
+    drawBackdrop(this, state, battle.spaceId);
+    this.fighters = drawFighters(this, state, layout);
+    this.combatantIds = [
+      battle.a.monsterId ?? battle.a.seat ?? -1,
+      battle.b.monsterId ?? battle.b.seat ?? -1,
+    ];
+    drawDicePools(this, state, layout);
+    this.exchangeLabel = this.add
+      .text(320, BATTLE_EXCHANGE_Y, t('battle.exchange', { exchange: battle.exchange }), {
         fontFamily: 'Chakra Petch',
-        fontSize: '22px',
-        color: '#ffd477',
+        fontSize: '18px',
+        color: '#fff4dc',
         fontStyle: 'bold',
+        stroke: '#1b2140',
+        strokeThickness: 4,
       })
-      .setOrigin(0.5);
-    fighters.forEach((fighter, index) => {
-      const x = index === 0 ? 175 : 465;
-      const player = fighter.kind === 'player' ? state.players[fighter.seat!] : undefined;
-      const texture = player ? `hero-${player.classId}` : 'icons';
-      this.add.image(x, 158, texture).setDisplaySize(64, 64);
-      this.add
-        .text(x, 205, player?.prank?.alias ?? player?.name ?? t('battle.opponent'), {
-          fontFamily: 'Chakra Petch',
-          fontSize: '17px',
-          color: '#fff4dc',
-          fontStyle: 'bold',
-        })
-        .setOrigin(0.5);
-      const hpRatio = Math.max(0, fighter.hp / fighter.stats.maxHp);
-      this.add.rectangle(x, 232, 130, 14, 0x633e4a);
-      this.add.rectangle(x - (130 * (1 - hpRatio)) / 2, 232, 130 * hpRatio, 12, 0x6acb72);
-      this.add
-        .text(x, 232, `${fighter.hp}/${fighter.stats.maxHp}`, {
-          fontFamily: 'Chakra Petch',
-          fontSize: '12px',
-          color: '#ffffff',
-        })
-        .setOrigin(0.5);
-      if (fighter.secretUsed) {
-        this.add.text(x, 270, '★', { fontSize: '24px', color: '#ffd477' }).setOrigin(0.5);
-      }
-    });
-    this.add.text(320, 270, '⚔', { fontSize: '28px', color: '#e7aa57' }).setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(8);
   }
 }

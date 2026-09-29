@@ -1,10 +1,23 @@
 import Phaser from 'phaser';
-import type { GameState, GameEvent, Region } from '@dice-bandits/engine';
-import { coinBurst, dice, shake } from '../fx';
+import type { GameState, GameEvent } from '@dice-bandits/engine';
+import { coinBurst, dice, dustPuff, shake } from '../fx';
+import { reducedMotion } from '../art/motion';
+import { hasAnim } from '../art/atlas';
+import { createHeroToken, tokenLayout } from './board/tokens';
+import { boardLayout, HUD_RECTS, type ScreenPoint } from './board/layout';
+import { roadSegmentsFor, placeDecorations, placeAmbients } from '../art/decorations';
+import { drawGround } from './board/ground';
+import { drawRoad } from './board/road';
+import { drawTiles } from './board/tiles';
+import { drawDecor } from './board/decor';
+import { drawAmbients } from './board/ambient';
+
+const CANVAS = { width: 640, height: 360 };
 
 export default class BoardScene extends Phaser.Scene {
-  private tokenObjects = new Map<number, Phaser.GameObjects.Image>();
+  private tokenObjects = new Map<number, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>();
   private spacePositions = new Map<number, { x: number; y: number }>();
+  private renderSignature = '';
 
   constructor() {
     super('BoardScene');
@@ -26,29 +39,49 @@ export default class BoardScene extends Phaser.Scene {
         await wait(350 * speed);
       } else if (event.type === 'Moved' && token) {
         const destination = this.spacePositions.get(Number(event.params.to));
-        if (destination && speed > 0) {
-          const middleX = (token.x + destination.x) / 2;
-          await new Promise<void>((resolve) => {
-            this.tweens.add({
-              targets: token,
-              x: middleX,
-              y: destination.y - 8,
-              duration: 100 * speed,
-              ease: 'Sine.easeOut',
-              onComplete: () => {
-                this.tweens.add({
-                  targets: token,
-                  x: destination.x,
-                  y: destination.y,
-                  duration: 100 * speed,
-                  ease: 'Sine.easeIn',
-                  onComplete: () => resolve(),
-                });
-              },
+        if (destination) {
+          const movingLeft = destination.x < token.x;
+          token.setFlipX(movingLeft);
+          if (speed > 0) {
+            const middleX = (token.x + destination.x) / 2;
+            const sprite =
+              token instanceof Phaser.GameObjects.Sprite && hasAnim(this, token.texture.key, 'hop')
+                ? token
+                : undefined;
+            sprite?.play(`${sprite.texture.key}:hop`);
+            await new Promise<void>((resolve) => {
+              this.tweens.add({
+                targets: token,
+                x: middleX,
+                y: destination.y - 8,
+                duration: 100 * speed,
+                ease: 'Sine.easeOut',
+                onComplete: () => {
+                  this.tweens.add({
+                    targets: token,
+                    x: destination.x,
+                    y: destination.y,
+                    duration: 100 * speed,
+                    ease: 'Sine.easeIn',
+                    onComplete: () => {
+                      if (sprite) {
+                        if (!reducedMotion() && hasAnim(this, sprite.texture.key, 'idle')) {
+                          sprite.play(`${sprite.texture.key}:idle`);
+                        } else {
+                          sprite.anims.stop();
+                          sprite.setFrame(0);
+                        }
+                      }
+                      dustPuff(this, destination.x, destination.y, speed);
+                      resolve();
+                    },
+                  });
+                },
+              });
             });
-          });
-        } else if (destination) {
-          token.setPosition(destination.x, destination.y);
+          } else {
+            token.setPosition(destination.x, destination.y);
+          }
         }
       } else if (event.type === 'GoldStolen' && token) {
         coinBurst(this, token, speed);
@@ -61,61 +94,65 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   private renderBoard(state: GameState): void {
+    // Combat picks and other nonvisual updates can arrive several times per
+    // second. Recreating the entire tiled board for each one overwhelms
+    // software-rendered Chromium and starves DOM input on CI machines.
+    const signature = JSON.stringify([
+      state.config.seed,
+      state.turnSeat,
+      richestSeat(state),
+      state.players.map((player) => [player.pos, player.classId, !!player.prank]),
+      state.towns.map((town) => [town.spaceId, town.owner]),
+      reducedMotion(),
+      window.diceBanditsSpeed,
+    ]);
+    if (signature === this.renderSignature) return;
+    this.renderSignature = signature;
     this.children.removeAll(true);
     this.tokenObjects.clear();
     this.spacePositions.clear();
-    const positions = new Map<number, { x: number; y: number }>();
-    const countAtSpace = new Map<number, number>();
-    const minX = Math.min(...state.board.spaces.map((space) => space.x));
-    const maxX = Math.max(...state.board.spaces.map((space) => space.x));
-    const minY = Math.min(...state.board.spaces.map((space) => space.y));
-    const maxY = Math.max(...state.board.spaces.map((space) => space.y));
-    const paddingX = 24;
-    const paddingTop = 55;
-    const paddingBottom = 27;
-    const boardHeightAvailable = 300 - paddingTop - paddingBottom;
-    const scale = Math.min(
-      (640 - paddingX * 2) / Math.max(1, maxX - minX),
-      boardHeightAvailable / Math.max(1, maxY - minY),
-    );
-    const boardWidth = (maxX - minX) * scale;
-    const boardHeight = (maxY - minY) * scale;
-    const offsetX = (640 - boardWidth) / 2;
-    const offsetY = paddingTop + (boardHeightAvailable - boardHeight) / 2;
+    const layout = boardLayout(state.board.spaces, CANVAS);
+    const toScreen = (x: number, y: number): ScreenPoint => layout.toScreen(x, y);
+    // Keep seeded decorations out from under the DOM HUD overlay zones.
+    const view = { ...toView(toScreen), avoid: HUD_RECTS };
+
+    // Layer 1: region ground covering the whole canvas.
+    drawGround(this, state.board.spaces, toScreen, CANVAS.width, CANVAS.height);
+
+    // Layer 2: cream road along every `next` edge.
+    drawRoad(this, roadSegmentsFor(state.board.spaces, view));
+
+    // Layer 3: space tiles with town-owner pips.
+    const owners = new Map<number, number | null>();
+    for (const town of state.towns) owners.set(town.spaceId, town.owner);
+    drawTiles(this, state.board.spaces, toScreen, layout.scale, owners);
+
+    // Layer 4: seeded props + ambient water/lava, y-sorted. The ambient layer
+    // is skipped entirely under prefers-reduced-motion.
+    const decorScale = layout.scale >= 16 ? 1 : layout.scale / 16;
+    drawDecor(this, placeDecorations(state.board.spaces, state.config.seed, view), decorScale);
+    if (!reducedMotion()) {
+      drawAmbients(this, placeAmbients(state.board.spaces, state.config.seed, view), decorScale);
+    }
+
+    // Layer 5: hero tokens (createHeroToken sets token depth itself).
+    const positions = new Map<number, ScreenPoint>();
     for (const space of state.board.spaces) {
-      const x = offsetX + (space.x - minX) * scale;
-      const y = offsetY + (space.y - minY) * scale;
-      positions.set(space.id, { x, y });
-      this.spacePositions.set(space.id, { x, y });
-      this.add
-        .image(x, y, `tile-${space.region as Region}`)
-        .setDisplaySize(20, 20)
-        .setDepth(0);
-      const marker = this.add.graphics().setDepth(1);
-      marker.fillStyle(kindColor(space.kind), 1);
-      marker.fillRoundedRect(x - 7, y - 7, 14, 14, 3);
-      const town = state.towns.find((candidate) => candidate.spaceId === space.id);
-      if (town?.owner !== null && town?.owner !== undefined) {
-        marker.fillStyle(seatColor(town.owner), 1);
-        marker.fillCircle(x + 7, y - 7, 4);
-      }
+      const point = toScreen(space.x, space.y);
+      positions.set(space.id, point);
+      this.spacePositions.set(space.id, point);
     }
     const leader = richestSeat(state);
-    for (const player of state.players) {
+    const offsets = tokenLayout(state.players.map((player) => player.pos));
+    for (const [playerIndex, player] of state.players.entries()) {
       const point = positions.get(player.pos);
       if (!point) continue;
-      const index = countAtSpace.get(player.pos) ?? 0;
-      countAtSpace.set(player.pos, index + 1);
-      const angle = (index * Math.PI) / 2;
-      const fanRadius = index === 0 ? 0 : 3;
-      const x = point.x + Math.cos(angle) * fanRadius;
-      const y = point.y + Math.sin(angle) * fanRadius;
-      const token = this.add
-        .image(x, y, `hero-${player.classId}`)
-        .setDisplaySize(14, 14)
-        .setDepth(4);
+      const offset = offsets[playerIndex]!;
+      const x = point.x + offset.x;
+      const y = point.y + offset.y;
+      const token = createHeroToken(this, player.classId, x, y, !reducedMotion());
       this.tokenObjects.set(player.seat, token);
-      const decorations = this.add.graphics().setDepth(5);
+      const decorations = this.add.graphics().setDepth(40);
       decorations.lineStyle(
         2,
         player.seat === state.turnSeat ? 0xffdc72 : seatColor(player.seat),
@@ -134,16 +171,15 @@ export default class BoardScene extends Phaser.Scene {
     const current = state.players[state.turnSeat];
     const point = current ? positions.get(current.pos) : undefined;
     if (point) {
-      const glow = this.add.graphics().setDepth(2);
+      const glow = this.add.graphics().setDepth(39);
       glow.lineStyle(2, 0xffdc72, 0.9);
       glow.strokeCircle(point.x, point.y, 15);
     }
-    if (state.round >= 10) {
-      const banner = this.add.graphics().setDepth(8);
-      banner.fillStyle(0x9b3547, 0.9);
-      banner.fillRoundedRect(205, 3, 230, 22, 5);
-    }
   }
+}
+
+function toView(toScreen: (x: number, y: number) => ScreenPoint) {
+  return { width: CANVAS.width, height: CANVAS.height, toScreen };
 }
 
 function wait(duration: number): Promise<void> {
@@ -152,19 +188,6 @@ function wait(duration: number): Promise<void> {
     : new Promise((resolve) => window.setTimeout(resolve, duration));
 }
 
-function kindColor(kind: string): number {
-  return (
-    {
-      castle: 0xf3c744,
-      town: 0x4bb67a,
-      shop: 0x60b8dc,
-      chest: 0xe6a34a,
-      monster: 0xc84d55,
-      event: 0xb678d6,
-      trap: 0x51445d,
-    }[kind] ?? 0xffffff
-  );
-}
 function seatColor(seat: number): number {
   return [0xf15b4a, 0x52c2ed, 0xa5d65b, 0xcd76d7][seat % 4]!;
 }

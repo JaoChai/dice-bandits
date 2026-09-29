@@ -65,7 +65,7 @@ export function renderHud(
     : '';
   const header = `<header class="game-topline"><strong class="pixel">${t('title.gameName')}</strong><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span><nav class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></nav><button class="text-button" data-action="exit">${t('setup.back')}</button></header>`;
   if (!root.querySelector('.game-shell')) {
-    root.innerHTML = `<section class="game-shell" data-testid="screen-board"><div class="board-stage" id="phaser-board"></div>${header}<div class="online-status" aria-live="polite"></div><section class="seat-hud"></section><nav class="action-bar" aria-label="${t('board.actions')}"></nav><div class="rotate-hint" data-testid="rotate-hint">${t('board.rotateHint')}</div></section>`;
+    root.innerHTML = `<section class="game-shell" data-testid="screen-board"><div class="board-stage" id="phaser-board"></div>${header}<div class="event-banner frame" data-testid="event-banner" role="status" tabindex="0"><span class="event-meta"><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span></span><span class="event-text">${state.round >= 10 ? t('event.FrenzyStarted') : ''}</span></div><div class="online-status" aria-live="polite"></div><section class="seat-hud">${seats}</section><nav class="action-tray action-bar frame" data-testid="action-tray" aria-label="${t('board.actions')}"></nav><div class="rotate-hint" data-testid="rotate-hint">${t('board.rotateHint')}</div></section>`;
   } else {
     const existingHeader = root.querySelector('.game-topline');
     if (existingHeader) {
@@ -85,9 +85,18 @@ export function renderHud(
   hudContexts.set(shell, { state, dispatch, options });
   if (!hudLanguageListeners.has(shell)) {
     hudLanguageListeners.add(shell);
+    shell.addEventListener('keydown', (event) => {
+      if (!(event.target instanceof Element)) return;
+      const banner = event.target.closest<HTMLElement>('[data-testid="event-banner"]');
+      if (!banner || (event.key !== 'Enter' && event.key !== ' ')) return;
+      event.preventDefault();
+      banner.classList.toggle('expanded');
+    });
     shell.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const banner = target.closest<HTMLElement>('[data-testid="event-banner"]');
+      if (banner) banner.classList.toggle('expanded');
       const button = target.closest<HTMLButtonElement>('[data-lang]');
       if (!button || !shell.contains(button)) return;
       const context = hudContexts.get(shell);
@@ -97,6 +106,20 @@ export function renderHud(
     });
   }
   root.querySelector('.seat-hud')!.innerHTML = seats;
+  const banner = root.querySelector<HTMLElement>('[data-testid="event-banner"]')!;
+  banner.querySelector('.round-label')!.textContent = t('board.round', {
+    round: state.round,
+    total: state.config.rounds,
+  });
+  banner.querySelector('.world-chip')!.textContent = t(`worldRule.${state.worldRule}`);
+  if (state.round >= 10 && !banner.querySelector('.event-text')!.textContent)
+    banner.querySelector('.event-text')!.textContent = t('event.FrenzyStarted');
+  banner.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      banner.classList.toggle('expanded');
+    }
+  });
   const onlineStatus = root.querySelector<HTMLElement>('.online-status')!;
   const ownTakeover =
     online?.seats.find((seat) => seat.seat === online.you)?.controller === 'botTakeover';
@@ -114,7 +137,7 @@ export function renderHud(
   onlineStatus
     .querySelector<HTMLButtonElement>('[data-testid="online-reclaim"]')
     ?.addEventListener('click', online!.reclaim);
-  const actionBar = root.querySelector<HTMLElement>('.action-bar')!;
+  const actionBar = root.querySelector<HTMLElement>('.action-tray')!;
   const isBattle = renderBattleUi(
     root,
     state,
@@ -128,11 +151,12 @@ export function renderHud(
   );
   if (!isBattle) {
     actionBar.setAttribute('aria-label', t('board.actions'));
-    actionBar.innerHTML = buttons || `<span>${t('board.botThinking')}</span>`;
+    const markup = buttons || `<span>${t('board.botThinking')}</span>`;
+    if (actionBar.innerHTML !== markup) actionBar.innerHTML = markup;
     root.querySelector('.dialog-shade')?.remove();
     root.querySelectorAll<HTMLButtonElement>('[data-action-index]').forEach((button) => {
       const action = actions[Number(button.dataset.actionIndex)];
-      if (action) button.addEventListener('click', () => dispatch(action));
+      if (action) button.onclick = () => dispatch(action);
     });
   }
   if (state.phase.kind === 'pvpReward')
@@ -145,7 +169,6 @@ function playerCard(state: GameState, player: Player, seats?: PublicSeat[]): str
   const hp = Math.max(0, Math.min(100, (player.hp / player.stats.maxHp) * 100));
   const towns = state.towns.filter((town) => town.owner === player.seat).length;
   const name = player.prank?.alias ?? player.name;
-  const statsLabel = `${player.gold} ${t('board.gold')} · ${t('board.level')} ${player.level} · ${towns} ${t('board.towns')}`;
   const cards = player.banditCards.map((card) => t(`card.${card}`)).join(' · ');
   const compactCards = player.banditCards.length
     ? `<small class="seat-status" title="${escapeHtml(cards)}" aria-label="${escapeHtml(cards)}">${player.banditCards.length} 🃏</small>`
@@ -154,7 +177,9 @@ function playerCard(state: GameState, player: Player, seats?: PublicSeat[]): str
     seats?.find((seat) => seat.seat === player.seat)?.controller === 'botTakeover'
       ? `<small class="seat-status" data-testid="seat-takeover-${player.seat}">${t('online.takeover')}</small>`
       : '';
-  return `<article class="seat-card ${player.seat === state.turnSeat ? 'active' : ''}" style="--seat-color:${seatHex(player.seat)}"><img src="/sprites/hero-${player.classId}-portrait.png" alt="${t(`class.${player.classId}`)}"><div class="seat-details"><strong>${escapeHtml(name)}</strong><span title="${escapeHtml(statsLabel)}" aria-label="${escapeHtml(statsLabel)}">${player.gold}🪙 · ${t('board.levelShort')}${player.level} · ${towns}🏘</span><div class="hp-track" aria-label="${t('board.hp')}"><span style="width:${hp}%"></span></div>${compactCards}${takeoverBadge}</div></article>`;
+  const classes = ['corner-tl', 'corner-tr', 'corner-bl', 'corner-br'];
+  const accent = ['#f15b4a', '#52c2ed', '#a5d65b', '#cd76d7'][player.seat % 4]!;
+  return `<article class="seat-card ${classes[player.seat % 4]} ${player.seat === state.turnSeat ? 'active' : ''}" style="--seat-color:${accent}"><div class="seat-portrait portrait-${player.classId}" role="img" aria-label="${t(`class.${player.classId}`)}"></div><div class="seat-details"><strong>${escapeHtml(name)}</strong><div class="seat-stats"><span aria-label="${player.gold} ${escapeHtml(t('board.gold'))}">${player.gold} ${t('board.gold')}</span><span aria-label="${escapeHtml(t('board.level'))} ${player.level}">${t('board.levelShort')} ${player.level}</span><span aria-label="${towns} ${escapeHtml(t('board.towns'))}">${towns} ${t('board.towns')}</span></div><div class="hp-track" aria-label="${t('board.hp')}"><span style="width:${hp}%"></span></div>${compactCards}${takeoverBadge}</div></article>`;
 }
 
 function actionName(action: Action): string {
@@ -210,9 +235,6 @@ function testId(action: Action): string {
               ? `-${action.perk}`
               : '';
   return `action-${action.type}${suffix}`;
-}
-function seatHex(seat: number): string {
-  return ['#f15b4a', '#52c2ed', '#a5d65b', '#cd76d7'][seat % 4]!;
 }
 function escapeHtml(value: string): string {
   return value.replace(

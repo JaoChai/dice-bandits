@@ -66,11 +66,13 @@ async function removeFloodBackground(
   input: Buffer,
   width: number,
   height: number,
+  backgroundColor?: [number, number, number],
+  tolerance = backgroundTolerance,
 ): Promise<Buffer> {
   const data = Buffer.from(input);
   const visited = new Uint8Array(width * height);
   const queue = new Int32Array(width * height);
-  const background = [data[0], data[1], data[2]];
+  const background = backgroundColor ?? [data[0], data[1], data[2]];
   let read = 0;
   let write = 0;
   const enqueue = (x: number, y: number): void => {
@@ -83,7 +85,7 @@ async function removeFloodBackground(
         Math.abs(data[offset] - background[0]),
         Math.abs(data[offset + 1] - background[1]),
         Math.abs(data[offset + 2] - background[2]),
-      ) > backgroundTolerance
+      ) > tolerance
     )
       return;
     visited[pixel] = 1;
@@ -107,7 +109,75 @@ async function removeFloodBackground(
     enqueue(x, y - 1);
     enqueue(x, y + 1);
   }
+  if (
+    Math.abs(background[0] - 255) <= 24 &&
+    Math.abs(background[1]) <= 24 &&
+    Math.abs(background[2] - 255) <= 24
+  ) {
+    // The magenta key survives anti-aliased edges as an opaque halo; remove its cast
+    // near transparency so downscaled edge pixels cannot quantise to palette red.
+    despillMagenta(data, width, height);
+  }
+  eliminateBackgroundBlends(data, width, height, background);
   return data;
+}
+
+// Flood-keying with a hard tolerance leaves a ring of semi-blended background at sprite
+// edges (the key survives anti-aliased outlines as opaque pixels). Any still-opaque pixel
+// on the transparency boundary that stays close to the key colour is blend, not art:
+// flood it away too. Grey keys sit inside the art's own value range, so this only fires
+// on boundary pixels — interior greys (rock highlights, fog, steel) are never touched.
+function eliminateBackgroundBlends(
+  data: Buffer,
+  width: number,
+  height: number,
+  background: [number, number, number],
+): void {
+  const near =
+    Math.max(
+      Math.abs(background[0] - 176),
+      Math.abs(background[1] - 176),
+      Math.abs(background[2] - 174),
+    ) <= 24;
+  const blendLimit = near ? 34 : 24;
+  const keyable = (offset: number): boolean =>
+    Math.abs((data[offset] ?? 0) - background[0]) <= blendLimit &&
+    Math.abs((data[offset + 1] ?? 0) - background[1]) <= blendLimit &&
+    Math.abs((data[offset + 2] ?? 0) - background[2]) <= blendLimit;
+  const boundary: number[] = [];
+  const isBoundary = (pixel: number): boolean => {
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    return (
+      (x > 0 && data[(pixel - 1) * 4 + 3] === 0) ||
+      (x < width - 1 && data[(pixel + 1) * 4 + 3] === 0) ||
+      (y > 0 && data[(pixel - width) * 4 + 3] === 0) ||
+      (y < height - 1 && data[(pixel + width) * 4 + 3] === 0)
+    );
+  };
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    if (data[pixel * 4 + 3] === 0 || !isBoundary(pixel)) continue;
+    if (keyable(pixel * 4)) boundary.push(pixel);
+  }
+  while (boundary.length > 0) {
+    const pixel = boundary.pop()!;
+    data[pixel * 4 + 3] = 0;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    for (const [dx, dy] of [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+    ]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      const next = ny * width + nx;
+      if (data[next * 4 + 3] === 0 || !keyable(next * 4)) continue;
+      boundary.push(next);
+    }
+  }
 }
 
 function areaAverage(
@@ -211,6 +281,739 @@ async function processCrop(
   return sharp(scaled, { raw: { width: sprite.width, height: sprite.height, channels: 4 } })
     .png()
     .toBuffer();
+}
+
+export type SheetEntry = {
+  name: string;
+  source: string;
+  frames: number;
+  cell: { width: number; height: number };
+  palette?: 'main' | 'backdrop';
+  select?: number[];
+  split?: 'components' | 'grid';
+  /** Inclusive source x ranges for irregular grid poses (one per output frame). */
+  sourceRanges?: [number, number][];
+  /** Grid frames share one scale by default; effects can scale each animation family. */
+  scaleBy?: 'sheet' | 'animation';
+  noiseFloor?: number;
+  fullFrame?: boolean;
+  background?: { color: [number, number, number]; tolerance: number };
+  ground?: boolean;
+  animations: Record<string, { from: number; to: number; fps: number; loop: boolean }>;
+  anchor?: 'feet' | 'center';
+};
+
+export type Atlas = {
+  image: string;
+  cell: { width: number; height: number };
+  frames: { x: number; y: number; w: number; h: number }[];
+  anchor: { x: number; y: number };
+  animations: Record<string, { frames: number[]; fps: number; loop: boolean }>;
+};
+
+export async function assertPaletteOnly(
+  pngPath: string,
+  paletteName: 'main' | 'backdrop',
+): Promise<void> {
+  const palettePath = join(
+    toolDir,
+    paletteName === 'main' ? 'palette.json' : 'palette-backdrop.json',
+  );
+  const palette = new Set(
+    (await readFile(palettePath, 'utf8')).toLowerCase().match(/#[0-9a-f]{6}/g),
+  );
+  if (palette.size !== 32) throw new Error(`Palette must contain 32 colors: ${palettePath}`);
+  const { data, info } = await sharp(pngPath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      const offset = (y * info.width + x) * info.channels;
+      const alpha = data[offset + 3];
+      if (alpha !== 0 && alpha !== 255) {
+        throw new Error(`Invalid alpha ${alpha} at (${x}, ${y}) in ${pngPath}`);
+      }
+      if (alpha === 255) {
+        const pixel = `#${[data[offset], data[offset + 1], data[offset + 2]]
+          .map((channel) => channel.toString(16).padStart(2, '0'))
+          .join('')}`;
+        if (!palette.has(pixel))
+          throw new Error(
+            `Color ${pixel} outside ${paletteName} palette at (${x}, ${y}) in ${pngPath}`,
+          );
+      }
+    }
+  }
+}
+
+function despillMagenta(data: Buffer, width: number, height: number): void {
+  const nearTransparent = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const pixel = y * width + x;
+      if (data[pixel * 4 + 3] !== 0) continue;
+      for (let dy = -16; dy <= 16; dy++)
+        for (let dx = -16; dx <= 16; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          nearTransparent[ny * width + nx] = 1;
+        }
+    }
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    const offset = pixel * 4;
+    if (data[offset + 3] === 0 || !nearTransparent[pixel]) continue;
+    const red = data[offset] ?? 0;
+    const green = data[offset + 1] ?? 0;
+    const blue = data[offset + 2] ?? 0;
+    if (blue > 80 && blue > green * 1.6 && red - green > 32 && blue - green > 32) {
+      const spill = Math.min(red - green, blue - green);
+      data[offset] = red - spill;
+      data[offset + 2] = blue - spill;
+    }
+  }
+}
+
+type Component = {
+  pixels: Buffer;
+  width: number;
+  height: number;
+  left: number;
+  top: number;
+  size: number;
+};
+
+function foregroundComponents(pixels: Buffer, width: number, height: number): Component[] {
+  const seen = new Uint8Array(width * height);
+  const components: Component[] = [];
+  for (let start = 0; start < seen.length; start++) {
+    if (seen[start] || pixels[start * 4 + 3] === 0) continue;
+    const queue = [start];
+    seen[start] = 1;
+    let minX = width,
+      minY = height,
+      maxX = -1,
+      maxY = -1;
+    for (let cursor = 0; cursor < queue.length; cursor++) {
+      const pixel = queue[cursor];
+      if (pixel === undefined) continue;
+      const x = pixel % width,
+        y = Math.floor(pixel / width);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = x + dx,
+            ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const next = ny * width + nx;
+          if (!seen[next] && pixels[next * 4 + 3] > 0) {
+            seen[next] = 1;
+            queue.push(next);
+          }
+        }
+    }
+    const w = maxX - minX + 1,
+      h = maxY - minY + 1;
+    const member = new Uint8Array(width * height);
+    for (const pixel of queue) member[pixel] = 1;
+    const crop = Buffer.alloc(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const index = (minY + y) * width + minX + x;
+        const from = index * 4;
+        if (!member[index]) continue;
+        pixels.copy(crop, (y * w + x) * 4, from, from + 4);
+      }
+    }
+    components.push({
+      pixels: crop,
+      width: w,
+      height: h,
+      left: minX,
+      top: minY,
+      size: queue.length,
+    });
+  }
+  return components;
+}
+
+async function buildSpecialSheet(
+  entry: SheetEntry,
+  sourcePath: string,
+  outDir: string,
+): Promise<Atlas> {
+  const { data: source, info } = await sharp(sourcePath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const palette = await readPalette(
+    join(toolDir, entry.palette === 'backdrop' ? 'palette-backdrop.json' : 'palette.json'),
+  );
+  const sourceFrames: Array<{ pixels: Buffer; width: number; height: number }> = [];
+  if (entry.fullFrame) {
+    // Whole-image mode (backdrops): no keying, no trimming — the sky may share the
+    // corner colour and the scene is opaque edge to edge. The backdrop palette never
+    // contains the pure key, so quantisation cannot paint transparency.
+    const raw = await sharp(sourcePath)
+      .resize(entry.cell.width, entry.cell.height, { fit: 'fill', kernel: 'lanczos3' })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    sourceFrames.push({ pixels: raw, width: entry.cell.width, height: entry.cell.height });
+  } else if (entry.ground) {
+    const side = Math.min(info.width, info.height);
+    for (let frame = 0; frame < entry.frames; frame++) {
+      const left = Math.floor((frame * (info.width - side)) / Math.max(entry.frames - 1, 1));
+      const raw = await sharp(sourcePath)
+        .extract({ left, top: Math.floor((info.height - side) / 2), width: side, height: side })
+        .resize(entry.cell.width, entry.cell.height, { fit: 'fill', kernel: 'lanczos3' })
+        .ensureAlpha()
+        .raw()
+        .toBuffer();
+      sourceFrames.push({ pixels: raw, width: entry.cell.width, height: entry.cell.height });
+    }
+  } else if (entry.split === 'grid') {
+    // Grid-grouped extraction: union components by expected column, or use measured
+    // x-ranges when a generated sheet spaces poses unevenly (the battle FX sheet).
+    // Detached islands stay with their parent pose rather than entering a neighbour.
+    const ranges = entry.sourceRanges;
+    if (
+      ranges &&
+      (ranges.length !== entry.frames ||
+        ranges.some(
+          ([left, right], index) =>
+            left !== (index === 0 ? 0 : ranges[index - 1]![1] + 1) ||
+            right < left ||
+            (index === entry.frames - 1 && right !== info.width - 1),
+        ))
+    )
+      throw new Error(`Invalid sourceRanges for ${entry.name}: must partition source width`);
+    const cutout = await removeFloodBackground(
+      source,
+      info.width,
+      info.height,
+      entry.background?.color,
+      entry.background?.tolerance ?? backgroundTolerance,
+    );
+    const all = foregroundComponents(cutout, info.width, info.height);
+    const floor = Math.max(entry.noiseFloor ?? Math.ceil(info.width * info.height * 0.001), 1);
+    const kept = all.filter((component) => component.size >= floor);
+    const columns = Array.from({ length: entry.frames }, () => [] as typeof kept);
+    for (const component of kept) {
+      const centre = component.left + component.width / 2;
+      if (ranges) {
+        const assigned = ranges.findIndex(([left, right]) => centre >= left && centre <= right);
+        if (assigned < 0) throw new Error(`Component outside sourceRanges for ${entry.name}`);
+        columns[assigned]!.push(component);
+        continue;
+      }
+      let best = 0;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (let frame = 0; frame < entry.frames; frame++) {
+        const columnCentre = ((frame + 0.5) * info.width) / entry.frames;
+        const distance = Math.abs(centre - columnCentre);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = frame;
+        }
+      }
+      columns[best]!.push(component);
+    }
+    for (let frame = 0; frame < entry.frames; frame++) {
+      const members = columns[frame]!;
+      if (members.length === 0)
+        throw new Error(`Expected a pose in frame ${frame} of ${entry.name}, found none`);
+      const left = Math.min(...members.map((component) => component.left));
+      const top = Math.min(...members.map((component) => component.top));
+      const right = Math.max(...members.map((component) => component.left + component.width - 1));
+      const bottom = Math.max(...members.map((component) => component.top + component.height - 1));
+      const width = right - left + 1;
+      const height = bottom - top + 1;
+      const union = Buffer.alloc(width * height * 4);
+      for (const component of members) {
+        for (let y = 0; y < component.height; y++) {
+          for (let x = 0; x < component.width; x++) {
+            const from = (y * component.width + x) * 4;
+            if (component.pixels[from + 3] === 0) continue;
+            const to = ((component.top - top + y) * width + (component.left - left + x)) * 4;
+            component.pixels.copy(union, to, from, from + 4);
+          }
+        }
+      }
+      sourceFrames.push({ pixels: union, width, height });
+    }
+  } else {
+    const cutout = await removeFloodBackground(
+      source,
+      info.width,
+      info.height,
+      entry.background?.color,
+      entry.background?.tolerance ?? backgroundTolerance,
+    );
+    const all = foregroundComponents(cutout, info.width, info.height);
+    const threshold = Math.ceil(info.width * info.height * 0.001);
+    const substantial = all.filter((component) => component.size >= threshold);
+    if (substantial.length < entry.frames)
+      throw new Error(
+        `Expected ${entry.frames} components in ${entry.name}, found ${substantial.length}`,
+      );
+    // Each frame is exactly one whole object: use the component's own pixel mask so a
+    // neighbouring object inside the bounding box is never copied into the frame.
+    const selected = substantial.sort((a, b) => a.left - b.left).slice(0, entry.frames);
+    for (const component of selected)
+      sourceFrames.push({
+        pixels: component.pixels,
+        width: component.width,
+        height: component.height,
+      });
+  }
+  const processed: Buffer[] = [];
+  // Battle grid poses share a scale: otherwise a wide strike shrinks the body and
+  // a spinning coin grows/shrinks from frame to frame. FX may group by animation.
+  const scales: number[] = sourceFrames.map(() => 0);
+  if (entry.split === 'grid') {
+    const groups =
+      entry.scaleBy === 'animation'
+        ? Object.values(entry.animations).map(({ from, to }) =>
+            Array.from({ length: to - from + 1 }, (_, index) => from + index),
+          )
+        : [sourceFrames.map((_, index) => index)];
+    const assigned = new Set<number>();
+    for (const group of groups) {
+      const members = group.map((index) => sourceFrames[index]);
+      if (members.some((member) => !member))
+        throw new Error(`Invalid animation frame in ${entry.name}`);
+      const scale = Math.min(
+        (entry.cell.width - 2) / Math.max(...members.map((member) => member!.width)),
+        (entry.cell.height - 2) / Math.max(...members.map((member) => member!.height)),
+      );
+      for (const index of group) {
+        if (assigned.has(index)) throw new Error(`Overlapping scale groups in ${entry.name}`);
+        scales[index] = scale;
+        assigned.add(index);
+      }
+    }
+    if (assigned.size !== sourceFrames.length)
+      throw new Error(`Unassigned scale group in ${entry.name}`);
+  }
+  for (const [frameIndex, frame] of sourceFrames.entries()) {
+    const inset = entry.split === 'components' || entry.split === 'grid' ? 1 : 0;
+    const gridScale = scales[frameIndex]!;
+    const scaled = await sharp(frame.pixels, {
+      raw: { width: frame.width, height: frame.height, channels: 4 },
+    })
+      .resize(
+        gridScale ? Math.max(1, Math.round(frame.width * gridScale)) : entry.cell.width - inset * 2,
+        gridScale
+          ? Math.max(1, Math.round(frame.height * gridScale))
+          : entry.cell.height - inset * 2,
+        {
+          fit: gridScale ? 'fill' : 'contain',
+          kernel: 'nearest',
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        },
+      )
+      .png()
+      .toBuffer();
+    const scaledInfo = await sharp(scaled).metadata();
+    const scaledW = scaledInfo.width!;
+    const scaledH = scaledInfo.height!;
+    const resized = await sharp({
+      create: {
+        width: entry.cell.width,
+        height: entry.cell.height,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
+    })
+      .composite([
+        {
+          input: scaled,
+          left: gridScale ? Math.floor((entry.cell.width - scaledW) / 2) : inset,
+          top: gridScale ? Math.floor((entry.cell.height - scaledH) / 2) : inset,
+        },
+      ])
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    for (let i = 0; i < resized.length; i += 4) {
+      if (resized[i + 3] < 128) resized.fill(0, i, i + 4);
+      else {
+        const color = nearestPaletteColor(
+          resized[i] ?? 0,
+          resized[i + 1] ?? 0,
+          resized[i + 2] ?? 0,
+          palette,
+        );
+        resized[i] = color[0] ?? 0;
+        resized[i + 1] = color[1] ?? 0;
+        resized[i + 2] = color[2] ?? 0;
+        resized[i + 3] = 255;
+      }
+    }
+    if (entry.split === 'components') {
+      let opaque = 0;
+      for (let i = 3; i < resized.length; i += 4) if (resized[i] === 255) opaque++;
+      for (
+        let pass = 0;
+        opaque / (entry.cell.width * entry.cell.height) < 0.15 && pass < 4;
+        pass++
+      ) {
+        const previous = Buffer.from(resized);
+        for (let y = 1; y < entry.cell.height - 1; y++)
+          for (let x = 1; x < entry.cell.width - 1; x++) {
+            const offset = (y * entry.cell.width + x) * 4;
+            if (previous[offset + 3] === 255) continue;
+            let found = -1;
+            for (let dy = -1; dy <= 1 && found < 0; dy++)
+              for (let dx = -1; dx <= 1; dx++) {
+                const neighbor = ((y + dy) * entry.cell.width + x + dx) * 4;
+                if (previous[neighbor + 3] === 255) {
+                  found = neighbor;
+                  break;
+                }
+              }
+            if (found >= 0) {
+              resized.copy(resized, offset, found, found + 4);
+              opaque++;
+            }
+          }
+      }
+    }
+    if (entry.ground) {
+      for (let y = 0; y < entry.cell.height; y++) {
+        const a = y * entry.cell.width * 4,
+          b = (y * entry.cell.width + entry.cell.width - 1) * 4;
+        const color = nearestPaletteColor(
+          Math.round(((resized[a] ?? 0) + (resized[b] ?? 0)) / 2),
+          Math.round(((resized[a + 1] ?? 0) + (resized[b + 1] ?? 0)) / 2),
+          Math.round(((resized[a + 2] ?? 0) + (resized[b + 2] ?? 0)) / 2),
+          palette,
+        );
+        for (const x of [a, b]) {
+          resized[x] = color[0] ?? 0;
+          resized[x + 1] = color[1] ?? 0;
+          resized[x + 2] = color[2] ?? 0;
+        }
+      }
+      for (let x = 0; x < entry.cell.width; x++) {
+        const a = x * 4,
+          b = ((entry.cell.height - 1) * entry.cell.width + x) * 4;
+        const color = nearestPaletteColor(
+          Math.round(((resized[a] ?? 0) + (resized[b] ?? 0)) / 2),
+          Math.round(((resized[a + 1] ?? 0) + (resized[b + 1] ?? 0)) / 2),
+          Math.round(((resized[a + 2] ?? 0) + (resized[b + 2] ?? 0)) / 2),
+          palette,
+        );
+        for (const y of [a, b]) {
+          resized[y] = color[0] ?? 0;
+          resized[y + 1] = color[1] ?? 0;
+          resized[y + 2] = color[2] ?? 0;
+        }
+      }
+    }
+    if ((entry.anchor ?? 'feet') === 'feet') {
+      let lowest = -1;
+      for (let y = entry.cell.height - 1; y >= 0 && lowest < 0; y--)
+        for (let x = 0; x < entry.cell.width; x++)
+          if (resized[(y * entry.cell.width + x) * 4 + 3] === 255) {
+            lowest = y;
+            break;
+          }
+      if (lowest >= 0 && lowest < entry.cell.height - 1) {
+        const shift = (entry.cell.height - 1 - lowest) * entry.cell.width * 4;
+        const aligned = Buffer.alloc(resized.length);
+        resized.copy(aligned, shift, 0, resized.length - shift);
+        processed.push(aligned);
+        continue;
+      }
+    }
+    processed.push(resized);
+  }
+  const atlasPixels = Buffer.alloc(processed.length * entry.cell.width * entry.cell.height * 4);
+  processed.forEach((frame, index) => {
+    for (let y = 0; y < entry.cell.height; y++)
+      frame.copy(
+        atlasPixels,
+        (y * processed.length * entry.cell.width + index * entry.cell.width) * 4,
+        y * entry.cell.width * 4,
+        (y + 1) * entry.cell.width * 4,
+      );
+  });
+  const animations: Atlas['animations'] = {};
+  for (const [name, animation] of Object.entries(entry.animations))
+    animations[name] = {
+      frames: Array.from(
+        { length: animation.to - animation.from + 1 },
+        (_, i) => animation.from + i,
+      ),
+      fps: animation.fps,
+      loop: animation.loop,
+    };
+  const atlas: Atlas = {
+    image: `${entry.name}.png`,
+    cell: entry.cell,
+    frames: processed.map((_, index) => ({
+      x: index * entry.cell.width,
+      y: 0,
+      w: entry.cell.width,
+      h: entry.cell.height,
+    })),
+    anchor: {
+      x: Math.floor(entry.cell.width / 2),
+      y:
+        (entry.anchor ?? 'feet') === 'feet' ? entry.cell.height : Math.floor(entry.cell.height / 2),
+    },
+    animations,
+  };
+  await mkdir(outDir, { recursive: true });
+  await sharp(atlasPixels, {
+    raw: { width: processed.length * entry.cell.width, height: entry.cell.height, channels: 4 },
+  })
+    .png({ compressionLevel: 9 })
+    .toFile(join(outDir, atlas.image));
+  await writeFile(join(outDir, `${entry.name}.json`), `${JSON.stringify(atlas, null, 2)}\n`);
+  const manifestPath = join(outDir, 'atlases.json');
+  let names: string[] = [];
+  try {
+    const existing = JSON.parse(await readFile(manifestPath, 'utf8')) as { atlases?: unknown };
+    if (Array.isArray(existing.atlases))
+      names = existing.atlases.filter((name): name is string => typeof name === 'string');
+  } catch {
+    /* first atlas */
+  }
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify({ atlases: [...new Set([...names, entry.name])].sort() }, null, 2)}\n`,
+  );
+  return atlas;
+}
+
+export async function buildSheet(
+  entry: SheetEntry,
+  baseDir: string,
+  outDir: string,
+): Promise<Atlas> {
+  if (!Number.isInteger(entry.frames) || entry.frames < 1)
+    throw new Error('frames must be a positive integer');
+  if (
+    !Number.isInteger(entry.cell.width) ||
+    entry.cell.width < 1 ||
+    !Number.isInteger(entry.cell.height) ||
+    entry.cell.height < 1
+  ) {
+    throw new Error('cell dimensions must be positive integers');
+  }
+  if (!/^[a-z0-9][a-z0-9-]*$/i.test(entry.name))
+    throw new Error(`Invalid sheet name: ${entry.name}`);
+  const sourcePath = isAbsolute(entry.source) ? entry.source : resolve(baseDir, entry.source);
+  if (entry.fullFrame || entry.ground || entry.split === 'components' || entry.split === 'grid')
+    return buildSpecialSheet(entry, sourcePath, outDir);
+  const { data: source, info } = await sharp(sourcePath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  if (info.width < entry.frames)
+    throw new Error(`Source width must provide ${entry.frames} frames: ${sourcePath}`);
+  const selectedFrames = entry.select ?? Array.from({ length: entry.frames }, (_, i) => i);
+  if (
+    selectedFrames.length === 0 ||
+    selectedFrames.some(
+      (index, position) =>
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= entry.frames ||
+        selectedFrames.indexOf(index) !== position,
+    )
+  ) {
+    throw new Error(`select must contain unique source frame indices in range for ${entry.name}`);
+  }
+  const frames: Array<{ pixels: Buffer; width: number }> = [];
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = info.height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let frameIndex = 0; frameIndex < entry.frames; frameIndex++) {
+    const left = Math.floor((frameIndex * info.width) / entry.frames);
+    const right = Math.floor(((frameIndex + 1) * info.width) / entry.frames);
+    const frameWidth = right - left;
+    const framePixels = Buffer.alloc(frameWidth * info.height * 4);
+    for (let y = 0; y < info.height; y++) {
+      for (let x = 0; x < frameWidth; x++) {
+        const from = (y * info.width + left + x) * info.channels;
+        const to = (y * frameWidth + x) * 4;
+        source.copy(framePixels, to, from, from + 4);
+      }
+    }
+    const cutout = await removeFloodBackground(
+      framePixels,
+      frameWidth,
+      info.height,
+      entry.background?.color,
+      entry.background?.tolerance ?? backgroundTolerance,
+    );
+    frames.push({ pixels: cutout, width: frameWidth });
+    for (let y = 0; y < info.height; y++) {
+      for (let x = 0; x < frameWidth; x++) {
+        if (cutout[(y * frameWidth + x) * 4 + 3] > 0) {
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+      }
+    }
+  }
+  const outputFrames = selectedFrames.length;
+  if (maxX < minX || maxY < minY) throw new Error(`No foreground pixels found in ${sourcePath}`);
+  const cropWidth = maxX - minX + 1;
+  const cropHeight = maxY - minY + 1;
+  const paletteFile = entry.palette === 'backdrop' ? 'palette-backdrop.json' : 'palette.json';
+  const palette = await readPalette(join(toolDir, paletteFile));
+  const processed: Buffer[] = [];
+  for (const frameIndex of selectedFrames) {
+    const frame = frames[frameIndex];
+    const visibleWidth = Math.min(cropWidth, frame.width - minX);
+    const crop = Buffer.alloc(cropWidth * cropHeight * 4);
+    for (let y = 0; y < cropHeight; y++) {
+      const from = ((minY + y) * frame.width + minX) * 4;
+      frame.pixels.copy(crop, y * cropWidth * 4, from, from + Math.max(visibleWidth, 0) * 4);
+    }
+    const scale = Math.min(
+      1,
+      (entry.cell.width * 2) / cropWidth,
+      (entry.cell.height * 2) / cropHeight,
+    );
+    const preWidth = Math.max(1, Math.floor(cropWidth * scale));
+    const preHeight = Math.max(1, Math.floor(cropHeight * scale));
+    const shrunk = areaAverage(crop, cropWidth, cropHeight, preWidth, preHeight);
+    const resized = await sharp(shrunk, {
+      raw: { width: preWidth, height: preHeight, channels: 4 },
+    })
+      .resize(entry.cell.width, entry.cell.height, {
+        fit: 'contain',
+        kernel: 'nearest',
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    for (let index = 0; index < resized.length; index += 4) {
+      if (resized[index + 3] < 128) {
+        resized.fill(0, index, index + 4);
+      } else {
+        const nearest = nearestPaletteColor(
+          resized[index],
+          resized[index + 1],
+          resized[index + 2],
+          palette,
+        );
+        resized[index] = nearest[0];
+        resized[index + 1] = nearest[1];
+        resized[index + 2] = nearest[2];
+        resized[index + 3] = 255;
+      }
+    }
+    if ((entry.anchor ?? 'feet') === 'feet') {
+      let lowest = -1;
+      for (let y = entry.cell.height - 1; y >= 0 && lowest < 0; y--) {
+        for (let x = 0; x < entry.cell.width; x++) {
+          if (resized[(y * entry.cell.width + x) * 4 + 3] === 255) {
+            lowest = y;
+            break;
+          }
+        }
+      }
+      if (lowest >= 0 && lowest < entry.cell.height - 1) {
+        const shift = (entry.cell.height - 1 - lowest) * entry.cell.width * 4;
+        const aligned = Buffer.alloc(resized.length);
+        resized.copy(aligned, shift, 0, resized.length - shift);
+        processed.push(aligned);
+        continue;
+      }
+    }
+    processed.push(resized);
+  }
+  const atlasPixels = Buffer.alloc(outputFrames * entry.cell.width * entry.cell.height * 4);
+  processed.forEach((frame, index) => {
+    for (let y = 0; y < entry.cell.height; y++) {
+      frame.copy(
+        atlasPixels,
+        (y * outputFrames * entry.cell.width + index * entry.cell.width) * 4,
+        y * entry.cell.width * 4,
+        (y + 1) * entry.cell.width * 4,
+      );
+    }
+  });
+  const animations: Atlas['animations'] = {};
+  for (const [name, animation] of Object.entries(entry.animations)) {
+    if (
+      !Number.isInteger(animation.from) ||
+      !Number.isInteger(animation.to) ||
+      animation.from < 0 ||
+      animation.to < animation.from ||
+      animation.to >= outputFrames ||
+      !Number.isFinite(animation.fps) ||
+      animation.fps <= 0
+    ) {
+      throw new Error(`Invalid animation ${name} in sheet ${entry.name}`);
+    }
+    animations[name] = {
+      frames: Array.from(
+        { length: animation.to - animation.from + 1 },
+        (_, i) => animation.from + i,
+      ),
+      fps: animation.fps,
+      loop: animation.loop,
+    };
+  }
+  const atlas: Atlas = {
+    image: `${entry.name}.png`,
+    cell: { width: entry.cell.width, height: entry.cell.height },
+    frames: Array.from({ length: outputFrames }, (_, index) => ({
+      x: index * entry.cell.width,
+      y: 0,
+      w: entry.cell.width,
+      h: entry.cell.height,
+    })),
+    anchor: {
+      x: Math.floor(entry.cell.width / 2),
+      y:
+        (entry.anchor ?? 'feet') === 'feet' ? entry.cell.height : Math.floor(entry.cell.height / 2),
+    },
+    animations,
+  };
+  await mkdir(outDir, { recursive: true });
+  await sharp(atlasPixels, {
+    raw: { width: outputFrames * entry.cell.width, height: entry.cell.height, channels: 4 },
+  })
+    .png({ compressionLevel: 9 })
+    .toFile(join(outDir, atlas.image));
+  await writeFile(join(outDir, `${entry.name}.json`), `${JSON.stringify(atlas, null, 2)}\n`);
+  const manifestPath = join(outDir, 'atlases.json');
+  let existing: unknown;
+  try {
+    existing = JSON.parse(await readFile(manifestPath, 'utf8'));
+  } catch {
+    existing = undefined;
+  }
+  const names =
+    existing &&
+    typeof existing === 'object' &&
+    'atlases' in existing &&
+    Array.isArray(existing.atlases)
+      ? existing.atlases.filter((name): name is string => typeof name === 'string')
+      : [];
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify({ atlases: [...new Set([...names, entry.name])].sort() }, null, 2)}\n`,
+  );
+  return atlas;
 }
 
 async function makeVolcanoTile(
@@ -496,6 +1299,28 @@ async function main(args: string[]): Promise<void> {
     const imagePath = resolve(args[1] ?? 'docs/concepts/style_16bit.png');
     const outputPath = resolve(args[2] ?? 'tools/pixelize/palette.json');
     await extractPalette(imagePath, outputPath);
+    return;
+  }
+  const sheetsIndex = args.indexOf('--sheets');
+  if (sheetsIndex >= 0) {
+    const outIndex = args.indexOf('--out');
+    const onlyIndex = args.indexOf('--only');
+    if (!args[sheetsIndex + 1] || outIndex < 0 || !args[outIndex + 1]) {
+      throw new Error(
+        'Usage: tsx pixelize.ts --sheets <sheets.json> --out <directory> [--only <name>]',
+      );
+    }
+    const configPath = resolve(args[sheetsIndex + 1]);
+    const outDir = resolve(args[outIndex + 1]);
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { sheets: SheetEntry[] };
+    if (!Array.isArray(config.sheets)) throw new Error(`Invalid sheets manifest: ${configPath}`);
+    const selected =
+      onlyIndex >= 0
+        ? config.sheets.filter((sheet) => sheet.name === args[onlyIndex + 1])
+        : config.sheets;
+    if (onlyIndex >= 0 && selected.length === 0)
+      throw new Error(`Unknown sheet: ${args[onlyIndex + 1]}`);
+    for (const entry of selected) await buildSheet(entry, dirname(configPath), outDir);
     return;
   }
   const configIndex = args.indexOf('--config');
