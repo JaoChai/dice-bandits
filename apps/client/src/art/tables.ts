@@ -2,23 +2,32 @@ import type { ClassId, Region, SpaceKind } from '@dice-bandits/engine';
 
 export const REGION_VISUALS: Record<
   Region,
-  { ground: string; road: number; ambient: string; backdrop: string }
+  { ground: string; props: string; road: number; ambient: string; backdrop: string }
 > = {
   meadow: {
-    ground: 'board-meadow',
+    ground: 'ground-meadow',
+    props: 'props-meadow',
     road: 0,
     ambient: 'ambient-meadow',
     backdrop: 'backdrop-meadow',
   },
   desert: {
-    ground: 'board-desert',
+    ground: 'ground-desert',
+    props: 'props-desert',
     road: 1,
     ambient: 'ambient-desert',
     backdrop: 'backdrop-desert',
   },
-  snow: { ground: 'board-snow', road: 2, ambient: 'ambient-snow', backdrop: 'backdrop-snow' },
+  snow: {
+    ground: 'ground-snow',
+    props: 'props-snow',
+    road: 2,
+    ambient: 'ambient-snow',
+    backdrop: 'backdrop-snow',
+  },
   volcano: {
-    ground: 'board-volcano',
+    ground: 'ground-volcano',
+    props: 'props-volcano',
     road: 3,
     ambient: 'ambient-volcano',
     backdrop: 'backdrop-volcano',

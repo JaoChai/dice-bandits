@@ -1,7 +1,11 @@
 import type Phaser from 'phaser';
 import { hasAnim, sheetKey } from '../../art/atlas';
 
-const TOKEN_DEPTH = 4;
+/**
+ * Above every board layer (ground -10, road -5, tiles 0, props/ambient 10+)
+ * and above the fx band (31/35); only selection rings (40) draw over tokens.
+ */
+const TOKEN_DEPTH = 30;
 
 export function tokenOffsets(countAtSpace: number): { x: number; y: number }[] {
   if (countAtSpace <= 0) return [];

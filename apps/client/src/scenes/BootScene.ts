@@ -14,7 +14,7 @@ const monsters = [
 const atlasKeys = [
   ...classes.flatMap((id) => [`hero-${id}`, `token-${id}`, `portrait-${id}`]),
   ...monsters.map((id) => `monster-${id}`),
-  ...regions.map((id) => `board-${id}`),
+  ...regions.flatMap((id) => [`ground-${id}`, `props-${id}`, `ambient-${id}`]),
   'tiles',
   'fx',
   'cards',
@@ -28,7 +28,11 @@ const legacyImageKeys = new Set([
   'icons',
 ]);
 
+/** Board-layer atlases whose draw code has per-layer fallbacks: never alias. */
+const DECOR_PREFIXES = ['ground-', 'props-', 'ambient-'];
+
 function fallbackTextureKey(key: string): string {
+  if (DECOR_PREFIXES.some((prefix) => key.startsWith(prefix))) return '';
   if (key.startsWith('hero-')) return key;
   if (key.startsWith('token-') || key.startsWith('portrait-')) return `hero-${key.split('-')[1]}`;
   if (key.startsWith('board-') || key.startsWith('backdrop-'))
@@ -107,8 +111,11 @@ export default class BootScene extends Phaser.Scene {
     }
     for (const key of atlasKeys) {
       if (this.failedAtlases.has(key) || !this.activeAtlases.has(key)) {
-        const fallback = this.textures.get(fallbackTextureKey(key));
-        if (!this.textures.exists(key) && fallback) {
+        // Missing decor atlases stay missing: ground/decor/ambient draw their
+        // own per-layer fallbacks. Never alias the __MISSING placeholder.
+        const fallbackKey = fallbackTextureKey(key);
+        const fallback = fallbackKey ? this.textures.get(fallbackKey) : undefined;
+        if (!this.textures.exists(key) && fallback && fallback.key !== '__MISSING') {
           this.textures.addImage(key, fallback.getSourceImage() as HTMLImageElement);
         }
         continue;

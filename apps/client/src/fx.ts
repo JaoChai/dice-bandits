@@ -12,13 +12,16 @@ export function dice(scene: Phaser.Scene, object: Phaser.GameObjects.Image, spee
   scene.tweens.add({ targets: object, angle: object.angle + 360, duration: 350 * speed });
 }
 
+/** Board-scene fx draw above every board layer and under the tokens. */
+const BURST_DEPTH = 31;
+
 export function coinBurst(
   scene: Phaser.Scene,
   object: Phaser.GameObjects.Image,
   speed: number,
 ): void {
   if (speed <= 0) return;
-  const burst = scene.add.graphics().setDepth(7);
+  const burst = scene.add.graphics().setDepth(BURST_DEPTH);
   burst.fillStyle(0xffd447, 1);
   burst.fillCircle(object.x, object.y, 5);
   scene.tweens.add({
@@ -32,9 +35,12 @@ export function coinBurst(
   });
 }
 
+/** Board-scene fx draw above every board layer and under the tokens. */
+const PUFF_DEPTH = 35;
+
 export function dustPuff(scene: Phaser.Scene, x: number, y: number, speed: number): void {
   if (speed <= 0 || reducedMotion()) return;
-  const puff = scene.add.graphics().setDepth(3);
+  const puff = scene.add.graphics().setDepth(PUFF_DEPTH);
   puff.fillStyle(0xe8dcc3, 0.9);
   puff.fillCircle(x - 4, y, 2);
   puff.fillCircle(x, y - 1, 3);

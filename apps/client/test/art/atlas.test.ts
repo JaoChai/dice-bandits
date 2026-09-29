@@ -94,7 +94,7 @@ describe('atlas runtime', () => {
     expect(image.mock.calls.map(([key]) => key)).not.toContain('hero-knight-atlas-image');
     boot.create();
 
-    expect(info).toHaveBeenCalledWith('[art] using M1 sprites for', 29, 'keys');
+    expect(info).toHaveBeenCalledWith('[art] using M1 sprites for', 37, 'keys');
     expect(warn).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
     info.mockRestore();
@@ -169,7 +169,7 @@ describe('atlas runtime', () => {
     const boot = Object.assign(Object.create(BootScene.prototype), {
       failedAtlases: new Set<string>(),
       warnedAtlases: new Set<string>(),
-      activeAtlases: new Set(['board-meadow']),
+      activeAtlases: new Set(['backdrop-meadow']),
       load: {
         image: vi.fn(),
         text: vi.fn(),
@@ -188,14 +188,53 @@ describe('atlas runtime', () => {
     }) as BootScene;
 
     boot.preload();
-    loaderror.callback?.({ key: 'board-meadow' });
+    loaderror.callback?.({ key: 'backdrop-meadow' });
     boot.create();
 
-    expect(warn).toHaveBeenCalledWith('[art] fallback', 'board-meadow');
-    expect(addImage).toHaveBeenCalledWith('board-meadow', 'legacy-image');
+    expect(warn).toHaveBeenCalledWith('[art] fallback', 'backdrop-meadow');
+    expect(addImage).toHaveBeenCalledWith('backdrop-meadow', 'legacy-image');
     expect(root.querySelector('[data-testid="asset-error"]')).toBeNull();
     expect(boot.scene.start).toHaveBeenCalledWith('BoardScene');
     root.remove();
+    warn.mockRestore();
+  });
+
+  it('leaves missing board-layer atlases unregistered so draw code falls back per layer', () => {
+    const loaderror: { callback?: (file: { key: string }) => void } = {};
+    const addImage = vi.fn();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const boot = Object.assign(Object.create(BootScene.prototype), {
+      failedAtlases: new Set<string>(),
+      warnedAtlases: new Set<string>(),
+      activeAtlases: new Set<string>(),
+      load: {
+        image: vi.fn(),
+        text: vi.fn(),
+        json: vi.fn(),
+        on: vi.fn((event: string, callback: (file: { key: string }) => void) => {
+          if (event === 'loaderror') loaderror.callback = callback;
+        }),
+      },
+      textures: {
+        get: vi.fn(() => ({ key: '__MISSING', getSourceImage: () => 'missing-image' })),
+        exists: vi.fn().mockReturnValue(false),
+        addImage,
+      },
+      cache: { json: { get: vi.fn().mockReturnValue(undefined) } },
+      scene: { start: vi.fn() },
+    }) as BootScene;
+
+    boot.preload();
+    loaderror.callback?.({ key: 'props-meadow-atlas-image' });
+    boot.create();
+
+    const aliased = addImage.mock.calls.map(([key]) => key);
+    for (const region of ['meadow', 'desert', 'snow', 'volcano']) {
+      expect(aliased).not.toContain(`ground-${region}`);
+      expect(aliased).not.toContain(`props-${region}`);
+      expect(aliased).not.toContain(`ambient-${region}`);
+    }
+    expect(boot.scene.start).toHaveBeenCalledWith('BoardScene');
     warn.mockRestore();
   });
 });

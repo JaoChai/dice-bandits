@@ -1,9 +1,18 @@
 import Phaser from 'phaser';
-import type { GameState, GameEvent, Region } from '@dice-bandits/engine';
+import type { GameState, GameEvent } from '@dice-bandits/engine';
 import { coinBurst, dice, dustPuff, shake } from '../fx';
 import { reducedMotion } from '../art/motion';
 import { hasAnim } from '../art/atlas';
 import { createHeroToken, tokenLayout } from './board/tokens';
+import { boardLayout, HUD_RECTS, type ScreenPoint } from './board/layout';
+import { roadSegmentsFor, placeDecorations, placeAmbients } from '../art/decorations';
+import { drawGround } from './board/ground';
+import { drawRoad } from './board/road';
+import { drawTiles } from './board/tiles';
+import { drawDecor } from './board/decor';
+import { drawAmbients } from './board/ambient';
+
+const CANVAS = { width: 640, height: 360 };
 
 export default class BoardScene extends Phaser.Scene {
   private tokenObjects = new Map<number, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>();
@@ -87,40 +96,36 @@ export default class BoardScene extends Phaser.Scene {
     this.children.removeAll(true);
     this.tokenObjects.clear();
     this.spacePositions.clear();
-    const positions = new Map<number, { x: number; y: number }>();
-    const minX = Math.min(...state.board.spaces.map((space) => space.x));
-    const maxX = Math.max(...state.board.spaces.map((space) => space.x));
-    const minY = Math.min(...state.board.spaces.map((space) => space.y));
-    const maxY = Math.max(...state.board.spaces.map((space) => space.y));
-    const paddingX = 24;
-    const paddingTop = 55;
-    const paddingBottom = 27;
-    const boardHeightAvailable = 300 - paddingTop - paddingBottom;
-    const scale = Math.min(
-      (640 - paddingX * 2) / Math.max(1, maxX - minX),
-      boardHeightAvailable / Math.max(1, maxY - minY),
-    );
-    const boardWidth = (maxX - minX) * scale;
-    const boardHeight = (maxY - minY) * scale;
-    const offsetX = (640 - boardWidth) / 2;
-    const offsetY = paddingTop + (boardHeightAvailable - boardHeight) / 2;
+    const layout = boardLayout(state.board.spaces, CANVAS);
+    const toScreen = (x: number, y: number): ScreenPoint => layout.toScreen(x, y);
+    // Keep seeded decorations out from under the DOM HUD overlay zones.
+    const view = { ...toView(toScreen), avoid: HUD_RECTS };
+
+    // Layer 1: region ground covering the whole canvas.
+    drawGround(this, state.board.spaces, toScreen, CANVAS.width, CANVAS.height);
+
+    // Layer 2: cream road along every `next` edge.
+    drawRoad(this, roadSegmentsFor(state.board.spaces, view));
+
+    // Layer 3: space tiles with town-owner pips.
+    const owners = new Map<number, number | null>();
+    for (const town of state.towns) owners.set(town.spaceId, town.owner);
+    drawTiles(this, state.board.spaces, toScreen, layout.scale, owners);
+
+    // Layer 4: seeded props + ambient water/lava, y-sorted. The ambient layer
+    // is skipped entirely under prefers-reduced-motion.
+    const decorScale = layout.scale >= 16 ? 1 : layout.scale / 16;
+    drawDecor(this, placeDecorations(state.board.spaces, state.config.seed, view), decorScale);
+    if (!reducedMotion()) {
+      drawAmbients(this, placeAmbients(state.board.spaces, state.config.seed, view), decorScale);
+    }
+
+    // Layer 5: hero tokens (createHeroToken sets token depth itself).
+    const positions = new Map<number, ScreenPoint>();
     for (const space of state.board.spaces) {
-      const x = offsetX + (space.x - minX) * scale;
-      const y = offsetY + (space.y - minY) * scale;
-      positions.set(space.id, { x, y });
-      this.spacePositions.set(space.id, { x, y });
-      this.add
-        .image(x, y, `tile-${space.region as Region}`)
-        .setDisplaySize(20, 20)
-        .setDepth(0);
-      const marker = this.add.graphics().setDepth(1);
-      marker.fillStyle(kindColor(space.kind), 1);
-      marker.fillRoundedRect(x - 7, y - 7, 14, 14, 3);
-      const town = state.towns.find((candidate) => candidate.spaceId === space.id);
-      if (town?.owner !== null && town?.owner !== undefined) {
-        marker.fillStyle(seatColor(town.owner), 1);
-        marker.fillCircle(x + 7, y - 7, 4);
-      }
+      const point = toScreen(space.x, space.y);
+      positions.set(space.id, point);
+      this.spacePositions.set(space.id, point);
     }
     const leader = richestSeat(state);
     const offsets = tokenLayout(state.players.map((player) => player.pos));
@@ -132,7 +137,7 @@ export default class BoardScene extends Phaser.Scene {
       const y = point.y + offset.y;
       const token = createHeroToken(this, player.classId, x, y, !reducedMotion());
       this.tokenObjects.set(player.seat, token);
-      const decorations = this.add.graphics().setDepth(5);
+      const decorations = this.add.graphics().setDepth(40);
       decorations.lineStyle(
         2,
         player.seat === state.turnSeat ? 0xffdc72 : seatColor(player.seat),
@@ -151,11 +156,15 @@ export default class BoardScene extends Phaser.Scene {
     const current = state.players[state.turnSeat];
     const point = current ? positions.get(current.pos) : undefined;
     if (point) {
-      const glow = this.add.graphics().setDepth(2);
+      const glow = this.add.graphics().setDepth(39);
       glow.lineStyle(2, 0xffdc72, 0.9);
       glow.strokeCircle(point.x, point.y, 15);
     }
   }
+}
+
+function toView(toScreen: (x: number, y: number) => ScreenPoint) {
+  return { width: CANVAS.width, height: CANVAS.height, toScreen };
 }
 
 function wait(duration: number): Promise<void> {
@@ -164,19 +173,6 @@ function wait(duration: number): Promise<void> {
     : new Promise((resolve) => window.setTimeout(resolve, duration));
 }
 
-function kindColor(kind: string): number {
-  return (
-    {
-      castle: 0xf3c744,
-      town: 0x4bb67a,
-      shop: 0x60b8dc,
-      chest: 0xe6a34a,
-      monster: 0xc84d55,
-      event: 0xb678d6,
-      trap: 0x51445d,
-    }[kind] ?? 0xffffff
-  );
-}
 function seatColor(seat: number): number {
   return [0xf15b4a, 0x52c2ed, 0xa5d65b, 0xcd76d7][seat % 4]!;
 }
