@@ -70,6 +70,20 @@ describe('online screens', () => {
     expect(document.querySelector('[data-testid="online-back"]')?.textContent).toContain('ABCDE');
   });
 
+  it('shows a translated rate-limit message when room creation is throttled', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(Response.json({ error: 'online.error.rateLimited' }, { status: 429 }));
+    showOnlineScreens({ fetcher, socketFactory, onStartGame: vi.fn() });
+    document.querySelector<HTMLInputElement>('[data-testid="online-name"]')!.value = 'Ada';
+    document.querySelector<HTMLButtonElement>('[data-testid="online-create-submit"]')!.click();
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-testid="online-error"]')?.textContent).toContain(
+        'Too many rooms created. Try again in a moment.',
+      ),
+    );
+  });
+
   it('creates a room, stores its session and opens its lobby', async () => {
     const fetcher = vi
       .fn()

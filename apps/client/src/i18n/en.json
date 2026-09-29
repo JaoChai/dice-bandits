@@ -207,6 +207,7 @@
   "online.claim.connecting": "Checking available seats…",
   "online.defaultName": "Player",
   "online.game.loading": "Joining game…",
+  "online.error.rateLimited": "Too many rooms created. Try again in a moment.",
   "online.error.badName": "Enter a name with 1–16 characters.",
   "online.error.notFound": "Room not found or no longer available.",
   "online.error.staleAction": "That action is out of date. The game has been updated.",

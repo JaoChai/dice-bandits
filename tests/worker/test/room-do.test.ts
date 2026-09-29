@@ -55,6 +55,50 @@ async function send(socket: WebSocket, message: object) {
 const closeSocket = (socket: WebSocket | null | undefined) => socket?.close();
 
 describe('Room Durable Object and Worker routes', () => {
+  it('rate-limits room creation after 20 requests per minute', async () => {
+    const headers = { 'content-type': 'application/json', 'CF-Connecting-IP': '192.0.2.10' };
+    const responses: Response[] = [];
+    for (let i = 0; i < 21; i += 1) {
+      responses.push(
+        await SELF.fetch('https://example.com/api/rooms', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ name: 'Host' }),
+        }),
+      );
+    }
+    expect(responses.filter((response) => response.status === 201)).toHaveLength(20);
+    const limited = responses.find((response) => response.status === 429);
+    expect(limited).toBeDefined();
+    expect(await limited!.json()).toEqual({ error: 'online.error.rateLimited' });
+  });
+
+  it('rate-limits WebSocket upgrades after 60 requests per minute', async () => {
+    const created = await createRoom('Socket limit');
+    const responses: Response[] = [];
+    for (let i = 0; i < 61; i += 1) {
+      responses.push(
+        await SELF.fetch(
+          new Request(`https://example.com/api/rooms/${created.body.code}/ws`, {
+            headers: { Upgrade: 'websocket', 'CF-Connecting-IP': '192.0.2.11' },
+          }),
+        ),
+      );
+    }
+    for (const response of responses) {
+      response.webSocket?.accept();
+      response.webSocket?.close();
+    }
+    expect(responses.filter((response) => response.status === 101)).toHaveLength(60);
+    expect(responses.filter((response) => response.status === 429)).toHaveLength(1);
+  });
+
+  it('does not rate-limit health checks', async () => {
+    const responses = await Promise.all(
+      Array.from({ length: 25 }, () => SELF.fetch('https://example.com/api/health')),
+    );
+    expect(responses.every((response) => response.status === 200)).toBe(true);
+  });
   it('rejects an invalid room name at the Worker route', async () => {
     const response = await SELF.fetch('https://example.com/api/rooms', {
       method: 'POST',

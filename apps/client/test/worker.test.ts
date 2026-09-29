@@ -7,6 +7,8 @@ describe('Worker fetch handler', () => {
       DB: { prepare: vi.fn() },
       ASSETS: { fetch: vi.fn() },
       ROOM: { getByName: vi.fn() },
+      ROOM_CREATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
+      ROOM_JOIN_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
     };
     const response = await worker.fetch(
       new Request('https://example.com/api/rooms', {
