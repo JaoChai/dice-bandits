@@ -4,6 +4,8 @@ export interface WorkerEnv {
   DB: { prepare(query: string): { first(): Promise<unknown> } };
   ASSETS: { fetch(request: Request): Promise<Response> };
   ROOM: { getByName(name: string): { fetch(request: Request): Promise<Response> } };
+  ROOM_CREATE_LIMITER: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  ROOM_JOIN_LIMITER: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
 
 export { Room } from './room-do';
@@ -27,6 +29,10 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/rooms' && request.method === 'POST') {
+      const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+      const { success } = await env.ROOM_CREATE_LIMITER.limit({ key: `create:${ip}` });
+      if (!success) return jsonError('online.error.rateLimited', 429);
+
       let body: unknown;
       try {
         body = await request.json();
@@ -59,6 +65,9 @@ export default {
 
     const wsRoute = /^\/api\/rooms\/([A-Z0-9]{5})\/ws$/.exec(url.pathname);
     if (wsRoute && request.method === 'GET') {
+      const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+      const { success } = await env.ROOM_JOIN_LIMITER.limit({ key: `ws:${ip}` });
+      if (!success) return new Response('Too many connections', { status: 429 });
       const code = wsRoute[1]!;
       const forwarded = new Request(`https://room.internal/ws${url.search}`, request);
       return env.ROOM.getByName(code).fetch(forwarded);

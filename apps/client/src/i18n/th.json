@@ -207,6 +207,7 @@
   "online.claim.connecting": "กำลังตรวจสอบที่นั่งว่าง…",
   "online.defaultName": "ผู้เล่น",
   "online.game.loading": "กำลังเข้าร่วมเกม…",
+  "online.error.rateLimited": "สร้างห้องถี่เกินไป ลองใหม่อีกสักครู่",
   "online.error.badName": "กรุณาใส่ชื่อยาว 1–16 ตัวอักษร",
   "online.error.notFound": "ไม่พบห้องนี้ หรือห้องปิดไปแล้ว",
   "online.error.staleAction": "คำสั่งนี้ไม่เป็นปัจจุบัน เกมมีการอัปเดตแล้ว",
