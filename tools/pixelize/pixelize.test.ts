@@ -304,6 +304,24 @@ describe('spritesheet mode', () => {
     expect(JSON.parse(await readFile(join(sheetOut, 't3.json'), 'utf8'))).toEqual(atlas);
   });
 
+  it('keeps default frame selection and can emit a chosen source frame as a one-frame atlas', async () => {
+    const all = await buildSheet(sheetEntry, sheetBase, sheetOut);
+    const selected = await buildSheet(
+      { ...sheetEntry, name: 'selected', select: [1], animations: {} },
+      sheetBase,
+      sheetOut,
+    );
+    expect(selected.frames).toHaveLength(1);
+    expect(selected.frames[0]).toEqual({ x: 0, y: 0, w: 16, h: 16 });
+    const selectedPixels = await sharp(join(sheetOut, 'selected.png')).raw().toBuffer();
+    const firstPixels = await sharp(join(sheetOut, 't3.png'))
+      .extract({ left: 0, top: 0, width: 16, height: 16 })
+      .raw()
+      .toBuffer();
+    expect(selectedPixels).not.toEqual(firstPixels);
+    expect(all.frames).toHaveLength(3);
+  });
+
   it('uses only main-palette colors or full transparency', async () => {
     await buildSheet(sheetEntry, sheetBase, sheetOut);
     await assertPaletteOnly(join(sheetOut, 't3.png'), 'main');

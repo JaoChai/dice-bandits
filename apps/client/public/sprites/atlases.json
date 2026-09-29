@@ -1,3 +1,16 @@
 {
-  "atlases": []
+  "atlases": [
+    "hero-cleric",
+    "hero-knight",
+    "hero-mage",
+    "hero-thief",
+    "portrait-cleric",
+    "portrait-knight",
+    "portrait-mage",
+    "portrait-thief",
+    "token-cleric",
+    "token-knight",
+    "token-mage",
+    "token-thief"
+  ]
 }

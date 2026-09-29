@@ -219,6 +219,7 @@ export type SheetEntry = {
   frames: number;
   cell: { width: number; height: number };
   palette?: 'main' | 'backdrop';
+  select?: number[];
   animations: Record<string, { from: number; to: number; fps: number; loop: boolean }>;
   anchor?: 'feet' | 'center';
 };
@@ -289,16 +290,30 @@ export async function buildSheet(
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  if (info.width % entry.frames !== 0)
-    throw new Error(`Source width must divide evenly into ${entry.frames} frames: ${sourcePath}`);
-  const frameWidth = info.width / entry.frames;
-  const frames: Buffer[] = [];
-  let minX = frameWidth;
+  if (info.width < entry.frames)
+    throw new Error(`Source width must provide ${entry.frames} frames: ${sourcePath}`);
+  const selectedFrames = entry.select ?? Array.from({ length: entry.frames }, (_, i) => i);
+  if (
+    selectedFrames.length === 0 ||
+    selectedFrames.some(
+      (index, position) =>
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= entry.frames ||
+        selectedFrames.indexOf(index) !== position,
+    )
+  ) {
+    throw new Error(`select must contain unique source frame indices in range for ${entry.name}`);
+  }
+  const frames: Array<{ pixels: Buffer; width: number }> = [];
+  let minX = Number.POSITIVE_INFINITY;
   let minY = info.height;
   let maxX = -1;
   let maxY = -1;
   for (let frameIndex = 0; frameIndex < entry.frames; frameIndex++) {
-    const left = frameIndex * frameWidth;
+    const left = Math.floor((frameIndex * info.width) / entry.frames);
+    const right = Math.floor(((frameIndex + 1) * info.width) / entry.frames);
+    const frameWidth = right - left;
     const framePixels = Buffer.alloc(frameWidth * info.height * 4);
     for (let y = 0; y < info.height; y++) {
       for (let x = 0; x < frameWidth; x++) {
@@ -308,7 +323,7 @@ export async function buildSheet(
       }
     }
     const cutout = await removeFloodBackground(framePixels, frameWidth, info.height);
-    frames.push(cutout);
+    frames.push({ pixels: cutout, width: frameWidth });
     for (let y = 0; y < info.height; y++) {
       for (let x = 0; x < frameWidth; x++) {
         if (cutout[(y * frameWidth + x) * 4 + 3] > 0) {
@@ -320,17 +335,20 @@ export async function buildSheet(
       }
     }
   }
+  const outputFrames = selectedFrames.length;
   if (maxX < minX || maxY < minY) throw new Error(`No foreground pixels found in ${sourcePath}`);
   const cropWidth = maxX - minX + 1;
   const cropHeight = maxY - minY + 1;
   const paletteFile = entry.palette === 'backdrop' ? 'palette-backdrop.json' : 'palette.json';
   const palette = await readPalette(join(toolDir, paletteFile));
   const processed: Buffer[] = [];
-  for (const frame of frames) {
+  for (const frameIndex of selectedFrames) {
+    const frame = frames[frameIndex];
+    const visibleWidth = Math.min(cropWidth, frame.width - minX);
     const crop = Buffer.alloc(cropWidth * cropHeight * 4);
     for (let y = 0; y < cropHeight; y++) {
-      const from = ((minY + y) * frameWidth + minX) * 4;
-      frame.copy(crop, y * cropWidth * 4, from, from + cropWidth * 4);
+      const from = ((minY + y) * frame.width + minX) * 4;
+      frame.pixels.copy(crop, y * cropWidth * 4, from, from + Math.max(visibleWidth, 0) * 4);
     }
     const scale = Math.min(
       1,
@@ -387,7 +405,7 @@ export async function buildSheet(
     }
     processed.push(resized);
   }
-  const atlasPixels = Buffer.alloc(entry.frames * entry.cell.width * entry.cell.height * 4);
+  const atlasPixels = Buffer.alloc(outputFrames * entry.cell.width * entry.cell.height * 4);
   processed.forEach((frame, index) => {
     for (let y = 0; y < entry.cell.height; y++) {
       frame.copy(
@@ -405,7 +423,7 @@ export async function buildSheet(
       !Number.isInteger(animation.to) ||
       animation.from < 0 ||
       animation.to < animation.from ||
-      animation.to >= entry.frames ||
+      animation.to >= outputFrames ||
       !Number.isFinite(animation.fps) ||
       animation.fps <= 0
     ) {
@@ -423,7 +441,7 @@ export async function buildSheet(
   const atlas: Atlas = {
     image: `${entry.name}.png`,
     cell: { width: entry.cell.width, height: entry.cell.height },
-    frames: Array.from({ length: entry.frames }, (_, index) => ({
+    frames: Array.from({ length: outputFrames }, (_, index) => ({
       x: index * entry.cell.width,
       y: 0,
       w: entry.cell.width,
@@ -438,7 +456,7 @@ export async function buildSheet(
   };
   await mkdir(outDir, { recursive: true });
   await sharp(atlasPixels, {
-    raw: { width: entry.frames * entry.cell.width, height: entry.cell.height, channels: 4 },
+    raw: { width: outputFrames * entry.cell.width, height: entry.cell.height, channels: 4 },
   })
     .png({ compressionLevel: 9 })
     .toFile(join(outDir, atlas.image));
