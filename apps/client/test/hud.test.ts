@@ -107,6 +107,29 @@ describe('renderHud', () => {
     root.remove();
   });
 
+  it('toggles the event banner once per keyboard press across HUD rerenders', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    const dispatch = () => undefined;
+    renderHud(root, state, dispatch);
+    const banner = root.querySelector<HTMLElement>('[data-testid="event-banner"]')!;
+    const press = (key: string) =>
+      banner.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+
+    press('Enter');
+    expect(banner.classList.contains('expanded')).toBe(true);
+    press(' ');
+    expect(banner.classList.contains('expanded')).toBe(false);
+    for (let render = 0; render < 4; render += 1) renderHud(root, state, dispatch);
+    expect(root.querySelector('[data-testid="event-banner"]')).toBe(banner);
+    press('Enter');
+    expect(banner.classList.contains('expanded')).toBe(true);
+    press(' ');
+    expect(banner.classList.contains('expanded')).toBe(false);
+    root.remove();
+  });
+
   it('shows the frenzy notice in the event banner rather than canvas decoration', () => {
     const root = document.createElement('div');
     document.body.append(root);

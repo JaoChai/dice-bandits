@@ -114,12 +114,6 @@ export function renderHud(
   banner.querySelector('.world-chip')!.textContent = t(`worldRule.${state.worldRule}`);
   if (state.round >= 10 && !banner.querySelector('.event-text')!.textContent)
     banner.querySelector('.event-text')!.textContent = t('event.FrenzyStarted');
-  banner.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      banner.classList.toggle('expanded');
-    }
-  });
   const onlineStatus = root.querySelector<HTMLElement>('.online-status')!;
   const ownTakeover =
     online?.seats.find((seat) => seat.seat === online.you)?.controller === 'botTakeover';
