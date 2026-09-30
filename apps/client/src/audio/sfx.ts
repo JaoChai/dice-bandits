@@ -17,7 +17,6 @@ export function SfxPlayer(
   graph: AudioGraph,
   opts: {
     url: (id: SfxId) => string;
-    now: () => number;
     onStart?: (id: SfxId) => void;
     fetcher?: typeof fetch;
   },

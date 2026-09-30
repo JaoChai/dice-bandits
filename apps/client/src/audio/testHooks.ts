@@ -1,3 +1,9 @@
+declare global {
+  interface Window {
+    __audioLog?: string[];
+  }
+}
+
 const enabled = import.meta.env.VITE_TEST_HOOKS === '1';
 
 export function recordAudioStart(id: string): void {

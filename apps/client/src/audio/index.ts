@@ -38,73 +38,107 @@ let state: {
   runtime: AudioRuntime | null;
   ctxFactory: () => AudioContext | null;
   fetcher?: typeof fetch;
-  now: () => number;
 } | null = null;
 
 let listenerControl: AbortController | null = null;
 
+/** Runs an audio action, swallowing any failure — audio must never break the game. */
+function runSafely(action: () => void): void {
+  try {
+    action();
+  } catch (error) {
+    console.warn(`[audio] operation failed: ${describe(error)}`);
+  }
+}
+
+/** Wraps a listener body so a dispatch on a broken audio stack never escapes. */
+function listener(body: (event: Event) => void): (event: Event) => void {
+  return (event: Event) => {
+    runSafely(() => body(event));
+  };
+}
+
 export function initAudio(deps?: {
   makeContext?: () => AudioContext | null;
   fetcher?: typeof fetch;
-  now?: () => number;
   storage?: Stored | null;
 }): void {
-  if (state) return;
-  const storage = deps && 'storage' in deps ? (deps.storage ?? null) : loadStorage();
-  state = {
-    settings: loadAudioSettings(storage),
-    storage,
-    desiredMusic: 'none',
-    runtime: null,
-    ctxFactory: deps?.makeContext ?? defaultContext,
-    fetcher: deps?.fetcher,
-    now: deps?.now ?? defaultClock,
-  };
-  installListeners();
+  runSafely(() => {
+    if (state) return;
+    const storage = deps && 'storage' in deps ? (deps.storage ?? null) : loadStorage();
+    state = {
+      settings: loadAudioSettings(storage),
+      storage,
+      desiredMusic: 'none',
+      runtime: null,
+      ctxFactory: deps?.makeContext ?? defaultContext,
+      fetcher: deps?.fetcher,
+    };
+    installListeners();
+  });
 }
 
 export function onGameEvents(
   events: readonly GameEvent[],
   nextState: Pick<GameState, 'phase'>,
 ): void {
-  for (const id of sfxForEvents(events)) playSfx(id);
-  setMusic(musicForState(nextState));
+  runSafely(() => {
+    for (const id of sfxForEvents(events)) playSfx(id);
+    // While locked this only records the desired track — no runtime, no context, no fetch.
+    setMusic(musicForState(nextState));
+  });
 }
 
 export function playSfx(id: SfxId): void {
-  const runtime = state?.runtime;
-  if (!runtime || !runtime.unlocked) return;
-  runtime.sfx.play(id);
+  runSafely(() => {
+    const runtime = state?.runtime;
+    if (!runtime || !runtime.unlocked) return;
+    runtime.sfx.play(id);
+  });
 }
 
 export function setMusic(track: MusicId | 'none'): void {
-  if (!state || state.desiredMusic === track) return;
-  state.desiredMusic = track;
-  const runtime = ensureRuntime();
-  if (!runtime || !runtime.unlocked) return;
-  runtime.music.set(track);
+  runSafely(() => {
+    if (!state || state.desiredMusic === track) return;
+    state.desiredMusic = track;
+    // Never build the AudioContext outside a user gesture (autoplay policy): while
+    // locked the track is recorded and unlock() starts it.
+    const runtime = state.runtime;
+    if (!runtime || !runtime.unlocked) return;
+    runtime.music.set(track);
+  });
 }
 
 export function getAudioSettings(): AudioSettings {
-  return { ...(state ? state.settings : loadAudioSettings()) };
+  try {
+    return { ...(state ? state.settings : loadAudioSettings()) };
+  } catch {
+    return loadAudioSettings(null);
+  }
 }
 
 export function setAudioSettings(patch: Partial<AudioSettings>): AudioSettings {
-  if (!state) return getAudioSettings();
-  state.settings = {
-    muted: patch.muted ?? state.settings.muted,
-    music: patch.music ?? state.settings.music,
-    sfx: patch.sfx ?? state.settings.sfx,
-  };
-  saveAudioSettings(state.settings, state.storage);
-  if (state.runtime) applySettings(state.runtime.graph, state.settings);
-  return { ...state.settings };
+  try {
+    if (!state) return getAudioSettings();
+    state.settings = {
+      muted: patch.muted ?? state.settings.muted,
+      music: patch.music ?? state.settings.music,
+      sfx: patch.sfx ?? state.settings.sfx,
+    };
+    saveAudioSettings(state.settings, state.storage);
+    if (state.runtime) applySettings(state.runtime.graph, state.settings);
+    return { ...state.settings };
+  } catch {
+    return getAudioSettings();
+  }
 }
 
 export function resetAudioForTests(): void {
-  listenerControl?.abort();
-  listenerControl = null;
-  state = null;
+  runSafely(() => {
+    listenerControl?.abort();
+    listenerControl = null;
+    state = null;
+  });
 }
 
 function ensureRuntime(): AudioRuntime | null {
@@ -117,7 +151,6 @@ function ensureRuntime(): AudioRuntime | null {
     applySettings(graph, state.settings);
     const sfx = SfxPlayer(graph, {
       url: SFX_URL,
-      now: state.now,
       onStart: recordAudioStart,
       fetcher: state.fetcher,
     });
@@ -137,7 +170,7 @@ function unlock(): void {
   const runtime = ensureRuntime();
   if (!runtime || runtime.unlocked) return;
   runtime.unlocked = true;
-  void runtime.graph.ctx.resume().catch((error: unknown) => {
+  runtime.graph.ctx.resume().catch((error: unknown) => {
     console.warn(`[audio] resume failed: ${describe(error)}`);
   });
   if (state.desiredMusic !== 'none') runtime.music.set(state.desiredMusic);
@@ -146,43 +179,40 @@ function unlock(): void {
 function installListeners(): void {
   listenerControl = new AbortController();
   const signal = listenerControl.signal;
-  const onGesture = () => unlock();
-  document.addEventListener('pointerdown', onGesture, { capture: true, signal });
-  document.addEventListener('keydown', onGesture, { capture: true, signal });
+  const onGesture = (): void => unlock();
+  document.addEventListener('pointerdown', listener(onGesture), { capture: true, signal });
+  document.addEventListener('keydown', listener(onGesture), { capture: true, signal });
   document.addEventListener(
     'click',
-    (event) => {
+    listener((event) => {
       unlock();
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('button:not(:disabled)')) playSfx('click');
-    },
+    }),
     { capture: true, signal },
   );
   let suspendedByVisibility = false;
   document.addEventListener(
     'visibilitychange',
-    () => {
+    listener(() => {
       const ctx = state?.runtime?.graph.ctx;
       if (!ctx) return;
       if (document.hidden) {
         suspendedByVisibility = true;
-        void ctx.suspend().catch(() => undefined);
+        ctx.suspend().catch(() => undefined);
       } else if (suspendedByVisibility) {
         suspendedByVisibility = false;
-        void ctx.resume().catch(() => undefined);
+        ctx.resume().catch(() => undefined);
       }
-    },
+    }),
     { capture: true, signal },
   );
 }
 
 function defaultContext(): AudioContext | null {
-  const Ctor = globalThis.AudioContext;
+  const scope = globalThis as { webkitAudioContext?: typeof AudioContext };
+  const Ctor = globalThis.AudioContext ?? scope.webkitAudioContext;
   return Ctor ? new Ctor() : null;
-}
-
-function defaultClock(): number {
-  return typeof performance !== 'undefined' ? performance.now() : 0;
 }
 
 function loadStorage(): Stored | null {

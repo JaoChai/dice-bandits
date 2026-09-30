@@ -25,7 +25,6 @@ select {
 button {
   color: inherit;
   cursor: pointer;
-  touch-action: manipulation;
 }
 #app {
   width: min(100vw, 640px);

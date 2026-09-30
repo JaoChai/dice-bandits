@@ -13,6 +13,7 @@ import {
   asAudioContext,
   FakeAudioBuffer,
   FakeAudioContext,
+  FakeBufferSourceNode,
   fakeAudioUrlMap,
   fakeFetch,
   flushAudio,
@@ -23,12 +24,6 @@ import {
 const event = (type: string): GameEvent => ({ type, seat: null, params: {} });
 const boardState = { phase: { kind: 'board' } } as unknown as Pick<GameState, 'phase'>;
 const battleState = { phase: { kind: 'battle' } } as unknown as Pick<GameState, 'phase'>;
-
-declare global {
-  interface Window {
-    __audioLog?: string[];
-  }
-}
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -56,7 +51,6 @@ function harness(options?: {
   initAudio({
     makeContext: options?.makeContext ?? (() => asAudioContext(fake)),
     fetcher,
-    now: () => 0,
     storage,
   });
   return {
@@ -69,7 +63,7 @@ function harness(options?: {
 }
 
 function startedSources(fake: FakeAudioContext) {
-  return sourcesOf(fake).filter((source) => source.started);
+  return sourcesOf(asAudioContext(fake)).filter((source) => source.started);
 }
 
 function startedMusic(fake: FakeAudioContext) {
@@ -87,11 +81,19 @@ beforeEach(() => {
 
 describe('audio public API', () => {
   it('does not create, resume or start anything before the first gesture', async () => {
-    const h = harness();
+    let contextsMade = 0;
+    const h = harness({
+      makeContext: () => {
+        contextsMade += 1;
+        return asAudioContext(h.fake);
+      },
+    });
     playSfx('click');
     setMusic('board');
     onGameEvents([event('DiceRolled')], battleState);
     await flushAudio();
+    expect(contextsMade).toBe(0);
+    expect(h.fetcher.requests).toEqual([]);
     expect(h.fake.sources.length).toBe(0);
     expect(h.fake.resumeCalls).toBe(0);
     expect(getAudioSettings()).toEqual({ muted: false, music: 0.5, sfx: 0.8 });
@@ -233,7 +235,6 @@ describe('audio public API', () => {
     audio.initAudio({
       makeContext: () => asAudioContext(fake),
       fetcher,
-      now: () => 0,
       storage: memoryStorage(),
     });
     try {
@@ -277,7 +278,6 @@ describe('audio public API', () => {
     audio.initAudio({
       makeContext: () => asAudioContext(fake),
       fetcher,
-      now: () => 0,
       storage: memoryStorage(),
     });
     class FakeMediaProbe {
@@ -306,7 +306,6 @@ describe('audio public API', () => {
     audio.initAudio({
       makeContext: () => asAudioContext(fake),
       fetcher,
-      now: () => 0,
       storage: memoryStorage(),
     });
     class FakeMediaProbe {
@@ -325,5 +324,109 @@ describe('audio public API', () => {
     }
     expect(fetcher.requests).toContain('/audio/music/board.ogg');
     expect(fetcher.requests).not.toContain('/audio/music/board.mp3');
+  });
+});
+
+describe('context constructor fallback', () => {
+  it('uses webkitAudioContext when AudioContext is absent and still plays', async () => {
+    vi.resetModules();
+    const audio = await import('../../src/audio');
+    const created: FakeAudioContext[] = [];
+    class WebkitStub extends FakeAudioContext {
+      constructor() {
+        super();
+        created.push(this);
+      }
+    }
+    const originalAudio = (globalThis as { AudioContext?: unknown }).AudioContext;
+    const originalWebkit = (globalThis as { webkitAudioContext?: unknown }).webkitAudioContext;
+    Object.defineProperty(globalThis, 'AudioContext', { configurable: true, value: undefined });
+    Object.defineProperty(globalThis, 'webkitAudioContext', {
+      configurable: true,
+      value: WebkitStub,
+    });
+    const fetcher = fakeFetch(fakeAudioUrlMap());
+    try {
+      audio.initAudio({ fetcher, storage: memoryStorage() });
+      audio.setMusic('board');
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      await flushAudio();
+    } finally {
+      Object.defineProperty(globalThis, 'AudioContext', {
+        configurable: true,
+        value: originalAudio,
+      });
+      Object.defineProperty(globalThis, 'webkitAudioContext', {
+        configurable: true,
+        value: originalWebkit,
+      });
+    }
+    expect(created.length).toBe(1);
+    expect(startedMusic(created[0] as unknown as FakeAudioContext).length).toBe(1);
+  });
+
+  it('stays a safe no-op when neither AudioContext nor webkitAudioContext exists', async () => {
+    vi.resetModules();
+    const audio = await import('../../src/audio');
+    const originalAudio = (globalThis as { AudioContext?: unknown }).AudioContext;
+    const originalWebkit = (globalThis as { webkitAudioContext?: unknown }).webkitAudioContext;
+    Object.defineProperty(globalThis, 'AudioContext', { configurable: true, value: undefined });
+    Object.defineProperty(globalThis, 'webkitAudioContext', {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      audio.initAudio({ fetcher: fakeFetch({}), storage: memoryStorage() });
+      expect(() => {
+        audio.setMusic('board');
+        audio.playSfx('dice');
+        audio.onGameEvents([], boardState);
+        document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        audio.setAudioSettings({ muted: true });
+      }).not.toThrow();
+    } finally {
+      Object.defineProperty(globalThis, 'AudioContext', {
+        configurable: true,
+        value: originalAudio,
+      });
+      Object.defineProperty(globalThis, 'webkitAudioContext', {
+        configurable: true,
+        value: originalWebkit,
+      });
+    }
+    expect(audio.getAudioSettings()).toEqual({ muted: true, music: 0.5, sfx: 0.8 });
+  });
+
+  it('contains internal playback failures so no API call or listener ever throws', async () => {
+    vi.resetModules();
+    const audio = await import('../../src/audio');
+    const fake = new FakeAudioContext();
+    const fetcher = fakeFetch(fakeAudioUrlMap());
+    audio.initAudio({
+      makeContext: () => asAudioContext(fake),
+      fetcher,
+      storage: memoryStorage(),
+    });
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushAudio();
+    fake.createBufferSource = () => {
+      const source = new FakeBufferSourceNode();
+      source.buffer = new FakeAudioBuffer(1) as unknown as AudioBuffer;
+      source.start = () => {
+        throw new Error('start failed');
+      };
+      return source;
+    };
+    expect(() => {
+      audio.onGameEvents([event('DiceRolled'), event('DamageDealt')], battleState);
+      audio.playSfx('coin');
+      audio.setMusic('battle');
+      audio.setAudioSettings({ muted: true });
+    }).not.toThrow();
+    document.body.innerHTML = '<button id="on">Go</button>';
+    expect(() => {
+      document.getElementById('on')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }).not.toThrow();
+    expect(audio.getAudioSettings().muted).toBe(true);
   });
 });

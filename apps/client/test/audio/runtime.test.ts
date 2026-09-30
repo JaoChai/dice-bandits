@@ -107,7 +107,7 @@ describe('sfx player', () => {
     const fake = new FakeAudioContext();
     const graph = makeGraph(fake);
     const fetcher = fakeFetch(fakeAudioUrlMap());
-    const player = SfxPlayer(graph, { url: sfxUrl, now: () => 0, fetcher });
+    const player = SfxPlayer(graph, { url: sfxUrl, fetcher });
     player.preload();
     await flushAudio();
     player.play('dice');
@@ -121,7 +121,7 @@ describe('sfx player', () => {
     const fake = new FakeAudioContext();
     const graph = makeGraph(fake);
     const fetcher = fakeFetch(fakeAudioUrlMap());
-    const player = SfxPlayer(graph, { url: sfxUrl, now: () => 0, fetcher });
+    const player = SfxPlayer(graph, { url: sfxUrl, fetcher });
     player.preload();
     await flushAudio();
     player.play('dice');
@@ -137,8 +137,7 @@ describe('sfx player', () => {
     const fake = new FakeAudioContext();
     const graph = makeGraph(fake);
     const fetcher = fakeFetch(fakeAudioUrlMap());
-    const nowMs = 0;
-    const player = SfxPlayer(graph, { url: sfxUrl, now: () => nowMs, fetcher });
+    const player = SfxPlayer(graph, { url: sfxUrl, fetcher });
     player.preload();
     await flushAudio();
     const ids = ['dice', 'step', 'hit', 'ko', 'coin', 'item', 'town'] as const;
@@ -150,8 +149,7 @@ describe('sfx player', () => {
     const fake = new FakeAudioContext();
     const graph = makeGraph(fake);
     const fetcher = fakeFetch({});
-    const nowMs = 0;
-    const player = SfxPlayer(graph, { url: sfxUrl, now: () => nowMs, fetcher });
+    const player = SfxPlayer(graph, { url: sfxUrl, fetcher });
     player.preload();
     await flushAudio();
     expect(warns.length).toBe(SFX_COUNT);
@@ -163,7 +161,7 @@ describe('sfx player', () => {
     const fake = new FakeAudioContext();
     const graph = makeGraph(fake);
     const fetcher = fakeFetch(fakeAudioUrlMap());
-    const player = SfxPlayer(graph, { url: sfxUrl, now: () => 0, fetcher });
+    const player = SfxPlayer(graph, { url: sfxUrl, fetcher });
     player.preload();
     await flushAudio();
     fake.currentTime = 7;
