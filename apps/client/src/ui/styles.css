@@ -848,6 +848,54 @@ h1 {
   min-height: 32px;
   font-size: 12px;
 }
+.audio-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid #8c7593;
+  border-radius: 6px;
+  padding: 4px;
+  background: #292238;
+  color: #fff4dc;
+}
+.audio-toggle:hover {
+  filter: brightness(1.16);
+}
+.audio-toggle .audio-slash {
+  display: none;
+}
+.audio-toggle[aria-pressed='true'] .audio-waves {
+  display: none;
+}
+.audio-toggle[aria-pressed='true'] .audio-slash {
+  display: inline;
+}
+.audio-dialog {
+  width: min(92%, 340px);
+}
+.audio-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #fff4dc;
+}
+.audio-slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.audio-value {
+  min-width: 38px;
+  text-align: right;
+  font-size: 12px;
+}
+.audio-dialog input[type='range'] {
+  width: min(38vw, 170px);
+  accent-color: #e1a54f;
+}
 .event-banner {
   position: absolute;
   z-index: 4;

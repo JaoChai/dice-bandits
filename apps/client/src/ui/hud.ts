@@ -3,6 +3,7 @@ import type { PublicSeat } from '@dice-bandits/room';
 import type { RoomSocketStatus } from '../online/socket';
 import { data } from '@dice-bandits/engine';
 import { getLang, setLang, t } from '../i18n';
+import { getAudioSettings, setAudioSettings } from '../audio';
 import { renderBattleUi } from './battleUi';
 import { showActionDialog, showPhaseDialog } from './dialogs';
 
@@ -63,9 +64,10 @@ export function renderHud(
         )
         .join('')
     : '';
-  const header = `<header class="game-topline"><strong class="pixel">${t('title.gameName')}</strong><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span><nav class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></nav><button class="text-button" data-action="exit">${t('setup.back')}</button></header>`;
+  const header = `<header class="game-topline"><strong class="pixel">${t('title.gameName')}</strong><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span><nav class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></nav>${audioToggleHtml()}<button class="text-button" data-action="exit">${t('setup.back')}</button></header>`;
   if (!root.querySelector('.game-shell')) {
     root.innerHTML = `<section class="game-shell" data-testid="screen-board"><div class="board-stage" id="phaser-board"></div>${header}<div class="event-banner frame" data-testid="event-banner" role="status" tabindex="0"><span class="event-meta"><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span></span><span class="event-text">${state.round >= 10 ? t('event.FrenzyStarted') : ''}</span></div><div class="online-status" aria-live="polite"></div><section class="seat-hud">${seats}</section><nav class="action-tray action-bar frame" data-testid="action-tray" aria-label="${t('board.actions')}"></nav><div class="rotate-hint" data-testid="rotate-hint">${t('board.rotateHint')}</div></section>`;
+    bindAudioToggle(root.querySelector('.game-topline [data-testid="audio-toggle"]'));
   } else {
     const existingHeader = root.querySelector('.game-topline');
     if (existingHeader) {
@@ -79,6 +81,9 @@ export function renderHud(
       existingHeader.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach((button) => {
         button.setAttribute('aria-pressed', String(button.dataset.lang === getLang()));
       });
+      syncAudioToggle(
+        existingHeader.querySelector<HTMLButtonElement>('[data-testid="audio-toggle"]'),
+      );
     }
   }
   const shell = root.querySelector<HTMLElement>('.game-shell')!;
@@ -236,4 +241,31 @@ function escapeHtml(value: string): string {
     (character) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!,
   );
+}
+
+/** Pixel-style speaker SVG: waves show when sound is on, a red slash when muted. */
+function audioToggleHtml(): string {
+  const muted = getAudioSettings().muted;
+  const label = muted ? t('audio.unmute') : t('audio.mute');
+  return `<button type="button" class="audio-toggle" data-testid="audio-toggle" aria-pressed="${muted}" aria-label="${label}" title="${label}"><svg viewBox="0 0 16 16" width="22" height="22" aria-hidden="true" focusable="false"><g shape-rendering="crispEdges" fill="currentColor"><rect x="2" y="6" width="2" height="4"/><rect x="4" y="5" width="2" height="6"/><rect x="6" y="4" width="2" height="8"/><g class="audio-waves"><rect x="10" y="6" width="1" height="4"/><rect x="12" y="4" width="1" height="8"/></g></g><g class="audio-slash" shape-rendering="crispEdges" stroke="#e2606c" stroke-width="2"><line x1="1" y1="15" x2="15" y2="1"/></g></svg></button>`;
+}
+
+/** Bind the mute handler exactly once per button element. */
+function bindAudioToggle(button: HTMLButtonElement | null): void {
+  if (!button || button.dataset.audioBound) return;
+  button.dataset.audioBound = '1';
+  button.addEventListener('click', () => {
+    setAudioSettings({ muted: !getAudioSettings().muted });
+    syncAudioToggle(button);
+  });
+}
+
+/** Refresh aria-pressed / aria-label from the current settings (no rebind, no recreate). */
+function syncAudioToggle(button: HTMLButtonElement | null): void {
+  if (!button) return;
+  const muted = getAudioSettings().muted;
+  button.setAttribute('aria-pressed', String(muted));
+  const label = muted ? t('audio.unmute') : t('audio.mute');
+  button.setAttribute('aria-label', label);
+  button.setAttribute('title', label);
 }
