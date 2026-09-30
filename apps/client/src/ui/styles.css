@@ -882,6 +882,10 @@ h1 {
   gap: 10px;
   color: #fff4dc;
 }
+.audio-mute-row {
+  justify-content: flex-start;
+  gap: 8px;
+}
 .audio-slider {
   display: inline-flex;
   align-items: center;
