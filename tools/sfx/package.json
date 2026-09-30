@@ -1,0 +1,14 @@
+{
+  "name": "@dice-bandits/sfx",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --target ES2023 --module ESNext --moduleResolution Bundler --strict --skipLibCheck *.ts",
+    "generate": "tsx generate.ts"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15",
+    "vitest": "5.0.2"
+  }
+}
