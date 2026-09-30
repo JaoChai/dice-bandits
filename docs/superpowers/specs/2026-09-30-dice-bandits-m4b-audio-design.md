@@ -46,10 +46,11 @@ per-region music; accounts (M3); new game screens or modes.
 
 ### 4.1 Sound effects (12, generated)
 
-`tools/sfx/generate.mjs` synthesises each sound from a small parameter table (oscillator
-type, pitch envelope, duration, noise, volume envelope) and writes mono 22.05 kHz files to
-`apps/client/public/audio/sfx/<id>.ogg` plus an `.mp3` fallback. The script is
-deterministic (same table → same bytes), so tweaks are one-line table edits.
+`tools/sfx` (a new workspace, like `tools/pixelize`) synthesises each sound in pure
+TypeScript from a small parameter table (wave, pitch sweep, duration, volume) and writes
+16-bit mono 22.05 kHz WAV files to `apps/client/public/audio/sfx/<id>.wav`. WAV decodes in
+every browser including Safari, needs no encoder (no ffmpeg in CI), and the generator is
+byte-for-byte deterministic, so tweaks are one-line table edits. 12 sounds ≈ 4 s ≈ 180 KB.
 
 | id | Sound | Triggered by (engine `GameEvent.type` / UI) |
 |---|---|---|
@@ -70,27 +71,41 @@ Unmapped event types play nothing.
 
 ### 4.2 Music (2, CC0)
 
-The owner picks one board and one battle track from this shortlist after listening. Every
-page was fetched and shows **CC0** as its only licence (checked 2026-09-30).
+**Chosen (owner approved 2026-09-30):** board = **board-2 "The Arplands"**, battle =
+**battle-1 "8bit Action Boss Battle"**. Chosen after a listening review by Gemini 3.8 Flash
+(OpenRouter) of each full track and of each loop seam (last 4 s + first 4 s): both scored
+9/10 with a seamless seam. The full shortlist is kept below for the record. Every page was
+fetched and shows **CC0** as its only licence (checked 2026-09-30).
 
 | Slot | Title | Author | Page | Length | MP3 size |
 |---|---|---|---|---:|---:|
 | board-1 | Flowerbed Fields [Loop] | Zane Little Music | https://opengameart.org/content/flowerbed-fields-loop | 105.9 s | 1.27 MB |
-| board-2 | The Arplands | LordZintick | https://opengameart.org/content/the-arplands | 144.0 s | 1.44 MB |
+| **board-2** ✅ | The Arplands | LordZintick | https://opengameart.org/content/the-arplands | 144.0 s | 1.44 MB |
 | board-3 | Chiptune: Exploration | ansimuz | https://opengameart.org/content/chiptune-exploration | 44.3 s | 0.53 MB |
-| battle-1 | 8bit Action Boss Battle | MintoDog | https://opengameart.org/content/8bit-action-boss-battle | 62.9 s | 0.76 MB |
+| **battle-1** ✅ | 8bit Action Boss Battle | MintoDog | https://opengameart.org/content/8bit-action-boss-battle | 62.9 s | 0.76 MB |
 | battle-2 | Rin's Theme (Loopable chiptune) | request | https://opengameart.org/content/rins-theme-loopable-chiptune-adventurebattle-bgm | 129.6 s | 1.30 MB |
 | battle-3 | 8-Bit Bluesy Battle Theme | emanresU | https://opengameart.org/content/8-bit-bluesy-battle-theme | 38.3 s | 0.46 MB |
 
-The two chosen tracks ship as `apps/client/public/audio/music/{board,battle}.ogg` plus
-`.mp3` fallback. Loops use the decoded `AudioBuffer` with `loop = true` from the OGG source
-(MP3 encoder padding can cause an audible gap). `apps/client/public/audio/CREDITS.md` records
-title, author, page URL, download URL, licence and retrieval date for each track.
+Source files: `https://opengameart.org/sites/default/files/the_arplands_0.ogg` and
+`https://opengameart.org/sites/default/files/8bit_action_boss_battle_bpm145_0.ogg`.
+
+**Loudness match.** Measured mean volume: board-2 −18.0 dB, battle-1 −11.8 dB, so battle
+would jump ~6 dB louder. Both tracks are normalised with
+`ffmpeg -af loudnorm=I=-18:TP=-2:LRA=11 -ar 44100` before encoding (measured result:
+−17.0 and −17.9 LUFS integrated).
+
+**Encoding.** `apps/client/public/audio/music/{board,battle}.ogg` (libvorbis `-q:a 2`) plus
+`.mp3` fallback (libmp3lame 64 kb/s). Measured sizes: board 1.34 MB OGG / 1.15 MB MP3,
+battle 0.58 MB OGG / 0.50 MB MP3. Loops use the decoded `AudioBuffer` with `loop = true`;
+OGG is preferred because MP3 encoder padding can cause an audible gap.
+`apps/client/public/audio/CREDITS.md` records title, author, page URL, download URL, licence,
+retrieval date and the normalisation command for each track.
 
 ### 4.3 Budgets
 
 - All SFX files together ≤ **300 KB**.
-- Each music file ≤ **1.5 MB**; total `public/audio` ≤ **3.5 MB**.
+- Each music file ≤ **1.5 MB**; total `public/audio` (both formats) ≤ **4 MB**. A player
+  downloads only one format (chosen by `canPlayType`), about 1.9 MB of music at most.
 - Enforced by a unit test and `scripts/check-audio-budget.mjs`, like the sprite budget.
 - Music loads **lazily after the first user gesture**, so the title screen is not slower.
 
@@ -104,7 +119,7 @@ title, author, page URL, download URL, licence and retrieval date for each track
 | `audio/context.ts` | Creates one `AudioContext` lazily; `unlock()` on the first `pointerdown`/`keydown`; master/music/sfx `GainNode`s; returns `null` when Web Audio is missing | settings |
 | `audio/sfx.ts` | Decodes SFX buffers once; `playSfx(id)`; throttles the same id within **80 ms**; max **6** simultaneous voices | context |
 | `audio/music.ts` | `setMusic('board' \| 'battle' \| 'none')`; 500 ms cross-fade; pauses on `visibilitychange` hidden, resumes on visible | context |
-| `audio/events.ts` | Pure `sfxForEvents(events: GameEvent[]): SfxId[]` (dedupes within one batch) and `musicForState(state: GameState): 'board' \| 'battle' \| 'none'` | engine types only |
+| `audio/events.ts` | Pure `sfxForEvents(events: GameEvent[]): SfxId[]` (dedupes within one batch) and `musicForState(state): 'board' \| 'battle'` | engine types only |
 | `audio/index.ts` | Public API: `initAudio()`, `onGameEvents(events, state)`, `playSfx`, `setMusic`, `getAudioSettings`, `setAudioSettings` | all above |
 
 `musicForState` returns `battle` when `state.phase.kind === 'battle'`, `board` otherwise, and
@@ -140,15 +155,18 @@ Unit (Vitest, `apps/client/test/audio/`):
 - Settings: defaults, round-trip, invalid JSON, throwing `localStorage`.
 - Mute: master gain goes to 0; unmute restores the saved volumes.
 - No Web Audio (`AudioContext` undefined): all APIs are no-ops and do not throw.
-- Budget: SFX total ≤ 300 KB, each music file ≤ 1.5 MB, total ≤ 3.5 MB.
-- Generator: running `tools/sfx/generate.mjs` twice produces identical bytes.
+- Budget: SFX total ≤ 300 KB, each music file ≤ 1.5 MB, total ≤ 4 MB.
+- Generator: synthesising the table twice produces identical WAV bytes.
 
 E2E (Playwright, existing suites unchanged and passing):
 - `audio-toggle` visible on the board; toggling flips `aria-pressed`; state survives reload.
 - Sound settings dialog: slider values persist across reload.
 - A full hot-seat game with audio enabled reaches results with 0 console errors.
-- A spy on `AudioBufferSourceNode.prototype.start` (injected via `addInitScript`) records at
-  least `dice` and `hit` during that game, proving events reach the audio layer.
+- With `VITE_TEST_HOOKS=1` the audio module appends each started SFX id to
+  `window.__audioLog` (compiled out of production builds and checked like `__db`); the E2E
+  game asserts it contains at least `dice` and `hit`.
+- Every `/audio/` response in the E2E run is 200 with an `audio/*` content type (the SPA
+  fallback would otherwise return HTML for a missing file).
 
 Live acceptance after deploy:
 - 3 games of 1 human + 3 bots at normal speed reach results, 0 stalls, 0 console errors.
@@ -164,6 +182,6 @@ That judgement is the owner's listening step.
   returns `undefined`, plus the live 1-human/3-bot stall probe.
 - **Noise during fast bot play** → 80 ms throttle, per-batch dedupe, 6-voice cap.
 - **Loop gap** → loop from decoded OGG buffers; owner listens to the seam.
-- **Mobile Safari** → unlock on first gesture; OGG not supported there, so the MP3 fallback
-  is chosen by `canPlayType`.
+- **Mobile Safari** → unlock on first gesture; if OGG is not playable the MP3 music fallback
+  is chosen by `canPlayType`; SFX are WAV, which every browser decodes.
 - **Licence drift** → CREDITS.md stores the page URL and retrieval date for each track.
