@@ -16,6 +16,7 @@ export class GameController {
   private readonly speed: number;
   private readonly onEvents: (events: GameEvent[], state: GameState) => Promise<void>;
   private botRun: Promise<void> | null = null;
+  private dispatching = false;
 
   constructor(opts: {
     state: GameState;
@@ -43,17 +44,25 @@ export class GameController {
   }
 
   async dispatch(action: Action): Promise<void> {
-    let result;
+    // The HUD may expose the next action before the current animation finishes.
+    // Never let a second state update tear down its scene/tween mid-await.
+    if (this.dispatching) return;
+    this.dispatching = true;
     try {
-      result = step(this.currentState, action);
-    } catch (error) {
-      console.error(error);
-      return;
+      let result;
+      try {
+        result = step(this.currentState, action);
+      } catch (error) {
+        console.error(error);
+        return;
+      }
+      this.currentState = jsonState(result.state);
+      saveGame(this.currentState);
+      await this.onEvents(result.events, this.currentState);
+      await this.runBotsIfNeeded();
+    } finally {
+      this.dispatching = false;
     }
-    this.currentState = jsonState(result.state);
-    saveGame(this.currentState);
-    await this.onEvents(result.events, this.currentState);
-    await this.runBotsIfNeeded();
   }
 
   private actingSides(): ActingSide[] {
