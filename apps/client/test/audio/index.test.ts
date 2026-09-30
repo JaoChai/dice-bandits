@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameEvent, GameState } from '@dice-bandits/engine';
 import {
   getAudioSettings,
@@ -16,12 +16,19 @@ import {
   fakeAudioUrlMap,
   fakeFetch,
   flushAudio,
+  type RecordingFetch,
   sourcesOf,
 } from './fakeAudio';
 
 const event = (type: string): GameEvent => ({ type, seat: null, params: {} });
 const boardState = { phase: { kind: 'board' } } as unknown as Pick<GameState, 'phase'>;
 const battleState = { phase: { kind: 'battle' } } as unknown as Pick<GameState, 'phase'>;
+
+declare global {
+  interface Window {
+    __audioLog?: string[];
+  }
+}
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -35,6 +42,7 @@ function memoryStorage() {
 
 interface Harness {
   fake: FakeAudioContext;
+  fetcher: RecordingFetch;
   fireOnBody: (type: string) => void;
 }
 
@@ -53,6 +61,7 @@ function harness(options?: {
   });
   return {
     fake,
+    fetcher,
     fireOnBody: (type: string) => {
       document.body.dispatchEvent(new Event(type, { bubbles: true }));
     },
@@ -201,6 +210,45 @@ describe('audio public API', () => {
     expect(startedSfx(h.fake).length).toBe(1);
   });
 
+  it('does not play the click sound when a nested element swallows the pointerdown', async () => {
+    const h = harness();
+    document.body.innerHTML = '<button id="btn" disabled><span id="inner">Disabled</span></button>';
+    const inner = document.getElementById('inner') as HTMLSpanElement;
+    inner.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushAudio();
+    expect(startedSfx(h.fake).length).toBe(0);
+    // A fresh button that did not exist when the pointerdown happened still clicks.
+    document.body.innerHTML += '<button id="live">Live</button>';
+    document.getElementById('live')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAudio();
+    expect(startedSfx(h.fake).length).toBe(1);
+  });
+
+  it('logs the started sound id to window.__audioLog only when test hooks are enabled', async () => {
+    vi.stubEnv('VITE_TEST_HOOKS', '1');
+    vi.resetModules();
+    const audio = await import('../../src/audio');
+    const fake = new FakeAudioContext();
+    const fetcher = fakeFetch(fakeAudioUrlMap());
+    audio.initAudio({
+      makeContext: () => asAudioContext(fake),
+      fetcher,
+      now: () => 0,
+      storage: memoryStorage(),
+    });
+    try {
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      await flushAudio();
+      document.body.innerHTML = '<button id="on">Go</button>';
+      document.getElementById('on')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      audio.playSfx('coin');
+      await flushAudio();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(window.__audioLog).toEqual(['click', 'coin']);
+  });
+
   it('ignores repeated initAudio calls', async () => {
     const h = harness();
     initAudio({});
@@ -219,5 +267,63 @@ describe('audio public API', () => {
     await flushAudio();
     expect(second.fake.resumeCalls).toBe(1);
     expect(startedMusic(second.fake).length).toBe(1);
+  });
+
+  it('requests the mp3 music URL when ogg playback is unsupported', async () => {
+    vi.resetModules();
+    const audio = await import('../../src/audio');
+    const fake = new FakeAudioContext();
+    const fetcher = fakeFetch(fakeAudioUrlMap());
+    audio.initAudio({
+      makeContext: () => asAudioContext(fake),
+      fetcher,
+      now: () => 0,
+      storage: memoryStorage(),
+    });
+    class FakeMediaProbe {
+      canPlayType(type: string): string {
+        return type === 'audio/ogg; codecs="vorbis"' ? '' : 'probably';
+      }
+    }
+    const original = globalThis.Audio;
+    Object.defineProperty(globalThis, 'Audio', { configurable: true, value: FakeMediaProbe });
+    try {
+      audio.setMusic('board');
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      await flushAudio();
+    } finally {
+      Object.defineProperty(globalThis, 'Audio', { configurable: true, value: original });
+    }
+    expect(fetcher.requests).toContain('/audio/music/board.mp3');
+    expect(fetcher.requests).not.toContain('/audio/music/board.ogg');
+  });
+
+  it('requests the ogg music URL when ogg playback is supported', async () => {
+    vi.resetModules();
+    const audio = await import('../../src/audio');
+    const fake = new FakeAudioContext();
+    const fetcher = fakeFetch(fakeAudioUrlMap());
+    audio.initAudio({
+      makeContext: () => asAudioContext(fake),
+      fetcher,
+      now: () => 0,
+      storage: memoryStorage(),
+    });
+    class FakeMediaProbe {
+      canPlayType(type: string): string {
+        return type === 'audio/ogg; codecs="vorbis"' ? 'probably' : '';
+      }
+    }
+    const original = globalThis.Audio;
+    Object.defineProperty(globalThis, 'Audio', { configurable: true, value: FakeMediaProbe });
+    try {
+      audio.setMusic('board');
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      await flushAudio();
+    } finally {
+      Object.defineProperty(globalThis, 'Audio', { configurable: true, value: original });
+    }
+    expect(fetcher.requests).toContain('/audio/music/board.ogg');
+    expect(fetcher.requests).not.toContain('/audio/music/board.mp3');
   });
 });

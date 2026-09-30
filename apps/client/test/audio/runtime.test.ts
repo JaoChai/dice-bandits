@@ -117,19 +117,18 @@ describe('sfx player', () => {
     expect(connectionsOf(started[0] as never)).toContain(graph.sfx as unknown);
   });
 
-  it('throttles the same id within 80 ms', async () => {
+  it('throttles the same id within 80 ms on the audio clock', async () => {
     const fake = new FakeAudioContext();
     const graph = makeGraph(fake);
     const fetcher = fakeFetch(fakeAudioUrlMap());
-    let nowMs = 0;
-    const player = SfxPlayer(graph, { url: sfxUrl, now: () => nowMs, fetcher });
+    const player = SfxPlayer(graph, { url: sfxUrl, now: () => 0, fetcher });
     player.preload();
     await flushAudio();
     player.play('dice');
-    nowMs = 50;
+    fake.currentTime = 0.05;
     player.play('dice');
     expect(startedSources(asAudioContext(fake)).length).toBe(1);
-    nowMs = 100;
+    fake.currentTime = 0.1;
     player.play('dice');
     expect(startedSources(asAudioContext(fake)).length).toBe(2);
   });
@@ -158,6 +157,18 @@ describe('sfx player', () => {
     expect(warns.length).toBe(SFX_COUNT);
     expect(() => player.play('dice')).not.toThrow();
     expect(startedSources(asAudioContext(fake)).length).toBe(0);
+  });
+
+  it('schedules playback on the audio clock, not the wall clock', async () => {
+    const fake = new FakeAudioContext();
+    const graph = makeGraph(fake);
+    const fetcher = fakeFetch(fakeAudioUrlMap());
+    const player = SfxPlayer(graph, { url: sfxUrl, now: () => 0, fetcher });
+    player.preload();
+    await flushAudio();
+    fake.currentTime = 7;
+    player.play('dice');
+    expect(startedSources(asAudioContext(fake))[0]?.startCalls).toContain(7);
   });
 });
 

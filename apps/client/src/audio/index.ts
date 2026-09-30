@@ -4,9 +4,23 @@ import { SfxPlayer, type SfxPlayer as Player } from './sfx';
 import { MusicPlayer } from './music';
 import { musicForState, sfxForEvents, type MusicId, type SfxId } from './events';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './settings';
+import { recordAudioStart } from './testHooks';
 
 const SFX_URL = (id: SfxId): string => `/audio/sfx/${id}.wav`;
-const MUSIC_URL = (id: MusicId): string => `/audio/music/${id}.ogg`;
+
+let musicExtension: '.ogg' | '.mp3' | null = null;
+
+function musicUrl(id: MusicId): string {
+  if (musicExtension === null) {
+    try {
+      const supported = new globalThis.Audio().canPlayType('audio/ogg; codecs="vorbis"');
+      musicExtension = supported === '' ? '.mp3' : '.ogg';
+    } catch {
+      musicExtension = '.mp3';
+    }
+  }
+  return `/audio/music/${id}${musicExtension}`;
+}
 
 type Stored = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -101,8 +115,13 @@ function ensureRuntime(): AudioRuntime | null {
     if (!ctx) return null;
     const graph = createGraph(() => ctx);
     applySettings(graph, state.settings);
-    const sfx = SfxPlayer(graph, { url: SFX_URL, now: state.now, fetcher: state.fetcher });
-    const music = MusicPlayer(graph, { url: MUSIC_URL, fetcher: state.fetcher });
+    const sfx = SfxPlayer(graph, {
+      url: SFX_URL,
+      now: state.now,
+      onStart: recordAudioStart,
+      fetcher: state.fetcher,
+    });
+    const music = MusicPlayer(graph, { url: musicUrl, fetcher: state.fetcher });
     sfx.preload();
     state.runtime = { graph, sfx, music, unlocked: false };
     return state.runtime;
@@ -135,8 +154,7 @@ function installListeners(): void {
     (event) => {
       unlock();
       const target = event.target instanceof Element ? event.target : null;
-      const button = target?.closest('button');
-      if (button && !button.hasAttribute('disabled')) playSfx('click');
+      if (target?.closest('button:not(:disabled)')) playSfx('click');
     },
     { capture: true, signal },
   );

@@ -1,7 +1,7 @@
 import { loadBuffer, type AudioGraph } from './context';
 import { SFX_IDS, type SfxId } from './events';
 
-const THROTTLE_MS = 80;
+const THROTTLE_SECONDS = 0.08;
 const MAX_VOICES = 6;
 
 export interface SfxPlayer {
@@ -41,11 +41,11 @@ export function SfxPlayer(
   function play(id: SfxId): void {
     const buffer = buffers.get(id);
     if (!buffer) return;
-    const now = opts.now();
+    const at = graph.ctx.currentTime;
     const last = lastPlayedAt.get(id);
-    if (last !== undefined && now - last < THROTTLE_MS) return;
+    if (last !== undefined && at - last < THROTTLE_SECONDS) return;
     if (voices.length >= MAX_VOICES) return;
-    lastPlayedAt.set(id, now);
+    lastPlayedAt.set(id, at);
     const source = graph.ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(graph.sfx);
@@ -54,7 +54,7 @@ export function SfxPlayer(
       const index = voices.findIndex((candidate) => candidate.source === source);
       if (index !== -1) voices.splice(index, 1);
     };
-    source.start();
+    source.start(at);
     opts.onStart?.(id);
   }
 
