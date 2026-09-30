@@ -1,5 +1,6 @@
 import type { ClassId, GameConfig, Personality } from '@dice-bandits/engine';
 import { getLang, setLang, t } from '../i18n';
+import { getAudioSettings, playSfx, setAudioSettings, setMusic } from '../audio';
 import { loadGame, onSaveToast } from '../save';
 import { testHooks } from '../testHooks';
 import { latestSession } from '../online/session';
@@ -36,6 +37,7 @@ export function showTitle(
   onNewGame: () => void = () => {},
   online: { create?: () => void; join?: () => void; back?: (code: string) => void } = {},
 ): void {
+  setMusic('board');
   const root = document.querySelector<HTMLElement>('#app');
   if (!root) throw new Error('Missing #app mount element');
   const render = (): void => {
@@ -46,7 +48,7 @@ export function showTitle(
     const saved = loadGame();
     const room = latestSession();
     unsubscribe();
-    root.innerHTML = `<main class="screen title-screen frame" data-testid="screen-title"><header>${languageToggle()}</header><div class="title-art" aria-hidden="true">🎲</div><h1 class="pixel logo-pixel">${t('title.gameName')}</h1><p>${t('title.subtitle')}</p><div class="title-actions"><button class="primary pixel" data-action="new">${t('title.newGame')}</button>${saved ? `<button class="secondary" data-action="continue">${t('title.continue')}</button>` : ''}<button class="secondary" data-testid="online-create">${t('online.create')}</button><button class="secondary" data-testid="online-join">${t('online.join')}</button>${room ? `<button class="secondary" data-testid="online-back">${t('online.backToRoom', { code: room.code })}</button>` : ''}</div></main>`;
+    root.innerHTML = `<main class="screen title-screen frame" data-testid="screen-title"><header>${languageToggle()}<button type="button" class="text-button" data-testid="audio-settings">${t('audio.settings')}</button></header><div class="title-art" aria-hidden="true">🎲</div><h1 class="pixel logo-pixel">${t('title.gameName')}</h1><p>${t('title.subtitle')}</p><div class="title-actions"><button class="primary pixel" data-action="new">${t('title.newGame')}</button>${saved ? `<button class="secondary" data-action="continue">${t('title.continue')}</button>` : ''}<button class="secondary" data-testid="online-create">${t('online.create')}</button><button class="secondary" data-testid="online-join">${t('online.join')}</button>${room ? `<button class="secondary" data-testid="online-back">${t('online.backToRoom', { code: room.code })}</button>` : ''}</div></main>`;
     if (discarded) {
       const toast = document.createElement('div');
       toast.className = 'toast';
@@ -55,6 +57,9 @@ export function showTitle(
       root.append(toast);
     }
     bindLanguageToggle(root, render);
+    root.querySelector('[data-testid="audio-settings"]')?.addEventListener('click', () => {
+      openSoundDialog(root.querySelector<HTMLButtonElement>('[data-testid="audio-settings"]')!);
+    });
     root.querySelector('[data-action="new"]')?.addEventListener('click', onNewGame);
     root
       .querySelector('[data-testid="online-create"]')
@@ -156,4 +161,52 @@ function escapeHtml(value: string): string {
     (character) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!,
   );
+}
+
+/** Sound-settings dialog: mute + music/sfx volume, applied and persisted immediately. */
+function openSoundDialog(openButton: HTMLButtonElement): void {
+  if (document.querySelector('[data-testid="audio-dialog"]')) return;
+  const current = getAudioSettings();
+  const shade = document.createElement('div');
+  shade.className = 'dialog-shade';
+  shade.innerHTML = `<section class="game-dialog audio-dialog" data-testid="audio-dialog" role="dialog" aria-modal="true" aria-label="${t('audio.settings')}"><h2>${t('audio.settings')}</h2><label class="audio-option audio-mute-row"><input type="checkbox" data-testid="audio-mute"${current.muted ? ' checked' : ''}> ${t('audio.muteAll')}</label><label class="audio-option">${t('audio.music')}<span class="audio-slider"><input type="range" min="0" max="100" step="5" value="${toPercent(current.music)}" data-testid="audio-music-volume"><output class="audio-value" data-testid="audio-music-value">${toPercent(current.music)}%</output></span></label><label class="audio-option">${t('audio.sfx')}<span class="audio-slider"><input type="range" min="0" max="100" step="5" value="${toPercent(current.sfx)}" data-testid="audio-sfx-volume"><output class="audio-value" data-testid="audio-sfx-value">${toPercent(current.sfx)}%</output></span></label><button type="button" data-testid="audio-close">${t('audio.close')}</button></section>`;
+
+  const close = (): void => {
+    shade.remove();
+    document.removeEventListener('keydown', onKeydown, true);
+    openButton.focus();
+  };
+  const onKeydown = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape') return;
+    event.stopPropagation();
+    close();
+  };
+  const music = shade.querySelector<HTMLInputElement>('[data-testid="audio-music-volume"]')!;
+  const sfx = shade.querySelector<HTMLInputElement>('[data-testid="audio-sfx-volume"]')!;
+  const musicValue = shade.querySelector<HTMLOutputElement>('[data-testid="audio-music-value"]')!;
+  const sfxValue = shade.querySelector<HTMLOutputElement>('[data-testid="audio-sfx-value"]')!;
+  music.addEventListener('input', () => {
+    musicValue.textContent = `${music.value}%`;
+    setAudioSettings({ music: Number(music.value) / 100 });
+  });
+  sfx.addEventListener('input', () => {
+    sfxValue.textContent = `${sfx.value}%`;
+    setAudioSettings({ sfx: Number(sfx.value) / 100 });
+    playSfx('click');
+  });
+  shade
+    .querySelector<HTMLInputElement>('[data-testid="audio-mute"]')!
+    .addEventListener('change', (event) => {
+      setAudioSettings({ muted: (event.target as HTMLInputElement).checked });
+    });
+  shade
+    .querySelector<HTMLButtonElement>('[data-testid="audio-close"]')!
+    .addEventListener('click', close);
+  document.addEventListener('keydown', onKeydown, true);
+  document.querySelector('#app')?.append(shade);
+  shade.querySelector<HTMLInputElement>('[data-testid="audio-mute"]')?.focus();
+}
+
+function toPercent(volume: number): number {
+  return Math.round(volume * 100);
 }

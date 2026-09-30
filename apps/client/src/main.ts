@@ -12,6 +12,8 @@ import { OnlineController } from './online/onlineController';
 import type { RoomSocketStatus } from './online/socket';
 import { testHooks } from './testHooks';
 import { t } from './i18n';
+import { initAudio, onGameEvents, setMusic } from './audio';
+import { musicForState } from './audio/events';
 import { showOnlineScreens, type OnlineSocket } from './online/screens';
 import { type RoomSession } from './online/session';
 import type { ServerMsg } from '@dice-bandits/room';
@@ -25,6 +27,7 @@ import { renderResults } from './ui/results';
 import { shake } from './fx';
 
 const app = getMount();
+initAudio();
 let game: Phaser.Game | null = null;
 
 /** Test-only probe: exercise the real board shake at the configured speed. */
@@ -67,6 +70,7 @@ export function startOnlineGame(
   const showOnlineResults = (state: GameState): void => {
     game?.destroy(true);
     game = null;
+    setMusic('board');
     renderResults(
       app,
       state,
@@ -84,6 +88,7 @@ export function startOnlineGame(
     state: firstView.state,
     socket,
     onEvents: async (events, nextState) => {
+      onGameEvents(events, nextState);
       renderHud(app, nextState, (action) => void controller.dispatch(action), {
         legal: controller.legal,
         online: controller.hudOnlineState,
@@ -159,6 +164,7 @@ export function startOnlineGame(
       showOnlineResults(controller.state);
       return;
     }
+    setMusic(musicForState(controller.state));
     renderOnlineHud();
     game = new Phaser.Game({
       type: Phaser.AUTO,
@@ -197,6 +203,7 @@ function escapeHtml(value: string): string {
 }
 
 function openOnline(options: { mode?: 'create' | 'join'; code?: string }): void {
+  setMusic('board');
   history.pushState(null, '', options.code ? `/r/${options.code}` : '/');
   showOnlineScreens({
     ...(options.mode ? { initialMode: options.mode } : {}),
@@ -236,9 +243,11 @@ function startSetup(): void {
 
 function startGame(state: GameState): void {
   if (state.phase.kind === 'gameOver') {
+    setMusic('board');
     renderResults(app, state, startSetup, () => showTitle(startSetup));
     return;
   }
+  setMusic(musicForState(state));
   game?.destroy(true);
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
@@ -246,6 +255,7 @@ function startGame(state: GameState): void {
     state,
     speed: testHooks.speed,
     onEvents: async (events, nextState) => {
+      onGameEvents(events, nextState);
       renderHud(app, nextState, dispatch);
       renderEventToast(app, events);
       const scene = game?.scene.getScene('BoardScene') as BoardScene | undefined;
@@ -275,6 +285,7 @@ function startGame(state: GameState): void {
       if (nextState.phase.kind === 'gameOver') {
         game?.destroy(true);
         game = null;
+        setMusic('board');
         renderResults(app, nextState, startSetup, () => {
           showTitle(startSetup);
         });
