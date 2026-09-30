@@ -80,7 +80,7 @@ export async function buildSheet(entry: SheetEntry, baseDir: string, outDir: str
 ```
 CLI: `npx tsx tools/pixelize/pixelize.ts --sheets tools/pixelize/sheets.json --out apps/client/public/sprites [--only <name>]` writes `<name>.png` (frames packed left→right) + `<name>.json`.
 
-- [ ] **Step 1: Write failing tests** in `pixelize.test.ts`:
+- [x] **Step 1: Write failing tests** in `pixelize.test.ts`:
 ```ts
 // tmp / tmp2: fresh mkdtemp dirs per test (beforeEach); toolDir = dirname of pixelize.ts
 const entry: SheetEntry = {
@@ -131,21 +131,21 @@ it('baseline-aligns frames (lowest opaque row equal in every frame)', async () =
 });
 ```
 The fixture helper draws 3 coloured blobs of different heights on `#808080` with sharp at test start.
-- [ ] **Step 2:** `npm test -w @dice-bandits/pixelize` → FAIL (`buildSheet` not exported).
-- [ ] **Step 3: Implement** reusing existing `removeFloodBackground`, `areaAverage`, `nearestPaletteColor`: split source into `frames` equal columns → remove background → trim to union bounding box of all frames (same box for every frame, keeps motion) → area-shrink to ≤2× cell then nearest to cell (keep aspect, pad transparent) → quantise → alpha threshold 128 → shift each frame so its lowest opaque row sits on the cell bottom (feet) → pack horizontally → write PNG (`compressionLevel: 9`, no metadata) + atlas JSON (stable key order). `palette-backdrop.json`: run existing `--extract-palette` on `docs/concepts/battle.png`, review, commit.
-- [ ] **Step 4:** tests PASS; full gate.
-- [ ] **Step 5:** Commit `feat(pixelize): spritesheet mode with JSON atlases`.
+- [ ] **Step 2:** `npm test -w @dice-bandits/pixelize` → FAIL (`buildSheet` not exported). _(not done: original failing run is not recorded in repository history)_
+- [x] **Step 3: Implement** reusing existing `removeFloodBackground`, `areaAverage`, `nearestPaletteColor`: split source into `frames` equal columns → remove background → trim to union bounding box of all frames (same box for every frame, keeps motion) → area-shrink to ≤2× cell then nearest to cell (keep aspect, pad transparent) → quantise → alpha threshold 128 → shift each frame so its lowest opaque row sits on the cell bottom (feet) → pack horizontally → write PNG (`compressionLevel: 9`, no metadata) + atlas JSON (stable key order). `palette-backdrop.json`: run existing `--extract-palette` on `docs/concepts/battle.png`, review, commit.
+- [x] **Step 4:** tests PASS; full gate.
+- [x] **Step 5:** Commit `feat(pixelize): spritesheet mode with JSON atlases`.
 
 ### Task 2: Heroes art (controller generates, worker normalises)
 
 **Files:** Create `apps/client/public/sprites/hero-{knight,thief,mage,cleric}.{png,json}`, `portrait-{class}.{png,json}`; Modify `tools/pixelize/sheets.json`; add approved raws to `docs/concepts/m4/heroes/`.
 
-- [ ] **Generate (controller):** per class one 8-frame row, prompt template from `docs/concepts/m4/knight-sheet.png` run; references `characters.png` + `battle.png`; frames: idle×2, hop×2, attack×3, hurt×1, facing right, flat light-grey background, no text. Plus one portrait row (4 busts). Vision-check (outfit matches `characters.png`, frames consistent, no text); regenerate ≤2×; contact sheet → owner approval.
-- [ ] **Step 1 (worker):** add `apps/client/test/art/assets.test.ts` failing: for each class, `hero-<class>.json` exists, `cell` = 64×64, animations `idle,hop,attack,hurt` present with frame counts 2,2,3,1; PNG pixels palette-only (reuse helper from Task 1 exported as `assertPaletteOnly(pngPath, paletteName)`).
-- [ ] **Step 2:** run → FAIL (files missing).
-- [ ] **Step 3:** add 8 entries to `sheets.json` (cell 64×64 battle heroes; board token uses the same sheet scaled ×0.5 is NOT allowed → also emit `token-<class>` 32×32 entries from the same source), run CLI.
-- [ ] **Step 4:** PASS; check total sprite size budget so far; full gate.
-- [ ] **Step 5:** Commit `feat(art): hero spritesheets and portraits`.
+- [ ] **Generate (controller):** per class one 8-frame row, prompt template from `docs/concepts/m4/knight-sheet.png` run; references `characters.png` + `battle.png`; frames: idle×2, hop×2, attack×3, hurt×1, facing right, flat light-grey background, no text. Plus one portrait row (4 busts). Vision-check (outfit matches `characters.png`, frames consistent, no text); regenerate ≤2×; contact sheet → owner approval. _(not done: hero contact-sheet review and owner approval are not evidenced in the repository)_
+- [x] **Step 1 (worker):** add `apps/client/test/art/assets.test.ts` failing: for each class, `hero-<class>.json` exists, `cell` = 64×64, animations `idle,hop,attack,hurt` present with frame counts 2,2,3,1; PNG pixels palette-only (reuse helper from Task 1 exported as `assertPaletteOnly(pngPath, paletteName)`).
+- [ ] **Step 2:** run → FAIL (files missing). _(not done: initial missing-asset failing run is not recorded)_
+- [x] **Step 3:** add 8 entries to `sheets.json` (cell 64×64 battle heroes; board token uses the same sheet scaled ×0.5 is NOT allowed → also emit `token-<class>` 32×32 entries from the same source), run CLI.
+- [x] **Step 4:** PASS; check total sprite size budget so far; full gate.
+- [x] **Step 5:** Commit `feat(art): hero spritesheets and portraits`.
 
 ### Task 3: Client art runtime (atlas loader, tables, motion policy) — parallel with Task 1
 
@@ -167,22 +167,22 @@ export const MONSTER_SHEETS: Record<string, string>;  // monster id -> sheet key
 export function motionScale(): number;       // window.diceBanditsSpeed
 export function reducedMotion(): boolean;    // matchMedia('(prefers-reduced-motion: reduce)')
 ```
-- [ ] **Step 1:** failing tests: `tables.test.ts` asserts every `Region` (`meadow,desert,snow,volcano`), every `SpaceKind` (`castle,town,shop,chest,monster,event,trap`), every class and the 6 monster ids (`goldSlime,mushroomBandit,lanternGhost,mimic,rockGolem,shadowImp`) have entries; `motion.test.ts` stubs `matchMedia` true/false.
-- [ ] **Step 2:** FAIL. **Step 3:** implement; `BootScene.preload` loads `sprites/<key>.json` + png for known keys with `this.load.json`/`this.load.image`, registers atlases in `create`; if an atlas fails, keep loading the M1 image under the same key and `console.warn('[art] fallback', key)` instead of the fatal asset panel (fatal panel only if the M1 image also fails).
-- [ ] **Step 4:** PASS + full gate (no visual change yet). **Step 5:** Commit `feat(client): art runtime with atlas loading and fallbacks`.
+- [x] **Step 1:** failing tests: `tables.test.ts` asserts every `Region` (`meadow,desert,snow,volcano`), every `SpaceKind` (`castle,town,shop,chest,monster,event,trap`), every class and the 6 monster ids (`goldSlime,mushroomBandit,lanternGhost,mimic,rockGolem,shadowImp`) have entries; `motion.test.ts` stubs `matchMedia` true/false.
+- [ ] **Step 2:** FAIL. **Step 3:** implement; `BootScene.preload` loads `sprites/<key>.json` + png for known keys with `this.load.json`/`this.load.image`, registers atlases in `create`; if an atlas fails, keep loading the M1 image under the same key and `console.warn('[art] fallback', key)` instead of the fatal asset panel (fatal panel only if the M1 image also fails). _(not done: initial failing run is not recorded, though the implementation exists)_
+- [x] **Step 4:** PASS + full gate (no visual change yet). **Step 5:** Commit `feat(client): art runtime with atlas loading and fallbacks`.
 
 ### Task 4: Hero tokens and hop/idle on the board
 
 **Files:** Create `apps/client/src/scenes/board/tokens.ts`; Modify `BoardScene.ts` (use tokens module), `fx.ts` (dust puff).
-- [ ] **Step 1:** failing unit test `apps/client/test/art/tokens.test.ts` for the pure helper `tokenOffsets(countAtSpace: number): {x:number,y:number}[]` (1 → [0,0]; 2 → ±6 px; 4 → 2×2 grid, no overlap ≥ 12 px apart).
-- [ ] **Step 2:** FAIL. **Step 3:** tokens are `Phaser.GameObjects.Sprite` playing `token-<class>:idle`; on `Moved` play `hop` per space (existing tween path kept, sprite anim added), dust puff at landing; flip X when moving left; speed 0 → no anim, instant position (existing behaviour).
-- [ ] **Step 4:** PASS + full gate (existing full-game E2E must still pass). **Step 5:** Commit `feat(board): animated hero tokens`.
+- [x] **Step 1:** failing unit test `apps/client/test/art/tokens.test.ts` for the pure helper `tokenOffsets(countAtSpace: number): {x:number,y:number}[]` (1 → [0,0]; 2 → ±6 px; 4 → 2×2 grid, no overlap ≥ 12 px apart).
+- [ ] **Step 2:** FAIL. **Step 3:** tokens are `Phaser.GameObjects.Sprite` playing `token-<class>:idle`; on `Moved` play `hop` per space (existing tween path kept, sprite anim added), dust puff at landing; flip X when moving left; speed 0 → no anim, instant position (existing behaviour). _(not done: initial failing run is not recorded, though the implementation exists)_
+- [x] **Step 4:** PASS + full gate (existing full-game E2E must still pass). **Step 5:** Commit `feat(board): animated hero tokens`.
 
 ### Task 5: Board region art (controller generates, worker normalises)
 
 **Files:** `apps/client/public/sprites/board-<region>.{png,json}` (ground 32×32 tileable ×2 variants + decoration props packed), `tiles.{png,json}` (7 space tiles 24×20 + 12×12 icons), `ambient-<region>.{png,json}`.
-- [ ] **Generate (controller):** per region, references `style_16bit.png` + `docs/concepts/m4/board-meadow.png`: (a) seamless ground tile sheet, (b) props sheet (trees, houses, rocks, fountain/cactus/pine/lava rock per region), (c) ambient loop 4 frames. One tile+icon sheet for all `SpaceKind`s. Vision-check + owner contact sheet.
-- [ ] **Worker steps:** failing asset test (files, cell sizes, palette) → sheets.json entries → CLI → PASS → size budget → full gate → commit `feat(art): board region sheets`.
+- [ ] **Generate (controller):** per region, references `style_16bit.png` + `docs/concepts/m4/board-meadow.png`: (a) seamless ground tile sheet, (b) props sheet (trees, houses, rocks, fountain/cactus/pine/lava rock per region), (c) ambient loop 4 frames. One tile+icon sheet for all `SpaceKind`s. Vision-check + owner contact sheet. _(not done: board contact-sheet vision review and owner approval are not evidenced)_
+- [ ] **Worker steps:** failing asset test (files, cell sizes, palette) → sheets.json entries → CLI → PASS → size budget → full gate → commit `feat(art): board region sheets`. _(not done: failing asset-test run is not recorded, though assets and tests shipped)_
 
 ### Task 6: Board scene layers
 
@@ -197,42 +197,42 @@ export function placeDecorations(
   view: { width: number; height: number; toScreen: (x: number, y: number) => { x: number; y: number } },
 ): Placed[];
 ```
-- [ ] **Step 1:** failing tests: same seed → identical output; no decoration within 14 px of any space centre or of any road segment (point-to-segment distance); all inside 640×360; count between 12 and 60 for 3 real boards (`generateBoard('a'|'b'|'c')` from engine).
-- [ ] **Step 2:** FAIL. **Step 3:** implement (engine `seedRng`/`pick` for determinism); `BoardScene.renderBoard` draws: ground tiles per region (region = nearest space's region, 1-tile dithered border) → road (cream 6 px polyline along `next` edges, darker 1 px edge) → tiles (`SPACE_VISUALS`, town owner colour pip kept) → decor → ambient sprites (skipped when `reducedMotion()`) → tokens. Board fills the canvas: remove the 55/27 px HUD paddings, keep 10 px safe margin (HUD overlays in Task 7). Frenzy banner moves to DOM (Task 7).
-- [ ] **Step 4:** PASS + full gate + screenshot 4 regions (seeds chosen so each region is visible) to `$TMPDIR/m4a/board-*.png`, vision-check against `style_16bit.png`. **Step 5:** Commit `feat(board): region ground, road, tiles and decorations`.
+- [x] **Step 1:** failing tests: same seed → identical output; no decoration within 14 px of any space centre or of any road segment (point-to-segment distance); all inside 640×360; count between 12 and 60 for 3 real boards (`generateBoard('a'|'b'|'c')` from engine).
+- [ ] **Step 2:** FAIL. **Step 3:** implement (engine `seedRng`/`pick` for determinism); `BoardScene.renderBoard` draws: ground tiles per region (region = nearest space's region, 1-tile dithered border) → road (cream 6 px polyline along `next` edges, darker 1 px edge) → tiles (`SPACE_VISUALS`, town owner colour pip kept) → decor → ambient sprites (skipped when `reducedMotion()`) → tokens. Board fills the canvas: remove the 55/27 px HUD paddings, keep 10 px safe margin (HUD overlays in Task 7). Frenzy banner moves to DOM (Task 7). _(not done: initial failing run is not recorded, though the implementation exists)_
+- [ ] **Step 4:** PASS + full gate + screenshot 4 regions (seeds chosen so each region is visible) to `$TMPDIR/m4a/board-*.png`, vision-check against `style_16bit.png`. **Step 5:** Commit `feat(board): region ground, road, tiles and decorations`. _(not done: four-region screenshot comparison at the specified path is not evidenced)_
 
 ### Task 7: Board HUD overlay (DOM) — parallel with Tasks 2/4
 
 **Files:** Modify `apps/client/src/ui/hud.ts`, `apps/client/src/ui/styles.css`; Create `apps/client/src/ui/frame.css`; Test: `apps/client/test/hud.test.ts` (add cases).
-- [ ] **Step 1:** failing unit tests (happy-dom): four `.seat-card` elements carry classes `corner-tl/tr/bl/br` by seat order; each shows gold, level, towns as separate `<span>`s with `aria-label`s (no emoji-only content); top banner `[data-testid="event-banner"]` contains the full event text (no `…`); action tray `[data-testid="action-tray"]` wraps the existing action buttons.
-- [ ] **Step 2:** FAIL. **Step 3:** implement: board canvas full-size; HUD absolutely positioned layers: corner cards (portrait via CSS `background` from `portrait-<class>` atlas frame 0, class accent border, HP bar with dark track), top banner (round · world rule · latest event, `-webkit-line-clamp: 2`, `title` attr = full text, tap toggles expanded), bottom-centre tray. 9-slice frame via `border-image` from a 12×12 frame PNG made in Task 5's tiles sheet (fallback: CSS double border navy `#1b2140` + gold `#e8a53c`). Min font 12 px at 915×412. Online banners and `seat-takeover-*` kept inside the cards.
-- [ ] **Step 4:** PASS + full gate. **Step 5:** Commit `feat(hud): full-screen board with edge HUD`.
+- [x] **Step 1:** failing unit tests (happy-dom): four `.seat-card` elements carry classes `corner-tl/tr/bl/br` by seat order; each shows gold, level, towns as separate `<span>`s with `aria-label`s (no emoji-only content); top banner `[data-testid="event-banner"]` contains the full event text (no `…`); action tray `[data-testid="action-tray"]` wraps the existing action buttons.
+- [ ] **Step 2:** FAIL. **Step 3:** implement: board canvas full-size; HUD absolutely positioned layers: corner cards (portrait via CSS `background` from `portrait-<class>` atlas frame 0, class accent border, HP bar with dark track), top banner (round · world rule · latest event, `-webkit-line-clamp: 2`, `title` attr = full text, tap toggles expanded), bottom-centre tray. 9-slice frame via `border-image` from a 12×12 frame PNG made in Task 5's tiles sheet (fallback: CSS double border navy `#1b2140` + gold `#e8a53c`). Min font 12 px at 915×412. Online banners and `seat-takeover-*` kept inside the cards. _(not done: initial failing run is not recorded, though the implementation exists)_
+- [x] **Step 4:** PASS + full gate. **Step 5:** Commit `feat(hud): full-screen board with edge HUD`.
 
 ### Task 8: Monsters + battle backdrops + FX art (controller generates, worker normalises)
 
 **Files:** `monster-<id>.{png,json}` (64×64; rockGolem, mimic 80×80): idle 2, attack 2–3, hurt 1; `backdrop-<region>.png` 640×360 (backdrop palette); `fx.{png,json}`: slash 3, spark 3, coin 4, dust 3, sparkle 3; `cards.{png,json}`: attack/strike/secret/defend/counter card faces + item card frame.
-- [ ] **Generate (controller)** with `monsters.png`/`battle.png` references; backdrops follow `battle.png` composition per region (meadow = concept; desert, snow, volcano variants). Vision-check + owner contact sheet.
-- [ ] **Worker steps:** failing asset tests → sheets.json → CLI → PASS → size budget → full gate → commit `feat(art): monsters, battle backdrops, effects and cards`.
+- [ ] **Generate (controller)** with `monsters.png`/`battle.png` references; backdrops follow `battle.png` composition per region (meadow = concept; desert, snow, volcano variants). Vision-check + owner contact sheet. _(not done: battle contact-sheet vision review and owner approval are not evidenced)_
+- [ ] **Worker steps:** failing asset tests → sheets.json → CLI → PASS → size budget → full gate → commit `feat(art): monsters, battle backdrops, effects and cards`. _(not done: failing asset-test run is not recorded, though assets and tests shipped)_
 
 ### Task 9: Battle scene
 
 **Files:** Create `apps/client/src/scenes/battle/{backdrop,fighters,effects}.ts`; Modify `BattleScene.ts`, `apps/client/src/ui/battleUi.ts`, `styles.css`; Test `apps/client/test/battleUi.test.ts` (add), `apps/client/test/art/battleLayout.test.ts`.
 
 **Interfaces — Produces:** `battleLayout(width=640,height=360)` returns `{ left:{x,y}, right:{x,y}, hpLeft:DOMRectLike, hpRight:DOMRectLike, dice:DOMRectLike, cards:DOMRectLike }` — pure, tested: rects don't intersect, all inside the frame, dice row between fighters and cards.
-- [ ] **Step 1:** failing tests: layout non-overlap; HP nodes `data-testid="hp-left"`/`"hp-right"` exist; `battleUi` renders `pick-*` buttons as `.command-card` with icon + translated label, item buttons (`action-useItem-*`) as `.item-card`, disabled when `awaitingView`; HP text node equals `${hp}/${max}` from state (guards the `3E/38` bug — render HP numbers in DOM with Chakra Petch tabular numerals, not the pixel canvas font).
-- [ ] **Step 2:** FAIL. **Step 3:** implement: backdrop by battle space region; attacker left, defender right (`setFlipX(true)`), integer scale ×2 at 640×360 base; dice pool drawn only inside `layout.dice`; hit sequence per spec §6.2 using `fx` sheet; coin burst on `GoldStolen`; secret card flip kept; `online-opponent-picked` kept.
-- [ ] **Step 4:** PASS + full gate + screenshots battle × 4 regions desktop + mobile → vision-check vs `battle.png`. **Step 5:** Commit `feat(battle): concept-style battle screen`.
+- [x] **Step 1:** failing tests: layout non-overlap; HP nodes `data-testid="hp-left"`/`"hp-right"` exist; `battleUi` renders `pick-*` buttons as `.command-card` with icon + translated label, item buttons (`action-useItem-*`) as `.item-card`, disabled when `awaitingView`; HP text node equals `${hp}/${max}` from state (guards the `3E/38` bug — render HP numbers in DOM with Chakra Petch tabular numerals, not the pixel canvas font).
+- [ ] **Step 2:** FAIL. **Step 3:** implement: backdrop by battle space region; attacker left, defender right (`setFlipX(true)`), integer scale ×2 at 640×360 base; dice pool drawn only inside `layout.dice`; hit sequence per spec §6.2 using `fx` sheet; coin burst on `GoldStolen`; secret card flip kept; `online-opponent-picked` kept. _(not done: initial failing run is not recorded, though the implementation exists)_
+- [ ] **Step 4:** PASS + full gate + screenshots battle × 4 regions desktop + mobile → vision-check vs `battle.png`. **Step 5:** Commit `feat(battle): concept-style battle screen`. _(not done: four-region battle screenshot comparison at both sizes is not evidenced)_
 
 ### Task 10: Other screens re-skin
 
 **Files:** Modify `apps/client/src/ui/{screens,results,dialogs,passDevice}.ts`, `apps/client/src/online/screens.ts`, `styles.css`, i18n JSON if new strings.
-- [ ] **Step 1:** failing unit tests: title shows `.logo-pixel` and 4 class portraits in setup; dialogs (perk/shop/reward) use `.frame` and keep `perk-*`/`shop-*` test ids; lobby seat rows keep `lobby-seat-*`.
-- [ ] **Step 2–4:** implement with `frame.css`; no flow change; full gate. **Step 5:** Commit `feat(ui): pixel frame style for menus, lobby, dialogs and results`.
+- [x] **Step 1:** failing unit tests: title shows `.logo-pixel` and 4 class portraits in setup; dialogs (perk/shop/reward) use `.frame` and keep `perk-*`/`shop-*` test ids; lobby seat rows keep `lobby-seat-*`.
+- [x] **Step 2–4:** implement with `frame.css`; no flow change; full gate. **Step 5:** Commit `feat(ui): pixel frame style for menus, lobby, dialogs and results`.
 
 ### Task 11: Motion policy, layout E2E, budgets
 
 **Files:** Create `apps/client/e2e/layout.spec.ts`; Modify `apps/client/playwright.config.ts` only if a project is needed (desktop 1280×720 and mobile-landscape 915×412 already exist).
-- [ ] **Step 1: Write the spec** (run on both projects, EN and TH via the language toggle):
+- [x] **Step 1: Write the spec** (run on both projects, EN and TH via the language toggle):
 ```ts
 test('board and battle fit the viewport without truncation', async ({ page }) => {
   await startTestGame(page);                      // existing helper
@@ -262,16 +262,16 @@ test('reduced motion disables shake and ambient loops', async ({ browser }) => {
 });
 ```
 (helpers `assertInside`, `assertNoEllipsis`, `assertMinFont`, `playUntil` go in `e2e/helpers.ts`. Test-hook surface, only when `VITE_TEST_HOOKS=1`: `window.__db.art = { ambientRunning: boolean; shakeCount: number }`, updated by `scenes/board/ambient.ts` and `fx.ts` `shake()`; battle HP DOM nodes carry `data-testid="hp-left"` / `"hp-right"` (added in Task 9).)
-- [ ] **Step 2:** run → fix any real layout defect it finds in the owning module (with a unit test), not by loosening the assertion.
-- [ ] **Step 3:** performance: add `scripts/check-sprite-budget.mjs` (fails if PNG total > 1.5 MB) to `npm test` of the client; Playwright trace of one battle on mobile emulation, record average FPS in the report (target ≥ 30).
-- [ ] **Step 4:** online spec `--repeat-each=3` ×3 all pass; full gate. **Step 5:** Commit `test(e2e): layout, readability and reduced-motion checks`.
+- [x] **Step 2:** run → fix any real layout defect it finds in the owning module (with a unit test), not by loosening the assertion.
+- [x] **Step 3:** performance: add `scripts/check-sprite-budget.mjs` (fails if PNG total > 1.5 MB) to `npm test` of the client; Playwright trace of one battle on mobile emulation, record average FPS in the report (target ≥ 30).
+- [ ] **Step 4:** online spec `--repeat-each=3` ×3 all pass; full gate. **Step 5:** Commit `test(e2e): layout, readability and reduced-motion checks`. _(not done: the online spec repeated three times is not evidenced; ordinary full gate and commit are)_
 
 ### Task 12: Review, owner approval, deploy, live check (controller)
 
-- [ ] Screenshot set: board ×4 regions, battle ×4 regions, perk/shop/reward dialogs, title, setup, lobby, results × desktop 1280×720 + mobile 915×412 × TH/EN → vision-check → send to owner beside the concept images.
-- [ ] Independent read-only whole-branch review (subagent) focusing on: rule/protocol untouched (`git diff origin/main -- packages apps/client/worker` empty), test ids preserved, fallbacks, budgets.
-- [ ] Push `feat/m4a-visuals`, PR, CI green, **owner approval to merge**.
-- [ ] After deploy: live hot-seat game + two-browser online game on the production URL (existing `m2-live3.mjs` flow), 0 console errors, screenshots.
+- [ ] Screenshot set: board ×4 regions, battle ×4 regions, perk/shop/reward dialogs, title, setup, lobby, results × desktop 1280×720 + mobile 915×412 × TH/EN → vision-check → send to owner beside the concept images. _(not done: the complete screen/language/size screenshot set sent to the owner is not evidenced)_
+- [x] Independent read-only whole-branch review (subagent) focusing on: rule/protocol untouched (`git diff origin/main -- packages apps/client/worker` empty), test ids preserved, fallbacks, budgets.
+- [x] Push `feat/m4a-visuals`, PR, CI green, **owner approval to merge**.
+- [x] After deploy: live hot-seat game + two-browser online game on the production URL (existing `m2-live3.mjs` flow), 0 console errors, screenshots.
 
 ---
 
