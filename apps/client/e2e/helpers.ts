@@ -91,30 +91,47 @@ export async function startTestGame(page: Page, speed = 0): Promise<void> {
   await expect(page.locator('[data-testid="screen-board"]')).toBeVisible();
 }
 
+/**
+ * Actionable-button selectors in the same precedence order `playOneStep`
+ * clicks them: dialogs first (their shade intercepts pointer events), then
+ * the HUD action tray, pick rows, and the pass/ready button.
+ */
+const ACTION_SELECTORS = [
+  '.dialog-shade button:visible:enabled',
+  '[data-testid^="action-"]:visible:enabled',
+  '[data-testid^="pick-"]:visible:enabled',
+  '[data-testid="pass-ready"]:visible:enabled',
+] as const;
+
+/**
+ * Perform one UI action.
+ *
+ * Bot seats act on their own: while a bot plays — its roll, moves and battles
+ * resolve asynchronously at speed > 0 — the human action tray is legitimately
+ * empty, so poll for the next actionable button instead of failing on sight.
+ * At speed=0 the tray is populated synchronously and the wait never engages.
+ */
 export async function playOneStep(page: Page): Promise<void> {
-  const modalButton = page.locator('.dialog-shade button:visible:enabled').first();
-  if (await modalButton.count()) {
-    await modalButton.click();
-    return;
+  const deadline = Date.now() + 15_000;
+  for (;;) {
+    for (const selector of ACTION_SELECTORS) {
+      const button = page.locator(selector).first();
+      if (await button.count()) {
+        try {
+          await button.click({ timeout: 5_000 });
+          return;
+        } catch {
+          break; // state changed mid-click (overlay closed/moved); re-poll
+        }
+      }
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        'No visible enabled game action, pick, reward, perk, shop, or pass button found within 15s',
+      );
+    }
+    await page.waitForTimeout(150);
   }
-
-  const action = page.locator('[data-testid^="action-"]:visible:enabled').first();
-  if (await action.count()) {
-    await action.click();
-    return;
-  }
-  const pick = page.locator('[data-testid^="pick-"]:visible:enabled').first();
-  if (await pick.count()) {
-    await pick.click();
-    return;
-  }
-  const pass = page.locator('[data-testid="pass-ready"]:visible:enabled').first();
-  if (await pass.count()) {
-    await pass.click();
-    return;
-  }
-
-  throw new Error('No visible enabled game action, pick, reward, perk, shop, or pass button found');
 }
 
 export async function playSteps(page: Page, count: number): Promise<void> {

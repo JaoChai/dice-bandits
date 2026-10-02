@@ -483,6 +483,8 @@ describe('board art atlases', () => {
 });
 
 describe('battle art atlases', () => {
+  // M5a Task 2 kept the shipped pixel atlases (old ids); the eight cartoon
+  // `monster-<newId>` atlases arrive with Task 4 (controller art pass).
   const monsters = [
     'goldSlime',
     'mushroomBandit',
@@ -655,7 +657,7 @@ describe('battle art atlases', () => {
     });
   }
 
-  it('ships six monster atlases with whole-pose frames at the spec cell sizes', async () => {
+  it('ships the interim monster atlases with whole-pose frames at the spec cell sizes', async () => {
     for (const monster of monsters) {
       const cellSize = monster === 'rockGolem' || monster === 'mimic' ? 80 : 64;
       const name = `monster-${monster}`;

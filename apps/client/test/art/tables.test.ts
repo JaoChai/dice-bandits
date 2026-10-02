@@ -28,14 +28,17 @@ describe('art visual tables', () => {
     expect(Object.keys(CLASS_ACCENT).sort()).toEqual([...classes].sort());
     expect(monsters).toEqual(
       expect.arrayContaining([
-        'goldSlime',
-        'mushroomBandit',
-        'lanternGhost',
-        'mimic',
-        'rockGolem',
-        'shadowImp',
+        'jellyBun',
+        'mushroomBonk',
+        'cactusPunch',
+        'coinScorpion',
+        'yetiBunny',
+        'penguinKnight',
+        'lavaImp',
+        'maskGoon',
       ]),
     );
+    expect(monsters).toHaveLength(8);
     expect(Object.keys(MONSTER_SHEETS).sort()).toEqual([...monsters].sort());
     for (const accent of Object.values(CLASS_ACCENT)) expect(accent).toMatch(/^#[\da-f]{6}$/i);
     for (const key of Object.values(MONSTER_SHEETS)) expect(key).toMatch(/^monster-/);

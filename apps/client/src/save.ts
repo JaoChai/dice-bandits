@@ -1,7 +1,8 @@
 import type { GameState } from '@dice-bandits/engine';
 
 const SAVE_KEY = 'diceBandits.save';
-const SAVE_VERSION = 1;
+// Bumped to 2 in M5a: the fixed map changed the board graph; v1 saves cannot load.
+const SAVE_VERSION = 2;
 const toastListeners = new Set<(key: string) => void>();
 
 export function onSaveToast(listener: (key: string) => void): () => void {

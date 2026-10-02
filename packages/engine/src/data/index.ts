@@ -4,10 +4,9 @@ import itemsJson from './items.json' with { type: 'json' };
 import perksJson from './perks.json' with { type: 'json' };
 import worldRulesJson from './worldRules.json' with { type: 'json' };
 import balanceJson from './balance.json' with { type: 'json' };
-import chunksJson from './chunks.json' with { type: 'json' };
 import pranksJson from './pranks.json' with { type: 'json' };
 
-import type { ClassId, Region, SpaceKind, Stats } from '../types';
+import type { ClassId, Region, Stats } from '../types';
 
 export interface ClassDef {
   base: Stats;
@@ -32,17 +31,6 @@ export interface PerkDef {
   id: string;
   effect: string;
 }
-export interface ChunkSpace {
-  kind: SpaceKind;
-  x: number;
-  y: number;
-}
-export interface Chunk {
-  id: string;
-  region: Region;
-  fork: boolean;
-  spaces: ChunkSpace[];
-}
 
 export const CLASSES = classesJson as Record<ClassId, ClassDef>;
 export const MONSTERS = monstersJson as unknown as Record<string, MonsterDef>;
@@ -52,6 +40,7 @@ export const PERKS = perksJson as PerkDef[];
 export const WORLD_RULES = worldRulesJson as Record<string, string>;
 export const BALANCE = balanceJson as {
   startGold: number;
+  slotWeights: Record<'town' | 'monster' | 'chest' | 'event' | 'trap', number>;
   rounds: number;
   frenzyFromRound: number;
   frenzyMultiplier: number;
@@ -80,5 +69,4 @@ export const BALANCE = balanceJson as {
   bountyRounds: number;
   resaleRatio: number;
 };
-export const CHUNKS = chunksJson as Chunk[];
 export const PRANK_ALIASES = pranksJson as string[];

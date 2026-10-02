@@ -46,6 +46,23 @@ export function pick<T>(s: RngState, arr: readonly T[]): [T, RngState] {
   return [arr[i] as T, n];
 }
 
+/** Draw one key from `weights`, with probability proportional to its weight. */
+export function weightedPick<K extends string>(
+  s: RngState,
+  weights: Record<K, number>,
+): [K, RngState] {
+  const entries = Object.entries(weights) as [K, number][];
+  const total = entries.reduce((sum, [, w]) => sum + w, 0);
+  if (total <= 0) throw new Error('weightedPick: total weight must be positive');
+  const [f, n] = nextFloat(s);
+  let threshold = f * total;
+  for (const [key, w] of entries) {
+    threshold -= w;
+    if (threshold < 0) return [key, n];
+  }
+  return [entries[entries.length - 1]![0], n];
+}
+
 export function shuffle<T>(s: RngState, arr: readonly T[]): [T[], RngState] {
   const out = [...arr];
   let st = s;

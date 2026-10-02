@@ -41,8 +41,18 @@ describe('save data', () => {
   it('round-trips a game state with a version field', () => {
     const state = game();
     saveGame(state);
-    expect(JSON.parse(localStorage.getItem('diceBandits.save') ?? '{}').version).toBe(1);
+    expect(JSON.parse(localStorage.getItem('diceBandits.save') ?? '{}').version).toBe(2);
     expect(loadGame()).toEqual(state);
+  });
+
+  it('discards a stored version-1 save (board shape changed in M5a) and removes the key', () => {
+    const toast = vi.fn();
+    const unsubscribe = onSaveToast(toast);
+    localStorage.setItem('diceBandits.save', JSON.stringify({ version: 1, state: game() }));
+    expect(loadGame()).toBeNull();
+    expect(localStorage.getItem('diceBandits.save')).toBeNull();
+    expect(toast).toHaveBeenLastCalledWith('toast.saveDiscarded');
+    unsubscribe();
   });
 
   it('discards parseable saves with structurally invalid state and announces the toast key', () => {
