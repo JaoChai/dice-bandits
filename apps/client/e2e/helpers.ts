@@ -156,6 +156,7 @@ export async function startJourney(page: Page, speed = 0): Promise<void> {
   for (let seat = 1; seat < 4; seat += 1) {
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
   }
+  await page.locator('[data-seat="0"] select[data-field="classId"]').selectOption('knight');
   await page.locator('#setup-form button[type="submit"]').click();
   await expect(page.locator('[data-testid="screen-board"]')).toBeVisible();
 }
