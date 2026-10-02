@@ -101,6 +101,53 @@ async function writeMapFixture(path: string): Promise<void> {
     .toFile(path);
 }
 
+/**
+ * Enclosed-key fixture: a #bdbdbd top strip (border-connected background) over
+ * a full-width dark #333333 slab containing an enclosed #bdbdbd hole and a
+ * #c0c0c0 (distance 3) "silver" rectangle — key-coloured pixels the key must
+ * NOT turn transparent. All rects are integer-aligned, so rasterization is
+ * exact and the keyed+trimmed output frame is fully predictable: the strip is
+ * keyed away, the slab spans the full width, so the frame is the slab exactly
+ * (256x240) and sheet coords are source coords shifted up by 16.
+ */
+async function writeHoleFixture(path: string): Promise<void> {
+  const size = 256;
+  const composites: OverlayOptions[] = [
+    {
+      input: Buffer.from(
+        `<svg width="${size}" height="${size - 16}"><rect width="${size}" height="${size - 16}" fill="#333333"/></svg>`,
+      ),
+      left: 0,
+      top: 16,
+    },
+    {
+      input: Buffer.from(
+        `<svg width="160" height="160"><rect width="160" height="160" fill="#bdbdbd"/></svg>`,
+      ),
+      left: 48,
+      top: 64,
+    },
+    {
+      input: Buffer.from(
+        `<svg width="48" height="16"><rect width="48" height="16" fill="#c0c0c0"/></svg>`,
+      ),
+      left: 24,
+      top: 232,
+    },
+  ];
+  await sharp({
+    create: {
+      width: size,
+      height: size,
+      channels: 4,
+      background: { r: 0xbd, g: 0xbd, b: 0xbd, alpha: 255 },
+    },
+  })
+    .composite(composites)
+    .png()
+    .toFile(path);
+}
+
 async function pixels(path: string): Promise<{ data: Buffer; width: number; height: number }> {
   const { data, info } = await sharp(path)
     .ensureAlpha()
@@ -118,6 +165,7 @@ beforeAll(async () => {
   await writePoseFixture(join(fixtures, 'poses-fixture.png'));
   await writeGridFixture(join(fixtures, 'grid-fixture.png'));
   await writeMapFixture(join(fixtures, 'map-fixture.png'));
+  await writeHoleFixture(join(fixtures, 'hole-fixture.png'));
   // The shipped manifest must parse; it lists entries once the art task lands
   // (plan Task 4), so do not assert emptiness here.
   await loadManifest();
@@ -127,6 +175,7 @@ afterAll(async () => {
   await rm(join(fixtures, 'poses-fixture.png'), { force: true });
   await rm(join(fixtures, 'grid-fixture.png'), { force: true });
   await rm(join(fixtures, 'map-fixture.png'), { force: true });
+  await rm(join(fixtures, 'hole-fixture.png'), { force: true });
 });
 
 beforeEach(async () => {
@@ -258,6 +307,43 @@ describe('cartoonize pose mode', () => {
         `pose ${pose} has ${partial.length} partial-alpha edge pixels`,
       ).toBeGreaterThan(0);
     }
+  });
+
+  it('keys only border-connected background: enclosed #bdbdbd and near-key pixels stay opaque', async () => {
+    // Regression for the Task 4 incident: the key must flood from the sheet
+    // border. A character with enclosed key-coloured areas (holes, silver
+    // highlights) must keep them opaque.
+    const holeEntry: ManifestEntry = {
+      name: 'fixture-hole',
+      input: 'fixtures/hole-fixture.png',
+      kind: 'pose',
+      cell: [256, 256],
+      shipHeight: 240,
+      poses: ['idle'],
+      out: 'fixture-hole',
+    };
+    const atlas = (await cartoonizeSheet(holeEntry, toolDir, out))!;
+    const sheet = await pixels(join(out, 'fixture-hole.webp'));
+    expect(atlas.image).toBe('fixture-hole.webp');
+    // No scaling (shipHeight 240 = slab height). The border-connected strip is
+    // keyed and trimmed away, so the frame is the 256x240 slab, bottom-aligned
+    // in its 256x256 cell at y=16 — sheet row = source row (16-px offsets
+    // cancel). If the strip survived keying instead, the trim box would be the
+    // full 256x256 sheet with frame.y=0.
+    const frame = atlas.frames['idle']!;
+    expect([frame.x, frame.y]).toEqual([0, 16]);
+    expect([frame.w, frame.h]).toEqual([256, 240]);
+    // Padding above the frame (the keyed strip's former rows) is transparent...
+    expect(alphaAt(sheet, 0, 0)).toBe(0);
+    // ...the slab's top row is opaque...
+    expect(alphaAt(sheet, 0, 16)).toBe(255);
+    // ...the enclosed hole centre keeps its key-coloured pixels...
+    const centre = alphaAt(sheet, 127, 143);
+    expect(centre, 'enclosed key-coloured hole centre stays opaque').toBeGreaterThan(0);
+    // ...and the near-key silver rect inside the slab survives (source (24,243)
+    // → sheet (24,243)).
+    const silver = alphaAt(sheet, 24, 243);
+    expect(silver, 'near-key silver rect survives inside the slab').toBeGreaterThan(200);
   });
 
   it('is byte-identical across repeated runs of the same input', async () => {

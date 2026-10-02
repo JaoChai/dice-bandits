@@ -2,7 +2,9 @@
 
 `cartoonize.ts` converts concept art sheets into shipped game atlases under
 `apps/client/public/art/`: it keys the flat `#bdbdbd` background to transparency
-(per-channel tolerance 28 with a 1-px feather), trims to the alpha bounding box,
+where it is connected to the sheet border (per-channel tolerance 28, flood fill
+from the edges, 1-px feather) — enclosed key-coloured holes and near-key
+highlights inside the character survive —, trims to the alpha bounding box,
 scales the pose to `shipHeight` with Lanczos3 (never up), pads it bottom-centre
 into its cell, packs cells row-major, and encodes WebP at quality 82, effort 6.
 Encoding is deterministic: the same input produces byte-identical output.
