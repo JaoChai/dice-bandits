@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CLASSES, MONSTERS, ITEMS, WORLD_RULES, BALANCE, CHUNKS } from '../src/data/index';
-import type { Chunk } from '../src/data/index';
+import { CLASSES, MONSTERS, ITEMS, WORLD_RULES, BALANCE } from '../src/data/index';
 import type { Region } from '../src/types';
 
 const REGIONS: Region[] = ['meadow', 'desert', 'snow', 'volcano'];
@@ -51,31 +50,9 @@ describe('data tables', () => {
     expect(Object.keys(WORLD_RULES)).toHaveLength(6);
   });
 
-  it('has 8-12 spaces in every chunk', () => {
-    expect(CHUNKS.length).toBeGreaterThan(0);
-    for (const chunk of CHUNKS) {
-      expect(chunk.spaces.length).toBeGreaterThanOrEqual(8);
-      expect(chunk.spaces.length).toBeLessThanOrEqual(12);
-    }
-  });
-
-  it('has exactly 2 chunks per region, each region with exactly one fork of two 3-space lanes', () => {
-    const chunksByRegion = new Map<Region, Chunk[]>();
-    for (const chunk of CHUNKS) {
-      const list = chunksByRegion.get(chunk.region) ?? [];
-      list.push(chunk);
-      chunksByRegion.set(chunk.region, list);
-    }
-    expect([...chunksByRegion.keys()].sort()).toEqual(['desert', 'meadow', 'snow', 'volcano']);
-    for (const chunks of chunksByRegion.values()) {
-      expect(chunks).toHaveLength(2);
-      const forks = chunks.filter((c) => c.fork);
-      expect(forks).toHaveLength(1);
-      const laneSizes = new Map<number, number>();
-      for (const space of forks[0]!.spaces) {
-        if (space.y !== 0) laneSizes.set(space.y, (laneSizes.get(space.y) ?? 0) + 1);
-      }
-      expect([...laneSizes.values()].sort((a, b) => a - b)).toEqual([3, 3]);
-    }
+  it('has positive slot weights for every board bag kind', () => {
+    const kinds = ['town', 'monster', 'chest', 'event', 'trap'] as const;
+    expect(Object.keys(BALANCE.slotWeights).sort()).toEqual([...kinds].sort());
+    for (const kind of kinds) expect(BALANCE.slotWeights[kind]).toBeGreaterThan(0);
   });
 });

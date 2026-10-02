@@ -185,7 +185,7 @@ describe('§5.5 matrix via resolveHalf (variance forced to 1)', () => {
 describe('startBattle', () => {
   it('sets the battle phase with the initiator as side a', () => {
     const s = createGame(cfg('knight'));
-    const r = startBattle(s, { context: 'monster', spaceId: 3, opponent: mkMonster('goldSlime') });
+    const r = startBattle(s, { context: 'monster', spaceId: 3, opponent: mkMonster('jellyBun') });
     expect(r.state).toBe(s); // rule functions mutate the clone their caller made
     expect(s.phase.kind).toBe('battle');
     const bt = battleOf(s);
@@ -193,7 +193,7 @@ describe('startBattle', () => {
     expect(bt.spaceId).toBe(3);
     expect(bt.a.seat).toBe(0);
     expect(bt.a.stats).toEqual(s.players[0]!.stats);
-    expect(bt.b.monsterId).toBe('goldSlime');
+    expect(bt.b.monsterId).toBe('jellyBun');
     expect(bt.exchange).toBe(1);
     expect(bt.half).toBe(1);
     expect(bt.pending).toEqual({ attack: null, defense: null });
@@ -201,12 +201,12 @@ describe('startBattle', () => {
   });
   it('the higher-SPD side attacks first; ties go to the initiator', () => {
     expect(
-      battleOf(fixture({ opponent: mkMonster('shadowImp', 1, undefined, { spd: 12 }) }))
-        .attackerSide,
+      battleOf(fixture({ opponent: mkMonster('lavaImp', 1, undefined, { spd: 12 }) })).attackerSide,
     ).toBe('b'); // 10 > 6
     expect(
-      battleOf(fixture({ opponent: mkMonster('mimic', 1, undefined, { spd: 6 }) })).attackerSide,
-    ).toBe('a'); // tied SPD goes to initiator
+      battleOf(fixture({ opponent: mkMonster('cactusPunch', 1, undefined, { spd: 6 }) }))
+        .attackerSide,
+    ).toBe('a'); // cactusPunch 6, tied SPD goes to initiator
   });
   it('does not mutate the opponent passed to startBattle during combat', () => {
     const s = createGame(cfg('knight'));
@@ -259,7 +259,7 @@ describe('startBattle', () => {
 
 describe('battle picks and legal actions', () => {
   it('offers actions to the player while monster picks are engine-drawn', () => {
-    const s = fixture({ opponent: mkMonster('goldSlime') }); // knight 6 > slime 4 → a picks first
+    const s = fixture({ opponent: mkMonster('jellyBun') }); // knight 6 > jellyBun 4 → a picks first
     const picks = (st: GameState, seat: number) =>
       legalActions(st, seat).map((a) => (a.type === 'battlePick' ? a.pick : null));
     expect(picks(s, 0)).toEqual(['attack', 'strike', 'secret']);
@@ -279,7 +279,7 @@ describe('battle picks and legal actions', () => {
     expect(picks).toEqual(['defend', 'counter', 'secret']);
   });
   it('a used secret is neither offered nor accepted again', () => {
-    const s = fixture({ opponent: mkMonster('shadowImp', 1, undefined, { spd: 12 }) }); // imp picks first
+    const s = fixture({ opponent: mkMonster('lavaImp', 1, undefined, { spd: 12 }) }); // lavaImp picks first
     const r2 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' }); // bulwark resolves against pre-drawn attack
     expect(battleOf(r2.state).a.secretUsed).toBe(true);
     // half 2: the knight is now the attacker; secret must not be offered
@@ -290,7 +290,7 @@ describe('battle picks and legal actions', () => {
     );
   });
   it('step does not mutate the input during battle picks', () => {
-    const s = fixture({ opponent: mkMonster('goldSlime') });
+    const s = fixture({ opponent: mkMonster('jellyBun') });
     const snap = structuredClone(s);
     step(s, { type: 'battlePick', side: 'a', pick: 'attack' });
     expect(s).toEqual(snap);
@@ -299,7 +299,7 @@ describe('battle picks and legal actions', () => {
 
 describe('secrets', () => {
   it('firestorm deals 2×mag ignoring the defender pick, caster unharmed', () => {
-    const s = fixture({ classA: 'mage', opponent: mkMonster('rockGolem') }); // mage 9 > golem 3
+    const s = fixture({ classA: 'mage', opponent: mkMonster('penguinKnight') }); // mage 9 > penguinKnight 3
     const golem0 = battleOf(s).b.hp;
     const mage0 = battleOf(s).a.hp;
     const r1 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' }); // firestorm
@@ -312,7 +312,7 @@ describe('secrets', () => {
     expect(bt2.a.secretUsed).toBe(true);
   });
   it('bulwark: knight takes 0 and reflects half of the incoming attack×counter', () => {
-    const s = fixture({ opponent: mkMonster('shadowImp', 1, undefined, { spd: 12 }) }); // imp 10 > knight 6
+    const s = fixture({ opponent: mkMonster('lavaImp', 1, undefined, { spd: 12 }) }); // lavaImp 10 > knight 6
     const knight0 = battleOf(s).a.hp;
     const imp0 = battleOf(s).b.hp;
     const r2 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' }); // bulwark resolves against pre-drawn attack
@@ -326,7 +326,7 @@ describe('secrets', () => {
     expect(bt2.a.secretUsed).toBe(true);
   });
   it('pickpocket steals 0 from monsters but still attacks (attack×counter)', () => {
-    const s = fixture({ classA: 'thief', opponent: mkMonster('goldSlime') }); // thief 13 > slime 4
+    const s = fixture({ classA: 'thief', opponent: mkMonster('jellyBun') }); // thief 13 > jellyBun 4
     const slime0 = battleOf(s).b.hp;
     const r1 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' }); // pickpocket
     const r2 = r1; // the faster thief's pick resolves against the pre-drawn defense
@@ -352,7 +352,7 @@ describe('secrets', () => {
     expect(target0 - bt2.b.hp).toBeLessThanOrEqual(hi);
   });
   it('sanctuary heals 40% maxHp, sets halveNext; the next hit taken is halved once', () => {
-    const s = fixture({ classA: 'cleric', opponent: mkMonster('goldSlime'), hp: 20 }); // cleric 8 > slime 4
+    const s = fixture({ classA: 'cleric', opponent: mkMonster('jellyBun'), hp: 20 }); // cleric 8 > jellyBun 4
     const slime0 = battleOf(s).b.hp;
     const r1 = step(s, { type: 'battlePick', side: 'a', pick: 'secret' }); // sanctuary
     const r2 = r1; // the faster cleric's pick resolves against the pre-drawn defense
@@ -373,7 +373,7 @@ describe('secrets', () => {
 
 describe('battle end', () => {
   it('ends in a draw after 3 exchanges with no rewards', () => {
-    const s = fixture({ opponent: mkMonster('rockGolem', 1, 500) }); // nobody can KO
+    const s = fixture({ opponent: mkMonster('penguinKnight', 1, 500) }); // nobody can KO
     const gold0 = s.players[0]!.gold;
     const xp0 = s.players[0]!.xp;
     const { state, events } = drive(s, (side, attacking) =>
@@ -390,8 +390,8 @@ describe('battle end', () => {
     assertInvariants(state);
   });
   it('monster win grants the monster xp + gold and levels when the configured threshold is reached', () => {
-    // slime hp 5: the knight's opening attack (≥12 with atk 30) KOs it before it ever acts
-    const s = fixture({ opponent: mkMonster('goldSlime', 1, 5), atk: 30 });
+    // jellyBun hp 5: the knight's opening attack (≥12 with atk 30) KOs it before it ever acts
+    const s = fixture({ opponent: mkMonster('jellyBun', 1, 5), atk: 30 });
     const { state, events } = drive(s, (side, attacking) =>
       attacking ? (side === 'a' ? 'attack' : 'strike') : 'defend',
     );
@@ -399,10 +399,10 @@ describe('battle end', () => {
     expect(ended && ended.params.result).toBe('aWin');
     const xp = events.find((e) => e.type === 'XpGained');
     const gold = events.find((e) => e.type === 'GoldGained');
-    expect(xp && xp.params.amount).toBe(MONSTERS['goldSlime']!.xp);
-    expect(gold && gold.params.amount).toBe(MONSTERS['goldSlime']!.gold);
-    expect(state.players[0]!.xp).toBe(MONSTERS['goldSlime']!.xp);
-    expect(state.players[0]!.gold).toBe(300 + MONSTERS['goldSlime']!.gold);
+    expect(xp && xp.params.amount).toBe(MONSTERS['jellyBun']!.xp);
+    expect(gold && gold.params.amount).toBe(MONSTERS['jellyBun']!.gold);
+    expect(state.players[0]!.xp).toBe(MONSTERS['jellyBun']!.xp);
+    expect(state.players[0]!.gold).toBe(300 + MONSTERS['jellyBun']!.gold);
     expect(state.players[0]!.level).toBe(2);
     expect(events).toContainEqual(
       expect.objectContaining({ type: 'LevelUp', params: { level: 2 } }),
@@ -414,7 +414,7 @@ describe('battle end', () => {
   });
   it('KO by monster: lose 20% gold, respawn at castle, hp maxHp, skip next turn', () => {
     const s = fixture({
-      opponent: mkMonster('shadowImp', 1, undefined, { atk: 30, spd: 12 }),
+      opponent: mkMonster('lavaImp', 1, undefined, { atk: 30, spd: 12 }),
       hp: 5,
     }); // high-ATK monster acts first and KOs the player
     const { state, events } = drive(s, (side, attacking) =>
@@ -462,8 +462,8 @@ describe('rng discipline', () => {
     startBattle(s, {
       context: 'monster',
       spaceId: 0,
-      opponent: mkMonster('shadowImp', 1, undefined, { spd: 12 }),
-    }); // imp attacks first
+      opponent: mkMonster('lavaImp', 1, undefined, { spd: 12 }),
+    }); // lavaImp attacks first
     const rng1 = structuredClone(s.rng);
     expect(rng1).not.toEqual(rng0); // opening monster pick is drawn before player defense
 
@@ -477,7 +477,7 @@ describe('rng discipline', () => {
     for (let i = 0; i < 20; i++) {
       const s = fixture({
         seed: `mp${i}`,
-        opponent: mkMonster('shadowImp', 1, 500, { maxHp: 500, spd: 12 }),
+        opponent: mkMonster('lavaImp', 1, 500, { maxHp: 500, spd: 12 }),
       });
       const picks: string[] = [];
       let st = s;

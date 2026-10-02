@@ -1,44 +1,58 @@
 {
-  "goldSlime": {
+  "jellyBun": {
     "base": { "maxHp": 12, "atk": 3, "def": 2, "spd": 2, "mag": 1 },
     "growth": { "maxHp": 2, "atk": 1, "def": 1, "spd": 1, "mag": 0 },
     "xp": 20,
-    "gold": 40,
+    "gold": 32,
     "regions": ["meadow"]
   },
-  "mushroomBandit": {
+  "mushroomBonk": {
     "base": { "maxHp": 14, "atk": 4, "def": 2, "spd": 3, "mag": 2 },
     "growth": { "maxHp": 2, "atk": 1, "def": 1, "spd": 1, "mag": 1 },
     "xp": 25,
-    "gold": 60,
-    "regions": ["meadow", "desert"]
+    "gold": 48,
+    "regions": ["meadow"]
   },
-  "lanternGhost": {
-    "base": { "maxHp": 10, "atk": 3, "def": 2, "spd": 4, "mag": 3 },
-    "growth": { "maxHp": 2, "atk": 1, "def": 1, "spd": 1, "mag": 1 },
-    "xp": 30,
-    "gold": 50,
-    "regions": ["desert", "snow"]
-  },
-  "mimic": {
+  "cactusPunch": {
     "base": { "maxHp": 12, "atk": 4, "def": 2, "spd": 2, "mag": 1 },
     "growth": { "maxHp": 2, "atk": 1, "def": 1, "spd": 1, "mag": 1 },
     "xp": 35,
-    "gold": 150,
+    "gold": 120,
     "regions": ["desert"]
   },
-  "rockGolem": {
+  "coinScorpion": {
+    "base": { "maxHp": 10, "atk": 3, "def": 2, "spd": 4, "mag": 3 },
+    "growth": { "maxHp": 2, "atk": 1, "def": 1, "spd": 1, "mag": 1 },
+    "xp": 30,
+    "gold": 40,
+    "regions": ["desert"]
+  },
+  "yetiBunny": {
+    "base": { "maxHp": 12, "atk": 3, "def": 2, "spd": 4, "mag": 3 },
+    "growth": { "maxHp": 2, "atk": 1, "def": 1, "spd": 1, "mag": 1 },
+    "xp": 30,
+    "gold": 40,
+    "regions": ["snow"]
+  },
+  "penguinKnight": {
     "base": { "maxHp": 15, "atk": 4, "def": 4, "spd": 2, "mag": 1 },
     "growth": { "maxHp": 2, "atk": 1, "def": 1, "spd": 0, "mag": 0 },
     "xp": 45,
-    "gold": 90,
-    "regions": ["snow", "volcano"]
+    "gold": 72,
+    "regions": ["snow"]
   },
-  "shadowImp": {
+  "lavaImp": {
     "base": { "maxHp": 10, "atk": 5, "def": 2, "spd": 4, "mag": 2 },
     "growth": { "maxHp": 2, "atk": 1, "def": 1, "spd": 1, "mag": 1 },
     "xp": 60,
-    "gold": 120,
+    "gold": 96,
+    "regions": ["volcano"]
+  },
+  "maskGoon": {
+    "base": { "maxHp": 15, "atk": 4, "def": 4, "spd": 3, "mag": 1 },
+    "growth": { "maxHp": 2, "atk": 1, "def": 1, "spd": 0, "mag": 0 },
+    "xp": 45,
+    "gold": 72,
     "regions": ["volcano"]
   }
 }

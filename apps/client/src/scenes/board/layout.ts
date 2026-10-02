@@ -52,37 +52,17 @@ export const HUD_RECTS: HudRect[] = [
   rect('tray', 289, 302, 351, 356),
 ];
 
-/** Largest tile size (px) tried when shrinking the board to fit the HUD. */
-export const MAX_TILE = 24;
-/** Smallest tile size the layout will shrink to before giving up. */
-export const MIN_TILE = 8;
-
-function tileClear(point: ScreenPoint, half: number, canvas: Size): boolean {
-  if (
-    point.x - half < 0 ||
-    point.x + half > canvas.width ||
-    point.y - half < 0 ||
-    point.y + half > canvas.height
-  ) {
-    return false;
-  }
-  return HUD_RECTS.every(
-    (hud) =>
-      point.x + half <= hud.x ||
-      point.x - half >= hud.x + hud.width ||
-      point.y + half <= hud.y ||
-      point.y - half >= hud.y + hud.height,
-  );
-}
-
 /**
- * Map the engine grid onto the 640x360 canvas:
- * - largest integer tile size (24 down to 8 px) whose whole tile boxes stay
- *   inside the canvas and clear of every DOM HUD rectangle;
- * - board centred horizontally; the vertical offset closest to centre that
- *   clears the HUD wins;
- * - integer screen coordinates (roundPixels);
- * - falls back to a plain centred fit (M1 behaviour) if nothing clears.
+ * Map the engine board onto the 640x360 canvas.
+ *
+ * Since M5a, `Space.x/y` are authored map pixels (0..3200 x 0..1800) with
+ * hand-tuned jitter, so the M4 integer grid-fit no longer applies: quantising
+ * pixels to graph units collapses diagonal node pairs onto one cell. The
+ * interim layout is a plain centred linear fit of the real map geometry
+ * (10 px margin), with `toScreen` returning rounded integer coordinates.
+ * The M4 HUD-avoiding integer tile pass is replaced by the M5a follow camera
+ * in Task 6, which consumes `Space.x/y` directly and never draws the whole
+ * map at once.
  */
 export function boardLayout(spaces: Space[], canvas: Size): BoardLayout {
   if (spaces.length === 0) {
@@ -92,51 +72,18 @@ export function boardLayout(spaces: Space[], canvas: Size): BoardLayout {
   const maxX = Math.max(...spaces.map((space) => space.x));
   const minY = Math.min(...spaces.map((space) => space.y));
   const maxY = Math.max(...spaces.map((space) => space.y));
-  const unitsX = Math.max(1, maxX - minX);
-  const unitsY = Math.max(1, maxY - minY);
-
-  for (let tile = MAX_TILE; tile >= MIN_TILE; tile--) {
-    const offsetX = Math.round((canvas.width - unitsX * tile) / 2);
-    const centreY = Math.round((canvas.height - unitsY * tile) / 2);
-    for (const offsetY of offsetsNearest(centreY, canvas.height)) {
-      const fits = spaces.every((space) =>
-        tileClear(
-          { x: offsetX + (space.x - minX) * tile, y: offsetY + (space.y - minY) * tile },
-          tile / 2,
-          canvas,
-        ),
-      );
-      if (fits) {
-        return {
-          scale: tile,
-          toScreen: (x: number, y: number) => ({
-            x: offsetX + (x - minX) * tile,
-            y: offsetY + (y - minY) * tile,
-          }),
-        };
-      }
-    }
-  }
+  const spanX = Math.max(1, maxX - minX);
+  const spanY = Math.max(1, maxY - minY);
 
   const margin = 10;
-  const scale = Math.min(
-    (canvas.width - 2 * margin) / unitsX,
-    (canvas.height - 2 * margin) / unitsY,
-  );
-  const offsetX = (canvas.width - unitsX * scale) / 2;
-  const offsetY = (canvas.height - unitsY * scale) / 2;
+  const scale = Math.min((canvas.width - 2 * margin) / spanX, (canvas.height - 2 * margin) / spanY);
+  const offsetX = (canvas.width - spanX * scale) / 2;
+  const offsetY = (canvas.height - spanY * scale) / 2;
   return {
     scale,
     toScreen: (x: number, y: number) => ({
-      x: offsetX + (x - minX) * scale,
-      y: offsetY + (y - minY) * scale,
+      x: Math.round(offsetX + (x - minX) * scale),
+      y: Math.round(offsetY + (y - minY) * scale),
     }),
   };
-}
-
-/** Every vertical offset in the canvas, nearest to the centred one first. */
-function offsetsNearest(centre: number, height: number): number[] {
-  const out = [centre];
-  for (let delta = 1; delta <= height; delta++) out.push(centre - delta, centre + delta);
-  return out.filter((offset) => offset >= 0 && offset <= height);
 }

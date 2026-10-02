@@ -20,7 +20,9 @@ describe('battle art selection', () => {
   });
   it('selects class and monster atlases for opposing fighters', () => {
     expect(fighterKey(state, { kind: 'player', seat: 0, monsterId: null })).toBe('hero-knight');
-    expect(fighterKey(state, { kind: 'monster', seat: null, monsterId: 'mimic' })).toBe(
+    // M5a interim: new engine ids resolve to the derive-from pixel atlas until
+    // Task 4 ships the cartoon `monster-<newId>` atlases (plan §Monster table).
+    expect(fighterKey(state, { kind: 'monster', seat: null, monsterId: 'cactusPunch' })).toBe(
       'monster-mimic',
     );
   });

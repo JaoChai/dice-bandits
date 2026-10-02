@@ -47,10 +47,11 @@ describe('GameController', () => {
     const actionDuringAnimation = legalActions(controller.state, 0)[0]!;
     expect(actionDuringAnimation).toBeDefined();
     await controller.dispatch(actionDuringAnimation);
-    expect(seen).toEqual(['battle']);
+    // Fixed map (M5a): the first roll for 'review-m4a' lands on a shop.
+    expect(seen).toEqual(['shop']);
     releaseAnimation();
     await first;
-    expect(seen).toEqual(['battle']);
+    expect(seen).toEqual(['shop']);
   });
 
   it('runs a human and three bots to game over, autosaving every action', async () => {
