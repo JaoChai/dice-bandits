@@ -1,5 +1,6 @@
 {
   "startGold": 300,
+  "slotWeights": { "town": 2, "monster": 3, "chest": 2, "event": 2, "trap": 1 },
   "rounds": 12,
   "frenzyFromRound": 10,
   "frenzyMultiplier": 2,

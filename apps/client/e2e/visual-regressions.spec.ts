@@ -4,10 +4,13 @@ import { playUntil } from './helpers';
 test('reward dialog frame stays inside the viewport with all choices scrollable', async ({
   page,
 }) => {
-  // Reaching this deterministic reward takes 66 full UI actions. CI traces show
-  // ~0.55 s per click on a slow runner (~62 s total), so budget for runner variance.
+  // Reaching this deterministic reward takes ~38 full UI actions. CI traces
+  // show ~0.55 s per click on a slow runner, so budget for runner variance.
   test.setTimeout(150_000);
-  await page.goto('/?seed=review-m4a&speed=0');
+  // M5a: seed re-derived for the fixed map (engine replay: human wins a duel
+  // and takes a pvpReward with 13 choices at action 38; the M4 seed
+  // review-m4a no longer reaches a human pvpReward within budget).
+  await page.goto('/?seed=m5a-7&speed=0');
   await page.locator('[data-action="new"]').click();
   for (let seat = 1; seat < 4; seat++)
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
@@ -28,10 +31,14 @@ test('reward dialog frame stays inside the viewport with all choices scrollable'
     await expect(buttons.last()).toBeInViewport();
   }
 });
+// M5a (review round 1): seeds re-derived for the fixed map via engine replay with the
+// setup screen's real defaults (all bots greedy). Meadow `m5a-2` @ 1 click, desert
+// `m5a-1` @ 9, volcano `m5a-v8` @ 23 (the old `m5a-9` journey reached round 12
+// game-over before any volcano battle under real UI click order).
 for (const [region, seed] of [
-  ['meadow', 'review-m4a'],
-  ['desert', 'desert-4'],
-  ['volcano', 'volcano-3'],
+  ['meadow', 'm5a-2'],
+  ['desert', 'm5a-1'],
+  ['volcano', 'm5a-v8'],
 ] as const) {
   test(`${region} battle renders its own backdrop without a page error`, async ({ page }) => {
     // This visual journey traverses many actions before the regional battle.

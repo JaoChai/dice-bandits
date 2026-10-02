@@ -263,3 +263,97 @@ Simulation command: `npm run sim -- --games 1000 --players 4`. Bot classes and p
 ```
 
 **Judgment:** All gates pass: average final level 4.05575, class rates 0.215–0.302, comeback 0.128, no crashes or stuck games. Stop tuning.
+
+## M5a fixed map — data-only tuning (2026-10-02, M5a Task 2 step 5)
+
+Board is the authored fixed map (35 free slots; meadow 7, desert 11, snow 11, volcano 6). Two gates must pass on the branch: (A) `npm run sim -- --games 200 --players 4` exit 0 (every class win rate in 0.15–0.35, comeback ≥ 0.08); (B) n=1000 within the plan Step-5 band vs main (`|branch − main| ≤ 0.10 × main` for class win rates, comebackRate, `engagement.townFlips`).
+
+**Main reference (bda7adc, trial-6 data), measured fresh on this branch's toolchain:** knight .246, thief .237, mage .215, cleric .302, comeback .128, townsClaimed 4453, townFlips 806, monsterBattles 8799, avgFinalLevel 4.056 → band ceilings knight .271, thief .261, mage .237, cleric .332; comeback floor .115; townFlips ceiling 887.
+
+Starting point (authored branch data `slotWeights {town:3, monster:4, chest:2, event:2, trap:1}`, new monster table): n=200 cleric **.380** → gate A FAIL; n=1000 townFlips **977** → gate B FAIL (cleric .325 in band).
+
+| Iter | Change                           | n=200 cleric (gate A)   | n=1000 townFlips (ceiling 887) | Verdict                                           |
+| ---- | -------------------------------- | ----------------------- | ------------------------------ | ------------------------------------------------- |
+| 0    | authored data                    | .380 FAIL               | 977                            | both fail                                         |
+| 1    | monster weight 4→3               | .325 pass               | 1001                           | A pass, B fail (comeback .115 grazes floor .1152) |
+| 2    | town weight 3→2                  | .275 pass               | 946                            | A pass, B fail                                    |
+| 3    | monster gold −20% (xp untouched) | .285 pass               | 954                            | A pass, B fail                                    |
+| 4    | town weight 2→1                  | .265 pass               | 865                            | B pass but board repair breaks (see finding F3)   |
+| 5    | monster xp −20%                  | .285 pass               | 954                            | byte-identical to iter 3 — xp inert (F2)          |
+| 6    | town 2, monster 4                | .335 pass (margin .015) | 929                            | A pass, B fail; comeback/levels drifting up       |
+
+**Current tree = iteration 3** (best candidate: `slotWeights {town:2, monster:3, chest:2, event:2, trap:1}`, monster gold 32/48/120/40/40/72/96/72, xp original). Engine suite 128/128 green under it. Remaining gap: townFlips 954 vs 887 (+7.5%).
+
+**Findings (measured on this branch, probes in scratch):**
+
+- **F1 — townFlips are duel seizes, not town battles.** Full sim-loop probe (bots, 200 games): flips 177 = 174 via `pvpReward reward:'seize'` (duel win on a town) + 3 via town-guardian battle wins. Flip volume therefore scales with town-space count and duel frequency, not monster rewards.
+- **F2 — monster xp is inert on the sim path.** Probe: jellyBun xp 16 → 500 produced byte-identical reports. `xpToLevel` thresholds (10,11,12,13,14,15,20,30,45,65…) are smaller than typical grants (16–48), and xp accumulates without reset, so effectively every battle win levels the player: grant size changes cannot change level counts.
+- **F3 — town weight 1 is structurally invalid.** Board repair guarantees ≥2 towns/region by donating from the bag pool; at weight 1 several seeds leave volcano with zero town donors (`no donor space in region volcano`), and seeded test `targeted.test.ts` 'end' hits an early gameOver (skip-chain past a trap skip at round 12). Town ≥ 2 is a hard floor.
+- **F4 — monster gold −20% moved flips by <1%** (946→954, within sampling noise): seizes are driven by duel dynamics, not attacker wealth from monster gold.
+- **F5 — cleric's n=200 ceiling needs monster share ≤ 33%.** At share 25% (monster 3): cleric .285–.311; at 36% (monster 4): .335–.380. The gate band's top (0.35) allows little headroom above share 33%.
+
+Untested data lever (weak, risk noted): diluting town share via `event` weight 2→4..5 (flips −3.5% per observed dilution elasticity — likely short of −7.5% — while event spaces teleport players onto towns, a countervailing flip pressure).
+
+**Status after 6 data-only iterations:** gate A passes; gate B fails on `engagement.townFlips` alone (all other band metrics — 4 class rates, comebackRate — inside 10% of main). Blocked per ruling: next step needs the lead's call.
+
+Ruling: accepted iter 3 under the one-sided townFlips band (954 ≤ 1.25 × 806 = 1007).
+
+## M5a review round 1 — final reports (2026-10-02, review fixes on wt/m5a-t2)
+
+**Full main + branch reports, n=1000, `npm run sim -- --games 1000 --players 4` (review items 3–5).**
+
+Main (bda7adc, trial-6 data, measured fresh on this branch's toolchain):
+
+```json
+{
+  "games": 1000,
+  "crashes": 0,
+  "stuck": 0,
+  "avgRounds": 12,
+  "classWinRate": { "knight": 0.246, "thief": 0.237, "mage": 0.215, "cleric": 0.302 },
+  "comebackRate": 0.128,
+  "seatWinRate": [0.254, 0.257, 0.235, 0.254],
+  "engagement": {
+    "townsClaimed": 4453,
+    "townFlips": 806,
+    "townAttacks": 2000,
+    "monsterBattles": 8799,
+    "investments": 196,
+    "equipmentBought": 5531,
+    "levelUps": 12223,
+    "duelsAccepted": 5466,
+    "banditCardsUsed": 11724,
+    "averageFinalLevel": 4.05575
+  }
+}
+```
+
+Branch (iter 3 data, current head — byte-identical to the accepted iter 3):
+
+```json
+{
+  "games": 1000,
+  "crashes": 0,
+  "stuck": 0,
+  "avgRounds": 12,
+  "classWinRate": { "knight": 0.2515, "thief": 0.2155, "mage": 0.229, "cleric": 0.304 },
+  "comebackRate": 0.126,
+  "seatWinRate": [0.2625, 0.257, 0.223, 0.2575],
+  "engagement": {
+    "townsClaimed": 5416,
+    "townFlips": 954,
+    "townAttacks": 2203,
+    "monsterBattles": 8437,
+    "investments": 235,
+    "equipmentBought": 5563,
+    "levelUps": 12846,
+    "duelsAccepted": 5507,
+    "banditCardsUsed": 11665,
+    "averageFinalLevel": 4.2115
+  }
+}
+```
+
+Band check vs main: knight +.0055 ≤ .0246 ✓, thief −.0215 ≤ .0237 ✓, mage +.014 ≤ .0215 ✓, cleric +.002 ≤ .0302 ✓, comeback −.002 ≥ −.0128 (floor .115) ✓, townFlips 954 within one-sided band [725, 1007] ✓ (lead ruling 2026-10-02).
+
+**Per-seed generateBoard timing (review item 3; 2,000 seeds/run, same vitest worker/transform both trees, 3 runs each, medians):** pre-fix (def4f58) typical 26.3 µs/seed, adversarial-retry seed 24.0 µs/seed; post-fix (current head) typical 27.8 µs/seed, adversarial-retry seed 23.3 µs/seed — parity within run-to-run variance; no retry-path cost regression (probe in scratch, not committed).

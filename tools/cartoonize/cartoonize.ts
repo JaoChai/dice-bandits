@@ -50,6 +50,24 @@ const TOLERANCE = 28;
 const KEY_SOFT = 12;
 /** WebP encode settings (plan Step 3): deterministic quality 82, effort 6. */
 const WEBP_OPTIONS: WebpOptions = { quality: 82, effort: 6 };
+/**
+ * Deep enclosed pockets: an enclosed (never border-reached) keyable component
+ * behaves as background — same soft ramp as the border flood — only when ALL
+ * three rules hold, measured over the whole component in the source cell:
+ *
+ * - `POCKET_MIN_AREA` (150 px): smaller enclosed key-coloured areas are
+ *   highlights and thin grey fills inside the character and stay opaque
+ *   (hole-fixture regression).
+ * - `POCKET_MAX_CHROMA` (4.0): the background is near-grey; mean per-pixel
+ *   chroma (max − min of RGB) above this is tinted paint (knight silver
+ *   measures ≥ 6.8) and stays opaque.
+ * - `POCKET_MAX_DISTANCE` (10): background sits within `TOLERANCE` of the key
+ *   colour; mean distance above this is deliberately darker/lighter paint
+ *   (thief 15.6, lavaImp 19.1) and stays opaque.
+ */
+const POCKET_MIN_AREA = 150;
+const POCKET_MAX_CHROMA = 4.0;
+const POCKET_MAX_DISTANCE = 10;
 
 export async function loadManifest(
   manifestPath = fileURLToPath(new URL('./sheets.json', import.meta.url)),
@@ -67,8 +85,11 @@ export async function loadManifest(
  * pixels. Reached pixels get the colour-space soft edge — distance ≤ KEY_SOFT
  * fully transparent, > KEY_SOFT ramping linearly to 255 — so anti-aliased
  * outlines keep a partial-alpha fringe instead of an opaque grey one. Pixels
- * the flood never reaches keep their alpha, so enclosed key-coloured holes and
- * near-key colours inside the character survive (Task 4 incident regression).
+ * the flood never reaches keep their alpha, so small enclosed key-coloured
+ * holes and near-key colours inside the character survive (Task 4 incident
+ * regression) — except deep enclosed pockets matching all three
+ * `POCKET_*` rules, which are keyed like background (t3fix2 incident
+ * regression).
  */
 async function chromaKey(input: SharpInstance): Promise<SharpInstance> {
   const { data, info } = await input.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -89,33 +110,73 @@ async function chromaKey(input: SharpInstance): Promise<SharpInstance> {
     distance[i] = Math.min(d, 255);
     keyable[i] = d <= TOLERANCE ? 1 : 0;
   }
+  // Component id per pixel: 0 = border-connected background, n ≥ 1 = the nth
+  // enclosed keyable component (deep-pocket candidate), -1 = not keyable.
+  const component = new Int32Array(size).fill(-1);
   const queue: number[] = [];
-  const enqueue = (i: number): void => {
+  const enqueue = (i: number, id: number): void => {
     if (keyable[i] === 1) {
       keyable[i] = 0;
+      component[i] = id;
       queue.push(i);
     }
   };
   for (let x = 0; x < width; x++) {
-    enqueue(x);
-    enqueue((height - 1) * width + x);
+    enqueue(x, 0);
+    enqueue((height - 1) * width + x, 0);
   }
   for (let y = 0; y < height; y++) {
-    enqueue(y * width);
-    enqueue(y * width + width - 1);
+    enqueue(y * width, 0);
+    enqueue(y * width + width - 1, 0);
   }
   while (queue.length > 0) {
     const i = queue.pop()!;
     const x = i % width;
-    if (x > 0) enqueue(i - 1);
-    if (x < width - 1) enqueue(i + 1);
-    if (i >= width) enqueue(i - width);
-    if (i < size - width) enqueue(i + width);
+    if (x > 0) enqueue(i - 1, component[i]!);
+    if (x < width - 1) enqueue(i + 1, component[i]!);
+    if (i >= width) enqueue(i - width, component[i]!);
+    if (i < size - width) enqueue(i + width, component[i]!);
+  }
+  // Every remaining keyable pixel seeds one enclosed component. Decide it as
+  // a deep pocket from the whole-component sums, then record its id so the
+  // alpha pass can tell survivors from keyed pockets.
+  let pocketCount = 0;
+  const deepPockets = new Set<number>();
+  for (let seed = 0; seed < size; seed++) {
+    if (keyable[seed] !== 1) continue;
+    const pocketId = ++pocketCount;
+    let count = 0;
+    let sumChroma = 0;
+    let sumDistance = 0;
+    enqueue(seed, pocketId);
+    while (queue.length > 0) {
+      const i = queue.pop()!;
+      const offset = i * channels;
+      const r = out[offset]!;
+      const g = out[offset + 1]!;
+      const b = out[offset + 2]!;
+      sumChroma += Math.max(r, g, b) - Math.min(r, g, b);
+      sumDistance += distance[i]!;
+      count++;
+      const x = i % width;
+      if (x > 0) enqueue(i - 1, pocketId);
+      if (x < width - 1) enqueue(i + 1, pocketId);
+      if (i >= width) enqueue(i - width, pocketId);
+      if (i < size - width) enqueue(i + width, pocketId);
+    }
+    if (
+      count >= POCKET_MIN_AREA &&
+      sumChroma / count <= POCKET_MAX_CHROMA &&
+      sumDistance / count <= POCKET_MAX_DISTANCE
+    ) {
+      deepPockets.add(pocketId);
+    }
   }
   for (let i = 0; i < size; i++) {
-    // Skip non-keyable pixels (keep them fully opaque) and keyable pixels the
-    // flood never reached (enclosed holes keep their original alpha).
-    if (distance[i]! > TOLERANCE || keyable[i] === 1) continue;
+    const id = component[i]!;
+    // Skip non-keyable pixels (keep them fully opaque) and keyable pixels no
+    // flood reached outside a keyed pocket (enclosed holes keep their alpha).
+    if (id < 0 || (id > 0 && !deepPockets.has(id))) continue;
     const offset = i * channels;
     if (distance[i]! <= KEY_SOFT) {
       out[offset + 3] = 0;

@@ -51,11 +51,17 @@ export const CLASS_ACCENT: Record<ClassId, string> = {
   cleric: '#55a780',
 };
 
+// M5a interim: keys follow the new engine monster ids (Task 2), but values
+// point at the shipped pixel atlases of the old monster each new id derives
+// from (plan §Monster table), so battles render until Task 4 ships the
+// cartoon `monster-<newId>` atlases and this maps 1:1 again.
 export const MONSTER_SHEETS: Record<string, string> = {
-  goldSlime: 'monster-goldSlime',
-  mushroomBandit: 'monster-mushroomBandit',
-  lanternGhost: 'monster-lanternGhost',
-  mimic: 'monster-mimic',
-  rockGolem: 'monster-rockGolem',
-  shadowImp: 'monster-shadowImp',
+  jellyBun: 'monster-goldSlime',
+  mushroomBonk: 'monster-mushroomBandit',
+  cactusPunch: 'monster-mimic',
+  coinScorpion: 'monster-lanternGhost',
+  yetiBunny: 'monster-lanternGhost',
+  penguinKnight: 'monster-rockGolem',
+  lavaImp: 'monster-shadowImp',
+  maskGoon: 'monster-rockGolem',
 };

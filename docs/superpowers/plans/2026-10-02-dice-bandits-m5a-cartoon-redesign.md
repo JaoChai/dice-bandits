@@ -92,7 +92,7 @@
 - [ ] **Step 2: run** `npm test -w @dice-bandits/engine -- board` → FAIL.
 - [ ] **Step 3: implement**: fixed slots get their kind; free slots draw from a weighted bag per region (weights in `balance.json` → new key `slotWeights: { town: 3, monster: 4, chest: 2, event: 2, trap: 1 }`), then the existing repair pass (towns ≥ 2, no adjacent traps) with seeded RNG; throw after 10 attempts as today.
 - [ ] **Step 4: save test** in `save.test.ts`: a stored `{version: 1, state}` → `loadGame()` returns `null` and the key is removed. Implement by bumping `SAVE_VERSION`.
-- [ ] **Step 5: baseline + balance**: before merging, run `npm run sim -- --games 1000 --players 4` on `main` and on this branch; append both JSON reports to `docs/balance-log.md` under "M5a fixed map". Accept when `avgRounds` is equal and `|branch − main| ≤ 0.10 × main` for every class win rate, `comebackRate`, and `engagement.townFlips`; otherwise tune `slotWeights` only.
+- [ ] **Step 5: baseline + balance**: before merging, run `npm run sim -- --games 1000 --players 4` on `main` and on this branch; append both JSON reports to `docs/balance-log.md` under "M5a fixed map". Accept when `avgRounds` is equal and `|branch − main| ≤ 0.10 × main` for every class win rate, `comebackRate`, and `engagement.townFlips`; otherwise tune `slotWeights` only. Exception (lead ruling 2026-10-02): `engagement.townFlips` is one-sided — accept `branch ≥ 0.90 × main` and `branch ≤ 1.25 × main`; more duel seizes are intended interaction.
 - [ ] **Step 6: full gate; commit** `feat(engine): fixed map with seeded space kinds`.
 
 ### Task 3: `tools/cartoonize` asset pipeline + art budget

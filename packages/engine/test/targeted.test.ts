@@ -40,30 +40,31 @@ const cfg = (seed = 't1'): GameConfig => ({
 
 describe('targeted flow', () => {
   it('fork presents chooseBranch with 2 options and follows the chosen branch', () => {
-    // 'fork' seed: forks at 20 (next 23|26) and 31; place A two before fork 20.
+    // Fixed map: forks at 10 (options 11|34) and 19 (options 20|37).
+    // seed 'fork' rolls 3 for A; walk continues onto the fork.
     const s = createGame(cfg('fork'));
-    s.players[0]!.pos = 20;
+    s.players[0]!.pos = 8; // 8 -> 9 -> 10 (fork) for a roll of 3
     s.players[1]!.pos = 31; // B far away so no duel interference
     const r = step(s, { type: 'roll' });
     expect(r.state.phase.kind).toBe('chooseBranch');
     const ph = r.state.phase;
     if (ph.kind !== 'chooseBranch') throw new Error('unreachable');
-    expect(ph.options.sort((a, b) => a - b)).toEqual([23, 26]);
+    expect(ph.options.sort((a, b) => a - b)).toEqual([11, 34]);
     expect(
       legalActions(r.state, r.state.turnSeat)
         .map((a) => (a as { to: number }).to)
         .sort((a, b) => a - b),
-    ).toEqual([23, 26]);
-    const r2 = step(r.state, { type: 'chooseBranch', to: 26 });
+    ).toEqual([11, 34]);
+    const r2 = step(r.state, { type: 'chooseBranch', to: 34 });
     expect(r2.events.some((e) => e.type === 'Moved')).toBe(true);
-    // continue moving the remaining steps; final pos must lie on the 26 branch or beyond
+    // one step left after the fork; final pos must lie on the 34 branch
     let st = r2.state;
     while (st.phase.kind === 'chooseBranch' || st.phase.kind === 'moving') {
       const acts = legalActions(st, st.turnSeat);
       st = step(st, acts[0]!).state;
-      if (st.players[0]!.pos === 26) break;
+      if (st.players[0]!.pos === 34) break;
     }
-    expect([26, 27, 28]).toContain(st.players[0]!.pos);
+    expect(st.players[0]!.pos).toBe(34);
     assertInvariants(st);
   });
 
@@ -79,8 +80,9 @@ describe('targeted flow', () => {
     const r2 = step(r.state, { type: 'duel', target: null });
     expect(r2.events.some((e) => e.type === 'DuelDeclined')).toBe(true);
     expect(r2.state.players[0]!.pos).toBe(3); // kept moving, did not stay on B's space
-    expect(r2.events.some((e) => e.type === 'BattleStarted')).toBe(true);
-    expect(r2.state.phase.kind).toBe('battle'); // landing resolves the monster space
+    // Landing on 3 (event space) ends the turn; assert the move resolved without a duel battle.
+    expect(r2.events.some((e) => e.type === 'DuelAccepted')).toBe(false);
+    expect(r2.state.phase.kind).not.toBe('duelOffer');
     assertInvariants(r2.state);
   });
 
