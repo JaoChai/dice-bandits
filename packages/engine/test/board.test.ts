@@ -7,6 +7,9 @@ const SEEDS = Array.from({ length: 10_000 }, (_, i) => `seed-${i}`);
 // prebuilt once (review round 1, item 1): no per-lookup Array.find
 const MAP_BY_ID = new Map(MAP.nodes.map((n) => [n.id, n]));
 const MAP_NODES_BY_ID = [...MAP.nodes].sort((a, z) => a.id - z.id);
+// exactly one authored shop slot per region; the slot bag excludes 'shop', so
+// these are also the only shop kinds a board may contain (review round 2, item 1)
+const SHOP_SLOT_IDS = MAP_NODES_BY_ID.filter((n) => n.slot === 'shop').map((n) => n.id);
 
 describe('generateBoard', () => {
   it('is deterministic', () => {
@@ -31,6 +34,9 @@ describe('generateBoard', () => {
       });
       // exactly one castle space, and it is the castle slot
       expect(b.spaces.filter((s) => s.kind === 'castle').map((s) => s.id)).toEqual([b.castleId]);
+      // shop kind appears exactly on the authored shop slots (round 2, item 1;
+      // expect.anything() on free slots alone lets a shop slip through)
+      expect(b.spaces.filter((s) => s.kind === 'shop').map((s) => s.id)).toEqual(SHOP_SLOT_IDS);
       // free slots never keep a fixed kind (the slot bag excludes castle)
       expect(
         b.spaces.some((s) => MAP_BY_ID.get(s.id)!.slot === 'free' && s.kind === 'castle'),
