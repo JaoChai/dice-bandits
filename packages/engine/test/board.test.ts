@@ -4,11 +4,9 @@ import { MAP } from '../src/map';
 
 const SEEDS = Array.from({ length: 10_000 }, (_, i) => `seed-${i}`);
 
-const nodeById = (id: number) => {
-  const node = MAP.nodes.find((n) => n.id === id);
-  if (!node) throw new Error(`MAP has no node ${id}`);
-  return node;
-};
+// prebuilt once (review round 1, item 1): no per-lookup Array.find
+const MAP_BY_ID = new Map(MAP.nodes.map((n) => [n.id, n]));
+const MAP_NODES_BY_ID = [...MAP.nodes].sort((a, z) => a.id - z.id);
 
 describe('generateBoard', () => {
   it('is deterministic', () => {
@@ -18,18 +16,34 @@ describe('generateBoard', () => {
   it.each([0, 1, 2])('guarantees hold (slice %i)', (slice) => {
     for (const seed of SEEDS.slice(slice * 3334, (slice + 1) * 3334)) {
       const b = generateBoard(seed);
-      expect(b.spaces.length).toBe(40);
-      expect(b.spaces[b.castleId]?.kind).toBe('castle');
-      expect(b.spaces.filter((s) => s.kind === 'castle').length).toBe(1);
-      expect(b.spaces.filter((s) => s.kind === 'castle')[0]?.id).toBe(b.castleId);
+      // one aggregated toEqual per board (review round 1, item 1): ids, pixels,
+      // regions, edges, and fixed-slot kinds all come from MAP in one comparison
+      expect(b).toEqual({
+        castleId: MAP.nodes[0]!.id,
+        spaces: MAP_NODES_BY_ID.map((n) => ({
+          id: n.id,
+          x: n.x,
+          y: n.y,
+          region: n.region,
+          next: [...n.next].sort((a, z) => a - z),
+          kind: n.slot === 'castle' ? 'castle' : n.slot === 'shop' ? 'shop' : expect.anything(),
+        })),
+      });
+      // exactly one castle space, and it is the castle slot
+      expect(b.spaces.filter((s) => s.kind === 'castle').map((s) => s.id)).toEqual([b.castleId]);
+      // free slots never keep a fixed kind (the slot bag excludes castle)
+      expect(
+        b.spaces.some((s) => MAP_BY_ID.get(s.id)!.slot === 'free' && s.kind === 'castle'),
+      ).toBe(false);
       for (const r of ['meadow', 'desert', 'snow', 'volcano'] as const) {
         const inR = b.spaces.filter((s) => s.region === r);
         expect(inR.filter((s) => s.kind === 'town').length).toBeGreaterThanOrEqual(2);
         expect(inR.filter((s) => s.kind === 'shop').length).toBeGreaterThanOrEqual(1);
       }
-      for (const s of b.spaces)
-        for (const n of s.next)
-          expect(!(s.kind === 'trap' && b.spaces[n]?.kind === 'trap')).toBe(true);
+      // no trap->trap edge
+      expect(
+        b.spaces.some((s) => s.kind === 'trap' && s.next.some((n) => b.spaces[n]!.kind === 'trap')),
+      ).toBe(false);
       // reachability from castle
       const seen = new Set([b.castleId]);
       const q = [b.castleId];
@@ -41,25 +55,8 @@ describe('generateBoard', () => {
           }
       expect(seen.size).toBe(b.spaces.length);
       expect(b.spaces.filter((s) => s.next.length === 2).length).toBe(2);
-      // fixed graph: ids, pixels, regions, edges match MAP; shop slots fixed
-      expect(b.spaces.map((s) => s.id)).toEqual(MAP.nodes.map((n) => n.id).sort((a, z) => a - z));
-      for (const s of b.spaces) {
-        const node = nodeById(s.id);
-        expect(s.x).toBe(node.x);
-        expect(s.y).toBe(node.y);
-        expect(s.region).toBe(node.region);
-        expect(s.next).toEqual([...node.next].sort((a, z) => a - z));
-        expect(s.kind === 'shop').toBe(node.slot === 'shop');
-      }
-      // castle space sits on the castle slot
-      expect(nodeById(b.castleId).slot).toBe('castle');
-      // free slots never keep a fixed kind
-      for (const s of b.spaces) {
-        const node = nodeById(s.id);
-        if (node.slot === 'free') expect(s.kind).not.toBe('castle');
-      }
-      const coords = new Set(b.spaces.map((s) => `${s.x},${s.y}`));
-      expect(coords.size).toBe(b.spaces.length);
+      // coordinates are unique
+      expect(new Set(b.spaces.map((s) => `${s.x},${s.y}`)).size).toBe(b.spaces.length);
     }
   });
 
