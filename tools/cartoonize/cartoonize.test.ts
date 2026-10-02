@@ -118,8 +118,9 @@ beforeAll(async () => {
   await writePoseFixture(join(fixtures, 'poses-fixture.png'));
   await writeGridFixture(join(fixtures, 'grid-fixture.png'));
   await writeMapFixture(join(fixtures, 'map-fixture.png'));
-  // Sanity-check the shipped manifest parses even while it is empty.
-  expect(Object.keys(await loadManifest())).toEqual([]);
+  // The shipped manifest must parse; it lists entries once the art task lands
+  // (plan Task 4), so do not assert emptiness here.
+  await loadManifest();
 });
 
 afterAll(async () => {
@@ -194,6 +195,68 @@ describe('cartoonize pose mode', () => {
     const atlas = (await cartoonizeSheet(poseEntry, toolDir, out))!;
     for (const pose of ['idle', 'attack', 'hurt'] as const) {
       expect(atlas.frames[pose]!.h).toBeLessThanOrEqual(poseEntry.shipHeight);
+    }
+  });
+
+  it('applies one scale per sheet: relative pose heights are preserved', async () => {
+    // Ground truth: measure each pose's keyed alpha bounding box in the source,
+    // then require the same ratios after the sheet's single scale factor.
+    const { data } = await sharp(join(fixtures, 'poses-fixture.png'))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const key = { r: 0xbd, g: 0xbd, b: 0xbd };
+    const frameWidth = Math.floor(256 / 3);
+    const sourceHeights = [0, 1, 2].map((pose) => {
+      let top = 256;
+      for (let y = 0; y < 256 && top === 256; y++) {
+        for (let x = 0; x < frameWidth; x++) {
+          const o = ((y * 256 + pose * frameWidth + x) * 4);
+          const distance = Math.max(
+            Math.abs(data[o]! - key.r),
+            Math.abs(data[o + 1]! - key.g),
+            Math.abs(data[o + 2]! - key.b),
+          );
+          if (distance > 28) {
+            top = y;
+            break;
+          }
+        }
+      }
+      return 256 - top;
+    });
+    const atlas = (await cartoonizeSheet(poseEntry, toolDir, out))!;
+    const heights = ['idle', 'attack', 'hurt'].map((p) => atlas.frames[p]!.h);
+    // One scale per sheet: identical ratio for every pose pair (±1 px slack
+    // for integer rounding), the tallest pose landing on shipHeight.
+    const scale = heights[2]! / sourceHeights[2]!;
+    for (let i = 0; i < 3; i++) {
+      expect(
+        Math.abs(heights[i]! / scale - sourceHeights[i]!),
+        `pose ${i}: ${heights[i]!} / ${scale} vs source ${sourceHeights[i]!}`,
+      ).toBeLessThanOrEqual(1);
+    }
+    expect(heights[2]).toBe(poseEntry.shipHeight);
+  });
+
+  it('feathers the key edge: some content-edge pixels have partial alpha', async () => {
+    // shipHeight 64 ≥ the tallest pose (64 px) → no scaling, edge alpha untouched.
+    const unscaledEntry: ManifestEntry = { ...poseEntry, shipHeight: 64 };
+    const atlas = (await cartoonizeSheet(unscaledEntry, toolDir, out))!;
+    const sheet = await pixels(join(out, 'fixture-pose.webp'));
+    for (const pose of ['idle', 'attack', 'hurt'] as const) {
+      const frame = atlas.frames[pose]!;
+      const partial: number[] = [];
+      for (let y = frame.y; y < frame.y + frame.h; y++) {
+        for (let x = frame.x; x < frame.x + frame.w; x++) {
+          const a = alphaAt(sheet, x, y);
+          if (a > 0 && a < 255) partial.push(a);
+        }
+      }
+      expect(
+        partial.length,
+        `pose ${pose} has ${partial.length} partial-alpha edge pixels`,
+      ).toBeGreaterThan(0);
     }
   });
 
