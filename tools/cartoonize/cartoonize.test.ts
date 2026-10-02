@@ -211,7 +211,7 @@ describe('cartoonize pose mode', () => {
       let top = 256;
       for (let y = 0; y < 256 && top === 256; y++) {
         for (let x = 0; x < frameWidth; x++) {
-          const o = ((y * 256 + pose * frameWidth + x) * 4);
+          const o = (y * 256 + pose * frameWidth + x) * 4;
           const distance = Math.max(
             Math.abs(data[o]! - key.r),
             Math.abs(data[o + 1]! - key.g),
