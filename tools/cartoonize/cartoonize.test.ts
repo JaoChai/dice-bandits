@@ -103,12 +103,19 @@ async function writeMapFixture(path: string): Promise<void> {
 
 /**
  * Enclosed-key fixture: a #bdbdbd top strip (border-connected background) over
- * a full-width dark #333333 slab containing an enclosed #bdbdbd hole and a
- * #c0c0c0 (distance 3) "silver" rectangle — key-coloured pixels the key must
- * NOT turn transparent. All rects are integer-aligned, so rasterization is
- * exact and the keyed+trimmed output frame is fully predictable: the strip is
- * keyed away, the slab spans the full width, so the frame is the slab exactly
+ * a full-width dark #333333 slab containing a SMALL enclosed #bdbdbd hole and
+ * a #b4bdc8 "silver" rectangle — key-adjacent pixels the key must NOT turn
+ * transparent. All rects are integer-aligned, so rasterization is exact and
+ * the keyed+trimmed output frame is fully predictable: the strip is keyed
+ * away, the slab spans the full width, so the frame is the slab exactly
  * (256x240) and sheet coords are source coords shifted up by 16.
+ *
+ * The hole is exact-key (#bdbdbd: chroma 0, distance 0 — the neutral pocket
+ * rules never exclude it), so it is sized BELOW POCKET_MIN_AREA (12x12 =
+ * 144 px < 150) to prove the area rule keeps small key-coloured pockets
+ * opaque. The silver rect (24x8 = 192 px, above the area threshold) has
+ * chroma 20 > POCKET_MAX_CHROMA, proving the chroma rule keeps neutrally
+ * tinted paint opaque.
  */
 async function writeHoleFixture(path: string): Promise<void> {
   const size = 256;
@@ -122,14 +129,14 @@ async function writeHoleFixture(path: string): Promise<void> {
     },
     {
       input: Buffer.from(
-        `<svg width="160" height="160"><rect width="160" height="160" fill="#bdbdbd"/></svg>`,
+        `<svg width="12" height="12"><rect width="12" height="12" fill="#bdbdbd"/></svg>`,
       ),
       left: 48,
       top: 64,
     },
     {
       input: Buffer.from(
-        `<svg width="48" height="16"><rect width="48" height="16" fill="#c0c0c0"/></svg>`,
+        `<svg width="24" height="8"><rect width="24" height="8" fill="#b4bdc8"/></svg>`,
       ),
       left: 24,
       top: 232,
@@ -146,6 +153,39 @@ async function writeHoleFixture(path: string): Promise<void> {
     .composite(composites)
     .png()
     .toFile(path);
+}
+
+/**
+ * Pocket fixture: a #bdbdbd top strip (border-connected background) over a
+ * full-width dark #333333 slab (y=32..128) containing enclosed key-coloured
+ * pockets on each side of the three deep-pocket rules:
+ *
+ *   RING  (all rules hold -> keyed): slab-coloured ring (outer r 24, inner
+ *         r 12) around an exact-key #bdbdbd centre (~452 px >= POCKET_MIN_AREA,
+ *         chroma 0, distance 0) — a ring opening / claw gap; becomes a hole.
+ *   DIM   (distance rule saves it): flat #a6a6a6 rect x84..108 y60..68
+ *         (24x8 = 192 px >= POCKET_MIN_AREA, chroma 0 <= POCKET_MAX_CHROMA,
+ *         mean distance 23 > POCKET_MAX_DISTANCE) — darker neutral paint;
+ *         stays opaque.
+ *   SPECK (area rule saves it): exact-key #bdbdbd 6x4 = 24 px < 150 at
+ *         (40,40) — a tiny highlight; stays opaque.
+ *
+ * The strip keys away as before, so the frame is the slab (128x96 at sheet
+ * y=32) and sheet coords equal source coords.
+ */
+async function writePocketFixture(path: string): Promise<void> {
+  const size = 128;
+  const svg = Buffer.from(
+    `<svg width="${size}" height="${size}">` +
+      `<rect width="${size}" height="${size}" fill="#bdbdbd"/>` +
+      `<rect width="${size}" height="96" y="32" fill="#333333"/>` +
+      `<circle cx="32" cy="80" r="24" fill="#333333"/>` +
+      `<circle cx="32" cy="80" r="12" fill="#bdbdbd"/>` +
+      `<rect x="84" y="60" width="24" height="8" fill="#a6a6a6"/>` +
+      `<rect x="40" y="40" width="6" height="4" fill="#bdbdbd"/>` +
+    `</svg>`,
+  );
+  await sharp(svg).png().toFile(path);
 }
 
 async function pixels(path: string): Promise<{ data: Buffer; width: number; height: number }> {
@@ -166,6 +206,7 @@ beforeAll(async () => {
   await writeGridFixture(join(fixtures, 'grid-fixture.png'));
   await writeMapFixture(join(fixtures, 'map-fixture.png'));
   await writeHoleFixture(join(fixtures, 'hole-fixture.png'));
+  await writePocketFixture(join(fixtures, 'pocket-fixture.png'));
   // The shipped manifest must parse; it lists entries once the art task lands
   // (plan Task 4), so do not assert emptiness here.
   await loadManifest();
@@ -176,6 +217,7 @@ afterAll(async () => {
   await rm(join(fixtures, 'grid-fixture.png'), { force: true });
   await rm(join(fixtures, 'map-fixture.png'), { force: true });
   await rm(join(fixtures, 'hole-fixture.png'), { force: true });
+  await rm(join(fixtures, 'pocket-fixture.png'), { force: true });
 });
 
 beforeEach(async () => {
@@ -311,8 +353,10 @@ describe('cartoonize pose mode', () => {
 
   it('keys only border-connected background: enclosed #bdbdbd and near-key pixels stay opaque', async () => {
     // Regression for the Task 4 incident: the key must flood from the sheet
-    // border. A character with enclosed key-coloured areas (holes, silver
-    // highlights) must keep them opaque.
+    // border. A character with SMALL enclosed key-coloured areas (holes,
+    // highlights) must keep them opaque: the 12x12 hole stays below
+    // POCKET_MIN_AREA (area rule), and the silver rect exceeds
+    // POCKET_MAX_CHROMA (chroma rule).
     const holeEntry: ManifestEntry = {
       name: 'fixture-hole',
       input: 'fixtures/hole-fixture.png',
@@ -337,13 +381,53 @@ describe('cartoonize pose mode', () => {
     expect(alphaAt(sheet, 0, 0)).toBe(0);
     // ...the slab's top row is opaque...
     expect(alphaAt(sheet, 0, 16)).toBe(255);
-    // ...the enclosed hole centre keeps its key-coloured pixels...
-    const centre = alphaAt(sheet, 127, 143);
+    // ...the small enclosed hole keeps its key-coloured pixels (12x12 hole at
+    // source (48,64)..(59,75), centre (53,69) → sheet (53,69); 144 px is below
+    // POCKET_MIN_AREA, so the area rule keeps it opaque)...
+    const centre = alphaAt(sheet, 53, 69);
     expect(centre, 'enclosed key-coloured hole centre stays opaque').toBeGreaterThan(0);
-    // ...and the near-key silver rect inside the slab survives (source (24,243)
-    // → sheet (24,243)).
-    const silver = alphaAt(sheet, 24, 243);
+    // ...and the near-key silver rect inside the slab survives (source (35,235)
+    // → sheet (35,235); its chroma exceeds POCKET_MAX_CHROMA, so the chroma
+    // rule keeps it opaque).
+    const silver = alphaAt(sheet, 35, 235);
     expect(silver, 'near-key silver rect survives inside the slab').toBeGreaterThan(200);
+  });
+
+  it('keys deep enclosed pockets: large neutral interiors become holes, rule-violating pockets stay opaque', async () => {
+    // Regression for the t3fix2 incident: ring pockets / claw gaps / between-
+    // arm areas are enclosed background showing through the figure — leaving
+    // them opaque grey reads as a solid blob. An enclosed keyable component is
+    // keyed like the border background only when ALL deep-pocket rules hold:
+    // area >= POCKET_MIN_AREA, mean chroma <= POCKET_MAX_CHROMA and mean
+    // distance <= POCKET_MAX_DISTANCE. The fixture places one pocket on each
+    // side of every rule (see writePocketFixture).
+    const pocketEntry: ManifestEntry = {
+      name: 'fixture-pocket',
+      input: 'fixtures/pocket-fixture.png',
+      kind: 'pose',
+      cell: [128, 128],
+      shipHeight: 96,
+      poses: ['idle'],
+      out: 'fixture-pocket',
+    };
+    const atlas = (await cartoonizeSheet(pocketEntry, toolDir, out))!;
+    const sheet = await pixels(join(out, 'fixture-pocket.webp'));
+    expect(atlas.image).toBe('fixture-pocket.webp');
+    // No scaling (shipHeight 96 = slab height): frame = slab, sheet row = 32.
+    const frame = atlas.frames['idle']!;
+    expect([frame.x, frame.y]).toEqual([0, 32]);
+    expect([frame.w, frame.h]).toEqual([128, 96]);
+    // The ring interior passes all three rules and becomes a real hole...
+    expect(alphaAt(sheet, 32, 80), 'ring pocket centre keyed away').toBe(0);
+    // ...opaque slab pixels between and around the pockets stay intact...
+    expect(alphaAt(sheet, 32, 50), 'slab above the ring stays opaque').toBe(255);
+    expect(alphaAt(sheet, 6, 80), 'slab left of the ring stays opaque').toBe(255);
+    expect(alphaAt(sheet, 96, 80), 'slab below the dim rect stays opaque').toBe(255);
+    // ...the dim pocket (mean distance 23 > POCKET_MAX_DISTANCE) stays
+    // opaque...
+    expect(alphaAt(sheet, 95, 64), 'dim neutral paint keeps its alpha').toBeGreaterThan(200);
+    // ...and the small key-coloured speck (24 px < POCKET_MIN_AREA) survives.
+    expect(alphaAt(sheet, 43, 41), 'small key-coloured speck survives').toBeGreaterThan(200);
   });
 
   it('is byte-identical across repeated runs of the same input', async () => {
