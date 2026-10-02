@@ -61,27 +61,66 @@ export async function loadManifest(
 }
 
 /**
- * Replaces near-`KEY` pixels with transparency and softens the edge in colour
- * space: distance ≤ KEY_SOFT is fully transparent, > TOLERANCE fully opaque,
- * and the band between ramps linearly 0→255 so anti-aliased outlines keep a
- * partial-alpha fringe instead of an opaque grey one.
+ * Replaces near-`KEY` background with transparency, but only where it is
+ * connected to the sheet border: a flood fill seeds every border pixel within
+ * `TOLERANCE` of the key colour and spreads 4-neighbour through keyable
+ * pixels. Reached pixels get the colour-space soft edge — distance ≤ KEY_SOFT
+ * fully transparent, > KEY_SOFT ramping linearly to 255 — so anti-aliased
+ * outlines keep a partial-alpha fringe instead of an opaque grey one. Pixels
+ * the flood never reaches keep their alpha, so enclosed key-coloured holes and
+ * near-key colours inside the character survive (Task 4 incident regression).
  */
 async function chromaKey(input: SharpInstance): Promise<SharpInstance> {
   const { data, info } = await input.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height, channels } = info;
   const out = Buffer.from(data);
+  const size = width * height;
   const ramp = TOLERANCE - KEY_SOFT;
-  for (let i = 0; i < width * height; i++) {
+  const distance = new Uint8Array(size);
+  // 1 = keyable and not yet visited; visited pixels are cleared to 0.
+  const keyable = new Uint8Array(size);
+  for (let i = 0; i < size; i++) {
     const offset = i * channels;
-    const distance = Math.max(
+    const d = Math.max(
       Math.abs(out[offset]! - KEY.r),
       Math.abs(out[offset + 1]! - KEY.g),
       Math.abs(out[offset + 2]! - KEY.b),
     );
-    if (distance <= KEY_SOFT) {
+    distance[i] = Math.min(d, 255);
+    keyable[i] = d <= TOLERANCE ? 1 : 0;
+  }
+  const queue: number[] = [];
+  const enqueue = (i: number): void => {
+    if (keyable[i] === 1) {
+      keyable[i] = 0;
+      queue.push(i);
+    }
+  };
+  for (let x = 0; x < width; x++) {
+    enqueue(x);
+    enqueue((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y++) {
+    enqueue(y * width);
+    enqueue(y * width + width - 1);
+  }
+  while (queue.length > 0) {
+    const i = queue.pop()!;
+    const x = i % width;
+    if (x > 0) enqueue(i - 1);
+    if (x < width - 1) enqueue(i + 1);
+    if (i >= width) enqueue(i - width);
+    if (i < size - width) enqueue(i + width);
+  }
+  for (let i = 0; i < size; i++) {
+    // Skip non-keyable pixels (keep them fully opaque) and keyable pixels the
+    // flood never reached (enclosed holes keep their original alpha).
+    if (distance[i]! > TOLERANCE || keyable[i] === 1) continue;
+    const offset = i * channels;
+    if (distance[i]! <= KEY_SOFT) {
       out[offset + 3] = 0;
-    } else if (distance <= TOLERANCE) {
-      out[offset + 3] = Math.round(((distance - KEY_SOFT) / ramp) * 255);
+    } else {
+      out[offset + 3] = Math.round(((distance[i]! - KEY_SOFT) / ramp) * 255);
     }
   }
   return sharp(out, { raw: { width, height, channels } });
