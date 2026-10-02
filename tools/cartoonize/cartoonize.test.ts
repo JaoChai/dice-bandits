@@ -169,6 +169,12 @@ async function writeHoleFixture(path: string): Promise<void> {
  *         stays opaque.
  *   SPECK (area rule saves it): exact-key #bdbdbd 6x4 = 24 px < 150 at
  *         (40,40) — a tiny highlight; stays opaque.
+ *   CHROMA (chroma rule saves it): flat #B9BDC3 rect x64..104 y84..124
+ *         (40x40 = 1600 px ≥ POCKET_MIN_AREA, mean chroma 10 >
+ *         POCKET_MAX_CHROMA, mean distance 6 ≤ POCKET_MAX_DISTANCE) —
+ *         near-key tinted paint like hero-knight's silver; ONLY the chroma
+ *         rule keeps it opaque, so deleting POCKET_MAX_CHROMA alone must
+ *         fail the pin test below (QA finding F1 regression).
  *
  * The strip keys away as before, so the frame is the slab (128x96 at sheet
  * y=32) and sheet coords equal source coords.
@@ -183,6 +189,7 @@ async function writePocketFixture(path: string): Promise<void> {
       `<circle cx="32" cy="80" r="12" fill="#bdbdbd"/>` +
       `<rect x="84" y="60" width="24" height="8" fill="#a6a6a6"/>` +
       `<rect x="40" y="40" width="6" height="4" fill="#bdbdbd"/>` +
+      `<rect x="64" y="84" width="40" height="40" fill="#B9BDC3"/>` +
       `</svg>`,
   );
   await sharp(svg).png().toFile(path);
@@ -428,6 +435,11 @@ describe('cartoonize pose mode', () => {
     expect(alphaAt(sheet, 95, 64), 'dim neutral paint keeps its alpha').toBeGreaterThan(200);
     // ...and the small key-coloured speck (24 px < POCKET_MIN_AREA) survives.
     expect(alphaAt(sheet, 43, 41), 'small key-coloured speck survives').toBeGreaterThan(200);
+    // ...and the large chroma pocket (1600 px ≥ POCKET_MIN_AREA, mean distance
+    // 6 ≤ POCKET_MAX_DISTANCE, mean chroma 10 > POCKET_MAX_CHROMA) survives —
+    // pinning POCKET_MAX_CHROMA alone: #B9BDC3 lies within the distance rule
+    // and the area rule, so only the chroma rule keeps this paint opaque.
+    expect(alphaAt(sheet, 84, 104), 'chroma-rule pocket keeps its alpha').toBe(255);
   });
 
   it('is byte-identical across repeated runs of the same input', async () => {
