@@ -297,3 +297,23 @@ Untested data lever (weak, risk noted): diluting town share via `event` weight 2
 **Status after 6 data-only iterations:** gate A passes; gate B fails on `engagement.townFlips` alone (all other band metrics — 4 class rates, comebackRate — inside 10% of main). Blocked per ruling: next step needs the lead's call.
 
 Ruling: accepted iter 3 under the one-sided townFlips band (954 ≤ 1.25 × 806 = 1007).
+
+## M5a review round 1 — final reports (2026-10-02, review fixes on wt/m5a-t2)
+
+**Full main + branch reports, n=1000, `npm run sim -- --games 1000 --players 4` (review items 3–5).**
+
+Main (bda7adc, trial-6 data, measured fresh on this branch's toolchain):
+
+```json
+{"games": 1000, "crashes": 0, "stuck": 0, "avgRounds": 12, "classWinRate": {"knight": 0.246, "thief": 0.237, "mage": 0.215, "cleric": 0.302}, "comebackRate": 0.128, "seatWinRate": [0.254, 0.257, 0.235, 0.254], "engagement": {"townsClaimed": 4453, "townFlips": 806, "townAttacks": 2000, "monsterBattles": 8799, "investments": 196, "equipmentBought": 5531, "levelUps": 12223, "duelsAccepted": 5466, "banditCardsUsed": 11724, "averageFinalLevel": 4.05575}}
+```
+
+Branch (iter 3 data, current head — byte-identical to the accepted iter 3):
+
+```json
+{"games": 1000, "crashes": 0, "stuck": 0, "avgRounds": 12, "classWinRate": {"knight": 0.2515, "thief": 0.2155, "mage": 0.229, "cleric": 0.304}, "comebackRate": 0.126, "seatWinRate": [0.2625, 0.257, 0.223, 0.2575], "engagement": {"townsClaimed": 5416, "townFlips": 954, "townAttacks": 2203, "monsterBattles": 8437, "investments": 235, "equipmentBought": 5563, "levelUps": 12846, "duelsAccepted": 5507, "banditCardsUsed": 11665, "averageFinalLevel": 4.2115}}
+```
+
+Band check vs main: knight +.0055 ≤ .0246 ✓, thief −.0215 ≤ .0237 ✓, mage +.014 ≤ .0215 ✓, cleric +.002 ≤ .0302 ✓, comeback −.002 ≥ −.0128 (floor .115) ✓, townFlips 954 within one-sided band [725, 1007] ✓ (lead ruling 2026-10-02).
+
+**Per-seed generateBoard timing (review item 3; 2,000 seeds/run, same vitest worker/transform both trees, 3 runs each, medians):** pre-fix (def4f58) typical 26.3 µs/seed, adversarial-retry seed 24.0 µs/seed; post-fix (current head) typical 27.8 µs/seed, adversarial-retry seed 23.3 µs/seed — parity within run-to-run variance; no retry-path cost regression (probe in scratch, not committed).
