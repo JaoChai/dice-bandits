@@ -1,0 +1,29 @@
+{
+  "frames": {
+    "idle": {
+      "x": 96,
+      "y": 20,
+      "w": 248,
+      "h": 280,
+      "anchorX": 124,
+      "anchorY": 280
+    },
+    "attack": {
+      "x": 504,
+      "y": 24,
+      "w": 312,
+      "h": 276,
+      "anchorX": 156,
+      "anchorY": 276
+    },
+    "hurt": {
+      "x": 951,
+      "y": 22,
+      "w": 297,
+      "h": 278,
+      "anchorX": 148,
+      "anchorY": 278
+    }
+  },
+  "image": "monster-maskGoon.webp"
+}

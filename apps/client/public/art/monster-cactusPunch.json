@@ -1,0 +1,29 @@
+{
+  "frames": {
+    "idle": {
+      "x": 105,
+      "y": 20,
+      "w": 229,
+      "h": 280,
+      "anchorX": 114,
+      "anchorY": 280
+    },
+    "attack": {
+      "x": 509,
+      "y": 29,
+      "w": 302,
+      "h": 271,
+      "anchorX": 151,
+      "anchorY": 271
+    },
+    "hurt": {
+      "x": 988,
+      "y": 33,
+      "w": 223,
+      "h": 267,
+      "anchorX": 111,
+      "anchorY": 267
+    }
+  },
+  "image": "monster-cactusPunch.webp"
+}

@@ -1,0 +1,53 @@
+{
+  "frames": {
+    "idle": {
+      "x": 66,
+      "y": 66,
+      "w": 187,
+      "h": 234,
+      "anchorX": 93,
+      "anchorY": 234
+    },
+    "attack": {
+      "x": 346,
+      "y": 81,
+      "w": 268,
+      "h": 219,
+      "anchorX": 134,
+      "anchorY": 219
+    },
+    "hurt": {
+      "x": 709,
+      "y": 72,
+      "w": 181,
+      "h": 228,
+      "anchorX": 90,
+      "anchorY": 228
+    },
+    "happy": {
+      "x": 1020,
+      "y": 20,
+      "w": 199,
+      "h": 280,
+      "anchorX": 99,
+      "anchorY": 280
+    },
+    "sad": {
+      "x": 1364,
+      "y": 80,
+      "w": 151,
+      "h": 220,
+      "anchorX": 75,
+      "anchorY": 220
+    },
+    "portrait": {
+      "x": 1669,
+      "y": 113,
+      "w": 182,
+      "h": 187,
+      "anchorX": 91,
+      "anchorY": 187
+    }
+  },
+  "image": "hero-cleric.webp"
+}

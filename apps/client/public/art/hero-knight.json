@@ -1,0 +1,53 @@
+{
+  "frames": {
+    "idle": {
+      "x": 57,
+      "y": 20,
+      "w": 206,
+      "h": 280,
+      "anchorX": 103,
+      "anchorY": 280
+    },
+    "attack": {
+      "x": 362,
+      "y": 26,
+      "w": 235,
+      "h": 274,
+      "anchorX": 117,
+      "anchorY": 274
+    },
+    "hurt": {
+      "x": 695,
+      "y": 32,
+      "w": 209,
+      "h": 268,
+      "anchorX": 104,
+      "anchorY": 268
+    },
+    "happy": {
+      "x": 1011,
+      "y": 22,
+      "w": 217,
+      "h": 278,
+      "anchorX": 108,
+      "anchorY": 278
+    },
+    "sad": {
+      "x": 1355,
+      "y": 37,
+      "w": 169,
+      "h": 263,
+      "anchorX": 84,
+      "anchorY": 263
+    },
+    "portrait": {
+      "x": 1659,
+      "y": 89,
+      "w": 201,
+      "h": 211,
+      "anchorX": 100,
+      "anchorY": 211
+    }
+  },
+  "image": "hero-knight.webp"
+}

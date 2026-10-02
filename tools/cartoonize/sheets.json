@@ -1,3 +1,208 @@
 {
-  "sheets": []
+  "sheets": [
+    {
+      "name": "hero-knight",
+      "input": "raw/hero-knight.png",
+      "kind": "pose",
+      "cell": [
+        320,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt",
+        "happy",
+        "sad",
+        "portrait"
+      ],
+      "out": "hero-knight"
+    },
+    {
+      "name": "hero-thief",
+      "input": "raw/hero-thief.png",
+      "kind": "pose",
+      "cell": [
+        320,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt",
+        "happy",
+        "sad",
+        "portrait"
+      ],
+      "out": "hero-thief"
+    },
+    {
+      "name": "hero-mage",
+      "input": "raw/hero-mage.png",
+      "kind": "pose",
+      "cell": [
+        320,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt",
+        "happy",
+        "sad",
+        "portrait"
+      ],
+      "out": "hero-mage"
+    },
+    {
+      "name": "hero-cleric",
+      "input": "raw/hero-cleric.png",
+      "kind": "pose",
+      "cell": [
+        320,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt",
+        "happy",
+        "sad",
+        "portrait"
+      ],
+      "out": "hero-cleric"
+    },
+    {
+      "name": "monster-jellyBun",
+      "input": "raw/monster-jellyBun.png",
+      "kind": "pose",
+      "cell": [
+        440,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt"
+      ],
+      "out": "monster-jellyBun"
+    },
+    {
+      "name": "monster-mushroomBonk",
+      "input": "raw/monster-mushroomBonk.png",
+      "kind": "pose",
+      "cell": [
+        440,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt"
+      ],
+      "out": "monster-mushroomBonk"
+    },
+    {
+      "name": "monster-cactusPunch",
+      "input": "raw/monster-cactusPunch.png",
+      "kind": "pose",
+      "cell": [
+        440,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt"
+      ],
+      "out": "monster-cactusPunch"
+    },
+    {
+      "name": "monster-coinScorpion",
+      "input": "raw/monster-coinScorpion.png",
+      "kind": "pose",
+      "cell": [
+        440,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt"
+      ],
+      "out": "monster-coinScorpion"
+    },
+    {
+      "name": "monster-yetiBunny",
+      "input": "raw/monster-yetiBunny.png",
+      "kind": "pose",
+      "cell": [
+        440,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt"
+      ],
+      "out": "monster-yetiBunny"
+    },
+    {
+      "name": "monster-penguinKnight",
+      "input": "raw/monster-penguinKnight.png",
+      "kind": "pose",
+      "cell": [
+        440,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt"
+      ],
+      "out": "monster-penguinKnight"
+    },
+    {
+      "name": "monster-lavaImp",
+      "input": "raw/monster-lavaImp.png",
+      "kind": "pose",
+      "cell": [
+        440,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt"
+      ],
+      "out": "monster-lavaImp"
+    },
+    {
+      "name": "monster-maskGoon",
+      "input": "raw/monster-maskGoon.png",
+      "kind": "pose",
+      "cell": [
+        440,
+        300
+      ],
+      "shipHeight": 280,
+      "poses": [
+        "idle",
+        "attack",
+        "hurt"
+      ],
+      "out": "monster-maskGoon"
+    }
+  ]
 }

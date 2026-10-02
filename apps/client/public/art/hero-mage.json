@@ -1,0 +1,53 @@
+{
+  "frames": {
+    "idle": {
+      "x": 61,
+      "y": 40,
+      "w": 197,
+      "h": 260,
+      "anchorX": 98,
+      "anchorY": 260
+    },
+    "attack": {
+      "x": 352,
+      "y": 61,
+      "w": 256,
+      "h": 239,
+      "anchorX": 128,
+      "anchorY": 239
+    },
+    "hurt": {
+      "x": 703,
+      "y": 45,
+      "w": 194,
+      "h": 255,
+      "anchorX": 97,
+      "anchorY": 255
+    },
+    "happy": {
+      "x": 1014,
+      "y": 20,
+      "w": 212,
+      "h": 280,
+      "anchorX": 106,
+      "anchorY": 280
+    },
+    "sad": {
+      "x": 1351,
+      "y": 61,
+      "w": 178,
+      "h": 239,
+      "anchorX": 89,
+      "anchorY": 239
+    },
+    "portrait": {
+      "x": 1658,
+      "y": 91,
+      "w": 204,
+      "h": 209,
+      "anchorX": 102,
+      "anchorY": 209
+    }
+  },
+  "image": "hero-mage.webp"
+}
