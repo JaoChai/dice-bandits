@@ -183,7 +183,7 @@ async function writePocketFixture(path: string): Promise<void> {
       `<circle cx="32" cy="80" r="12" fill="#bdbdbd"/>` +
       `<rect x="84" y="60" width="24" height="8" fill="#a6a6a6"/>` +
       `<rect x="40" y="40" width="6" height="4" fill="#bdbdbd"/>` +
-    `</svg>`,
+      `</svg>`,
   );
   await sharp(svg).png().toFile(path);
 }
