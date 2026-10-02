@@ -1,19 +1,31 @@
+// Battle journeys on this spec use `startBattleJourney` (helpers.ts): a fixed
+// seed whose engine replay reaches a battle involving the human knight after
+// 1 UI action (first roll → meadow monster, round 1). The previous
+// `startTestGame` + `playUntil` journeys spun ~10 CPU-bound bot turns first
+// (e2e-1's first battle is a bot's town-guardian fight, not the human's) and
+// their speed=1 bot loops raced runner timing in CI.
 import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { assertInside, assertMinFont, assertNoEllipsis, playUntil, startTestGame } from './helpers';
+import {
+  assertInside,
+  assertMinFont,
+  assertNoEllipsis,
+  startBattleJourney,
+  startJourney,
+} from './helpers';
 
 // The original four-seat overlap test below is retained unchanged.
 test('board and battle fit the viewport without truncation', async ({ page }) => {
-  await startTestGame(page);
+  await startJourney(page);
   for (const lang of ['en', 'th'] as const) {
     await page.locator(`.game-topline [data-lang="${lang}"]`).click();
     await assertInside(page, '[data-testid="screen-board"] *:visible');
     await assertNoEllipsis(page, '[data-testid="event-banner"]');
     await assertMinFont(page, '.seat-card', 12);
   }
-  await playUntil(page, (state) => state.phase.kind === 'battle');
+  await startBattleJourney(page);
   await expect(page.locator('.battle-panel')).toBeVisible();
   await assertInside(page, '.battle-panel *:visible', '.battle-panel');
   const expected = await page.evaluate(() => {
@@ -29,9 +41,8 @@ test('reduced motion disables shake and ambient loops', async ({ browser }) => {
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   try {
     const page = await context.newPage();
-    await startTestGame(page, 1);
+    await startBattleJourney(page, 1);
     await expect.poll(() => page.evaluate(() => window.__db!.art.ambientRunning)).toBe(false);
-    await playUntil(page, (state) => state.phase.kind === 'battle');
     await page.evaluate(() => window.__db!.art.triggerShake!());
     expect(await page.evaluate(() => window.__db!.art.shakeCount)).toBe(0);
   } finally {
@@ -43,9 +54,8 @@ test('normal motion runs ambient loops at normal speed', async ({ browser }) => 
   const context = await browser.newContext({ reducedMotion: 'no-preference' });
   try {
     const page = await context.newPage();
-    await startTestGame(page, 1);
+    await startBattleJourney(page, 1);
     await expect.poll(() => page.evaluate(() => window.__db!.art.ambientRunning)).toBe(true);
-    await playUntil(page, (state) => state.phase.kind === 'battle');
     expect(await page.evaluate(() => window.diceBanditsSpeed)).toBe(1);
     expect(await page.evaluate(() => window.__db!.art.ambientRunning)).toBe(true);
     await page.evaluate(() => window.__db!.art.triggerShake!());
@@ -57,8 +67,7 @@ test('normal motion runs ambient loops at normal speed', async ({ browser }) => 
 
 test('mobile battle trace measures animation frame cadence', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-landscape', 'mobile emulation only');
-  await startTestGame(page);
-  await playUntil(page, (state) => state.phase.kind === 'battle');
+  await startBattleJourney(page);
   const measurement = page.evaluate(
     () =>
       new Promise<{ frames: number; seconds: number; fps: number }>((resolve) => {

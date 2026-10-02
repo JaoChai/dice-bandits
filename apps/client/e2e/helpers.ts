@@ -139,3 +139,29 @@ export async function playSteps(page: Page, count: number): Promise<void> {
     await playOneStep(page);
   }
 }
+
+/**
+ * Start a game on the deterministic battle-journey seed and stop as soon as
+ * the board is visible (phase awaitRoll, round 1, seat 0 to roll). `m5ab-1`
+ * was derived by engine replay of the setup screen's real defaults (human
+ * knight + greedy bot thief/mage/cleric): its first roll lands seat 0 on a
+ * meadow monster — a battle involving the human, so at speed=0 the controller
+ * parks on the pick cards and playUntil's "any visible button" polling cannot
+ * resolve past it. No runner-speed dependence, and the journey is 1 click
+ * instead of ~10.
+ */
+export async function startJourney(page: Page, speed = 0): Promise<void> {
+  await page.goto(`/?seed=m5ab-1&speed=${speed}`);
+  await page.locator('[data-action="new"]').click();
+  for (let seat = 1; seat < 4; seat += 1) {
+    await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
+  }
+  await page.locator('#setup-form button[type="submit"]').click();
+  await expect(page.locator('[data-testid="screen-board"]')).toBeVisible();
+}
+
+/** `startJourney` + play until the deterministic human battle. */
+export async function startBattleJourney(page: Page, speed = 0): Promise<void> {
+  await startJourney(page, speed);
+  await playUntil(page, (state) => state.phase.kind === 'battle');
+}
