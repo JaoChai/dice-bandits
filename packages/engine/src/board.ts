@@ -116,7 +116,14 @@ export function generateBoard(seed: string): Board {
         n.kind = kind;
       }
     }
-    state = repair(draft, state);
+    // A draft can exhaust every convertible space in a region before repair's
+    // minimums are met; treat that attempt as failed and re-draw the slot bag
+    // in the next attempt (the loop still throws after MAX_ATTEMPTS).
+    try {
+      state = repair(draft, state);
+    } catch {
+      continue;
+    }
     if (valid(draft)) {
       const spaces: Space[] = draft
         .slice()

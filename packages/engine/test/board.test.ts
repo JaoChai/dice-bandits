@@ -75,4 +75,13 @@ describe('generateBoard', () => {
     const totalPairs = (signatures.length * (signatures.length - 1)) / 2;
     expect(equalPairs / totalPairs).toBeLessThanOrEqual(0.01);
   });
+
+  it('never throws for adversarial seeds (repair failures retry, not crash)', () => {
+    // These seeds exhaust every donor space in a region (probe3-2388: volcano),
+    // so repair() throws "no donor space" and generateBoard crashed instead of
+    // re-drafting the slot bag in its existing attempt loop.
+    for (const seed of ['probe3-2388', 'crash-8641', 'crash-15563'])
+      expect(() => generateBoard(seed)).not.toThrow();
+    for (let i = 0; i < 2000; i++) expect(() => generateBoard(`crash-${i}`)).not.toThrow();
+  });
 });
