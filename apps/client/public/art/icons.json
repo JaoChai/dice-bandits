@@ -1,0 +1,133 @@
+{
+  "frames": {
+    "heart": {
+      "x": 10,
+      "y": 32,
+      "w": 108,
+      "h": 96,
+      "anchorX": 54,
+      "anchorY": 96
+    },
+    "coin": {
+      "x": 141,
+      "y": 24,
+      "w": 102,
+      "h": 104,
+      "anchorX": 51,
+      "anchorY": 104
+    },
+    "sword": {
+      "x": 271,
+      "y": 9,
+      "w": 97,
+      "h": 119,
+      "anchorX": 48,
+      "anchorY": 119
+    },
+    "shield": {
+      "x": 398,
+      "y": 13,
+      "w": 99,
+      "h": 115,
+      "anchorX": 49,
+      "anchorY": 115
+    },
+    "crown": {
+      "x": 7,
+      "y": 151,
+      "w": 113,
+      "h": 105,
+      "anchorX": 56,
+      "anchorY": 105
+    },
+    "scroll": {
+      "x": 137,
+      "y": 136,
+      "w": 110,
+      "h": 120,
+      "anchorX": 55,
+      "anchorY": 120
+    },
+    "piggy": {
+      "x": 256,
+      "y": 142,
+      "w": 127,
+      "h": 114,
+      "anchorX": 63,
+      "anchorY": 114
+    },
+    "die": {
+      "x": 393,
+      "y": 140,
+      "w": 110,
+      "h": 116,
+      "anchorX": 55,
+      "anchorY": 116
+    },
+    "star": {
+      "x": 7,
+      "y": 275,
+      "w": 113,
+      "h": 109,
+      "anchorX": 56,
+      "anchorY": 109
+    },
+    "skull": {
+      "x": 140,
+      "y": 278,
+      "w": 103,
+      "h": 106,
+      "anchorX": 51,
+      "anchorY": 106
+    },
+    "dieFace1": {
+      "x": 269,
+      "y": 283,
+      "w": 102,
+      "h": 101,
+      "anchorX": 51,
+      "anchorY": 101
+    },
+    "dieFace2": {
+      "x": 397,
+      "y": 283,
+      "w": 101,
+      "h": 101,
+      "anchorX": 50,
+      "anchorY": 101
+    },
+    "dieFace3": {
+      "x": 13,
+      "y": 411,
+      "w": 102,
+      "h": 101,
+      "anchorX": 51,
+      "anchorY": 101
+    },
+    "dieFace4": {
+      "x": 140,
+      "y": 410,
+      "w": 103,
+      "h": 102,
+      "anchorX": 51,
+      "anchorY": 102
+    },
+    "dieFace5": {
+      "x": 268,
+      "y": 410,
+      "w": 104,
+      "h": 102,
+      "anchorX": 52,
+      "anchorY": 102
+    },
+    "dieFace6": {
+      "x": 396,
+      "y": 410,
+      "w": 103,
+      "h": 102,
+      "anchorX": 51,
+      "anchorY": 102
+    }
+  },
+  "image": "icons.webp"
+}

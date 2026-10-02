@@ -203,6 +203,125 @@
         "hurt"
       ],
       "out": "monster-maskGoon"
+    },
+    {
+      "name": "tiles",
+      "input": "raw/tiles.png",
+      "kind": "grid",
+      "cell": [
+        180,
+        170
+      ],
+      "shipHeight": 160,
+      "grid": [
+        4,
+        2
+      ],
+      "poses": [
+        "castle",
+        "town",
+        "shop",
+        "chest",
+        "monster",
+        "event",
+        "trap",
+        "plain"
+      ],
+      "out": "tiles"
+    },
+    {
+      "name": "buildings",
+      "input": "raw/buildings.png",
+      "kind": "grid",
+      "cell": [
+        320,
+        300
+      ],
+      "shipHeight": 280,
+      "grid": [
+        3,
+        2
+      ],
+      "poses": [
+        "castle",
+        "town1",
+        "town2",
+        "town3",
+        "shopCart",
+        "baronFort"
+      ],
+      "out": "buildings"
+    },
+    {
+      "name": "icons",
+      "input": "raw/icons.png",
+      "kind": "grid",
+      "cell": [
+        128,
+        128
+      ],
+      "shipHeight": 120,
+      "grid": [
+        4,
+        4
+      ],
+      "poses": [
+        "heart",
+        "coin",
+        "sword",
+        "shield",
+        "crown",
+        "scroll",
+        "piggy",
+        "die",
+        "star",
+        "skull",
+        "dieFace1",
+        "dieFace2",
+        "dieFace3",
+        "dieFace4",
+        "dieFace5",
+        "dieFace6"
+      ],
+      "out": "icons"
+    },
+    {
+      "name": "ui",
+      "input": "raw/ui.png",
+      "kind": "grid",
+      "cell": [
+        400,
+        300
+      ],
+      "shipHeight": 300,
+      "grid": [
+        5,
+        2
+      ],
+      "poses": [
+        "btn",
+        "btnPressed",
+        "btnDisabled",
+        "panel",
+        "ribbon",
+        "cardFrame",
+        "coinPill",
+        "hpBar",
+        "menuBtn",
+        "soundBtn"
+      ],
+      "out": "ui"
+    },
+    {
+      "name": "map",
+      "input": "raw/map.png",
+      "kind": "map",
+      "cell": [
+        640,
+        600
+      ],
+      "shipHeight": 600,
+      "out": "map"
     }
   ]
 }
