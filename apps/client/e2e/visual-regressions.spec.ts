@@ -31,14 +31,14 @@ test('reward dialog frame stays inside the viewport with all choices scrollable'
     await expect(buttons.last()).toBeInViewport();
   }
 });
-// M5a: seeds re-derived for the fixed map via engine replay (first battle in
-// the target region with the human seat in it, human takes the first legal
-// action, bots greedy): meadow `m5a-2` @ 3, desert `m5a-1` @ 45,
-// volcano `m5a-9` @ 72 actions.
+// M5a (review round 1): seeds re-derived for the fixed map via engine replay with the
+// setup screen's real defaults (all bots greedy). Meadow `m5a-2` @ 1 click, desert
+// `m5a-1` @ 9, volcano `m5a-v8` @ 23 (the old `m5a-9` journey reached round 12
+// game-over before any volcano battle under real UI click order).
 for (const [region, seed] of [
   ['meadow', 'm5a-2'],
   ['desert', 'm5a-1'],
-  ['volcano', 'm5a-9'],
+  ['volcano', 'm5a-v8'],
 ] as const) {
   test(`${region} battle renders its own backdrop without a page error`, async ({ page }) => {
     // This visual journey traverses many actions before the regional battle.
