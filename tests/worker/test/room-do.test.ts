@@ -54,8 +54,19 @@ async function send(socket: WebSocket, message: object) {
 
 const closeSocket = (socket: WebSocket | null | undefined) => socket?.close();
 
+async function waitForRateLimitWindow(): Promise<number> {
+  // Miniflare resets quotas at wall-clock minute boundaries, not after the first
+  // request. Reserve the burst's normal 5s test budget; wait only when necessary.
+  const remaining = 60_000 - (Date.now() % 60_000);
+  if (remaining < 5_000) {
+    await new Promise((resolve) => setTimeout(resolve, remaining + 1));
+  }
+  return Math.floor(Date.now() / 60_000);
+}
+
 describe('Room Durable Object and Worker routes', () => {
   it('rate-limits room creation after 20 requests per minute', async () => {
+    const epoch = await waitForRateLimitWindow();
     const headers = { 'content-type': 'application/json', 'CF-Connecting-IP': '192.0.2.10' };
     const responses: Response[] = [];
     for (let i = 0; i < 21; i += 1) {
@@ -67,13 +78,16 @@ describe('Room Durable Object and Worker routes', () => {
         }),
       );
     }
+    expect(Math.floor(Date.now() / 60_000)).toBe(epoch);
     expect(responses.filter((response) => response.status === 201)).toHaveLength(20);
-    const limited = responses.find((response) => response.status === 429);
-    expect(limited).toBeDefined();
-    expect(await limited!.json()).toEqual({ error: 'online.error.rateLimited' });
-  });
+    const limited = responses[20]!;
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toEqual({ error: 'online.error.rateLimited' });
+  }, 10_000);
 
   it('rate-limits WebSocket upgrades after 60 requests per minute', async () => {
+    // Wait before creating the room: its test TTL is only 500ms.
+    const epoch = await waitForRateLimitWindow();
     const created = await createRoom('Socket limit');
     const responses: Response[] = [];
     for (let i = 0; i < 61; i += 1) {
@@ -89,9 +103,12 @@ describe('Room Durable Object and Worker routes', () => {
       response.webSocket?.accept();
       response.webSocket?.close();
     }
+    expect(Math.floor(Date.now() / 60_000)).toBe(epoch);
     expect(responses.filter((response) => response.status === 101)).toHaveLength(60);
     expect(responses.filter((response) => response.status === 429)).toHaveLength(1);
-  });
+    expect(responses[60]!.status).toBe(429);
+    expect(await responses[60]!.text()).toBe('Too many connections');
+  }, 10_000);
 
   it('does not rate-limit health checks', async () => {
     const responses = await Promise.all(
