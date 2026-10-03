@@ -11,7 +11,7 @@ export function renderBattleUi(
   battleSeat: number | undefined,
   dispatch: (action: Action) => void,
   actionName: (action: Action) => string,
-  humanPicker: boolean,
+  humanPicker = false,
   onlineMode = false,
   awaitingView = false,
 ): boolean {

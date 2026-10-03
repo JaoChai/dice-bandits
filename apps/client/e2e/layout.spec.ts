@@ -64,7 +64,7 @@ test('reduced motion disables shake and ambient loops', async ({ browser }) => {
     // proves the board's ambient branch ran, unlike the earlier DOM-only wait.
     await expect
       .poll(() => page.evaluate(() => window.__db!.art.backdropKey))
-      .toBe('backdrop-meadow');
+      .toBe('art:backdrop-meadow');
     await expect.poll(() => page.evaluate(() => window.__db!.art.ambientRunning)).toBe(false);
     await page.evaluate(() => window.__db!.art.triggerShake!());
     expect(await page.evaluate(() => window.__db!.art.shakeCount)).toBe(0);

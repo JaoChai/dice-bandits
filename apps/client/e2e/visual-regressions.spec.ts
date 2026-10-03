@@ -58,7 +58,7 @@ for (const [region, seed] of [
     await waitForBattleArt(page);
     await expect
       .poll(() => page.evaluate(() => window.__db!.art.backdropKey))
-      .toBe(`backdrop-${region}`);
+      .toBe(`art:backdrop-${region}`);
     expect(errors).toEqual([]);
   });
 }
@@ -89,6 +89,6 @@ test('snow battle survives atlas loading and renders without a page error', asyn
   await expect(page.locator('.battle-panel')).toBeVisible();
   releaseAtlas();
   await waitForBattleArt(page);
-  expect(await page.evaluate(() => window.__db!.art.backdropKey)).toBe('backdrop-snow');
+  expect(await page.evaluate(() => window.__db!.art.backdropKey)).toBe('art:backdrop-snow');
   expect(errors, 'Phaser must not render a destroyed legacy frame').toEqual([]);
 });
