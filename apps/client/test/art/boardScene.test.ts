@@ -32,7 +32,6 @@ interface Rec {
   tint?: number;
   played?: string;
   name?: string;
-  destroyed?: boolean;
 }
 
 /** Chainable Phaser game-object test double that records what the scene did. */
@@ -45,10 +44,6 @@ function gameObject(
   const proxy: unknown = new Proxy(rec, {
     get(target, prop: string | symbol) {
       if (typeof prop !== 'string') return undefined;
-      if (prop === 'destroy')
-        return () => {
-          target.destroyed = true;
-        };
       if (prop === 'depth') return target.depth;
       if (prop === 'setDepth')
         return (depth: number) => {
@@ -106,6 +101,7 @@ function makeScene() {
       main: {
         setScroll: vi.fn(),
         setZoom: vi.fn(),
+        setVisible: vi.fn(),
         centerOn: vi.fn(),
         width: 1280,
         height: 720,
@@ -195,14 +191,13 @@ describe('BoardScene layering', () => {
     (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(state);
 
     const mapTiles = objects.filter((o) => o.depth === -10);
-    const road = objects.filter((o) => o.depth === -5 && !o.destroyed);
+    const road = objects.filter((o) => o.depth === -5);
     const tiles = objects.filter((o) => o.depth === 0);
     const tokens = objects.filter((o) => o.texture?.startsWith('token-'));
     const rings = objects.filter((o) => o.depth >= 40 && o.kind === 'graphics');
 
     expect(mapTiles.length).toBe(15); // 5x3 painted background tiles
-    expect(road.length).toBe(1); // one cached image for the whole road
-    expect(road[0]!.texture).toBe('board:road');
+    expect(road.length).toBe(1); // one graphics pass for the whole road
     expect(tiles.length).toBe(state.board.spaces.length); // one marker per space
     expect(tokens).toHaveLength(4);
     expect(rings.length).toBeGreaterThan(0);
@@ -222,6 +217,29 @@ describe('BoardScene layering', () => {
     const updated = { ...state, phase: { kind: 'gameOver' as const } } as GameState;
     scene.renderBoard(updated);
     expect(objects).toHaveLength(drawn);
+  });
+
+  it('hides the covered board in battle and restores it even with the same visual signature', () => {
+    const { scene, objects } = makeScene();
+    const state = gameFor('covered-board');
+    scene.renderBoard(state);
+    const drawn = objects.length;
+    const battle = { ...state, phase: { kind: 'battle' as const } } as GameState;
+    scene.renderBoard(battle);
+    scene.renderBoard(state);
+
+    expect(scene.cameras.main.setVisible).toHaveBeenNthCalledWith(1, true);
+    expect(scene.cameras.main.setVisible).toHaveBeenNthCalledWith(2, false);
+    expect(scene.cameras.main.setVisible).toHaveBeenNthCalledWith(3, true);
+    expect(objects).toHaveLength(drawn);
+  });
+
+  it('starts with the board camera hidden when the initial state is already a battle', () => {
+    const { scene } = makeScene();
+    const state = gameFor('initial-battle');
+    scene.renderBoard({ ...state, phase: { kind: 'battle' as const } } as GameState);
+
+    expect(scene.cameras.main.setVisible).toHaveBeenCalledWith(false);
   });
 
   it('binds one tap handler and eases the camera to the active seat (Review 7a)', () => {

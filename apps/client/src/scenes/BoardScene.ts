@@ -159,6 +159,11 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   private renderBoard(state: GameState): void {
+    // BattleScene covers the stage. Rendering the large map beneath it adds
+    // an invisible software-GL pass to every battle frame and DOM interaction.
+    // Do this before the signature guard: entering/leaving battle may change
+    // no board geometry, but must still hide/restore the board camera.
+    this.cameras.main.setVisible(state.phase.kind !== 'battle');
     // Combat picks and other nonvisual updates can arrive several times per
     // second. Recreating the entire tiled board for each one overwhelms
     // software-rendered Chromium and starves DOM input on CI machines.

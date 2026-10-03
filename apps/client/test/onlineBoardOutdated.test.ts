@@ -143,6 +143,7 @@ function realSceneOn(gameMock: {
       main: {
         setScroll: vi.fn(),
         setZoom: vi.fn(),
+        setVisible: vi.fn(),
         centerOn: vi.fn(),
         width: 1280,
         height: 720,
