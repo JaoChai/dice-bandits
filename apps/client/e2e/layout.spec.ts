@@ -41,7 +41,30 @@ test('reduced motion disables shake and ambient loops', async ({ browser }) => {
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   try {
     const page = await context.newPage();
+    // Positive control: the same seed/assets must actually draw ambient loops,
+    // and the real shake probe must reach an active BoardScene.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await startBattleJourney(page, 1);
+    await expect.poll(() => page.evaluate(() => window.__db!.art.ambientRunning)).toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          window.__db!.art.triggerShake!();
+          return window.__db!.art.shakeCount;
+        }),
+      )
+      .toBeGreaterThan(0);
+
+    // Reload under reduce: both probes reset, and the board draws afresh with
+    // the new media policy (ambientRunning is a sticky "ever played" flag).
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await startBattleJourney(page, 1);
+    // BootScene starts BoardScene before launching BattleScene; main.ts also
+    // emits the board state before launching battle. A rendered backdrop thus
+    // proves the board's ambient branch ran, unlike the earlier DOM-only wait.
+    await expect
+      .poll(() => page.evaluate(() => window.__db!.art.backdropKey))
+      .toBe('backdrop-meadow');
     await expect.poll(() => page.evaluate(() => window.__db!.art.ambientRunning)).toBe(false);
     await page.evaluate(() => window.__db!.art.triggerShake!());
     expect(await page.evaluate(() => window.__db!.art.shakeCount)).toBe(0);
