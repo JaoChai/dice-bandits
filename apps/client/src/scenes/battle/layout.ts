@@ -4,6 +4,8 @@ export const BATTLE_FRAME = { width: 1280, height: 720 } as const;
 export const BATTLE_FIGHTER_HEIGHT = 280;
 export const BATTLE_CARD = { width: 180, height: 240 } as const;
 export const BATTLE_EXCHANGE_Y = 176;
+/** Ground line the fighters stand on (their origin is feet-centred). */
+export const BATTLE_GROUND_Y = (BATTLE_FRAME.height * 11) / 12;
 export type BattleLayout = {
   left: { x: number; y: number };
   right: { x: number; y: number };
@@ -30,9 +32,10 @@ export function battleLayout(
     width: w * x,
     height: h * y,
   });
+  const groundY = BATTLE_GROUND_Y * y;
   return {
-    left: { x: 340 * x, y: 660 * y },
-    right: { x: 940 * x, y: 660 * y },
+    left: { x: ((BATTLE_FRAME.width * 17) / 64) * x, y: groundY },
+    right: { x: ((BATTLE_FRAME.width * 47) / 64) * x, y: groundY },
     hpLeft: rect(40, 36, 420, 96),
     hpRight: rect(820, 36, 420, 96),
     dice: rect(300, 678, 680, 42),

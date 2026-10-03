@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type Phaser from 'phaser';
 import { playHit } from '../../src/scenes/battle/effects';
+import { BATTLE_FIGHTER_HEIGHT } from '../../src/scenes/battle/layout';
 
 /**
  * Task 8 reviewer item 3 RED: playHit must drive the cartoon puppet poses —
@@ -80,14 +81,19 @@ function hitScene(textures: string[]) {
     },
     cameras: { main: { flash: vi.fn(), shake: vi.fn() } },
     add: {
-      sprite: vi.fn((_x: number, _y: number, key: string, frame?: string | number) => {
+      sprite: vi.fn((x: number, y: number, key: string, frame?: string | number) => {
         const sprite = effectSprite(key, true);
+        sprite.x = x;
+        sprite.y = y;
         frames.push({ key, pose: String(frame) });
         sprites.push(sprite);
         return sprite;
       }),
-      text: vi.fn(() => {
+      text: vi.fn((x: number, y: number, value: string) => {
         const text = {
+          x,
+          y,
+          value,
           setOrigin: vi.fn().mockReturnThis(),
           setDepth: vi.fn().mockReturnThis(),
           destroy: vi.fn(),
@@ -157,6 +163,30 @@ describe('playHit drives the cartoon puppet poses (reviewer item 3)', () => {
     expect(targetPose).toHaveBeenCalledWith('idle');
     // The motions must mount real puppet tween steps, not only swap frames.
     expect(tweens.length).toBeGreaterThan(0);
+  });
+
+  it('places hit fx and damage numbers from the fighter height, not 640x360 constants', async () => {
+    const { scene, sprites, tweens, delayed, textObjects } = hitScene([
+      'art:hero-knight',
+      'art:monster-jellyBun',
+    ]);
+    const fighters = FIGHTERS();
+    const running = playHit(
+      scene as unknown as Phaser.Scene,
+      fighters as never,
+      LAYOUT as never,
+      EVENT,
+      0,
+      'jellyBun',
+      1,
+    );
+    await Promise.resolve();
+    await settle(running, tweens, delayed);
+    const ground = LAYOUT.left.y;
+    // slash (index 0), spark (index 1), damage number (text, index 2)
+    expect(sprites[0]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 4);
+    expect(sprites[1]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 4 + 2);
+    expect(textObjects[0]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 2 - 8);
   });
 
   it('skips every pose and pause at speed 0', async () => {

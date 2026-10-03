@@ -1,10 +1,14 @@
 import type Phaser from 'phaser';
 import type { BattleFighters } from './fighters';
 import type { BattleLayout } from './layout';
+import { BATTLE_FIGHTER_HEIGHT } from './layout';
 import { playMotion } from './fighters';
 import { hasAnim } from '../../art/atlas';
 import { reducedMotion } from '../../art/motion';
 import { t } from '../../i18n';
+
+/** Torso height for hit fx, damage numbers and the secret banner, from the 720p puppet. */
+export const HIT_TORSO_Y = BATTLE_FIGHTER_HEIGHT / 4;
 
 type Side = 'a' | 'b';
 type DamageEvent = {
@@ -64,10 +68,10 @@ export async function playHit(
   for (const { side, amount } of damageTargets(event, leftId, rightId)) {
     const pos = layout[side === 'a' ? 'left' : 'right'];
     const target = fighters[side];
-    const slash = effect(scene, 'slash', pos.x, pos.y - 68);
+    const slash = effect(scene, 'slash', pos.x, pos.y - HIT_TORSO_Y);
     await pause(scene, 90 * speed);
     slash?.destroy();
-    const spark = effect(scene, 'spark', pos.x, pos.y - 66);
+    const spark = effect(scene, 'spark', pos.x, pos.y - HIT_TORSO_Y + 2);
     playMotion(scene, target, 'hurt');
     if (!reducedMotion()) {
       target.setTint(0xffffff);
@@ -75,7 +79,7 @@ export async function playHit(
       scene.cameras.main.shake(110 * speed, 0.003);
     }
     const number = scene.add
-      .text(pos.x, pos.y - 112, t('battle.damage', { value: amount }), {
+      .text(pos.x, pos.y - BATTLE_FIGHTER_HEIGHT / 2 - 8, t('battle.damage', { value: amount }), {
         fontFamily: 'Chakra Petch',
         fontSize: '20px',
         color: '#fff4dc',
