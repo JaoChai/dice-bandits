@@ -108,7 +108,7 @@ function makeScene() {
         getWorldPoint: vi.fn(() => ({ x: 0, y: 0 })),
       },
     },
-    input: { on: vi.fn() },
+    input: { on: vi.fn(), off: vi.fn() },
     game: {
       events: {
         on: vi.fn((event: string, handler: (state: GameState) => void) =>

@@ -4,10 +4,17 @@ import { escapeHtml } from './escape';
 
 const KINDS = ['castle', 'town', 'shop', 'chest', 'monster', 'event', 'trap'] as const;
 
+/** The one live close function for the open popup (Review 6b). */
+let activeClose: (() => void) | null = null;
+
 /**
  * Tap-a-space popup (spec §7): tile icon, name, one-line effect, and owner +
  * value for towns. Opens on any space tap; closes on Esc or an outside tap.
  * Popup is a DOM overlay so Thai text wraps instead of clipping.
+ *
+ * Review 6b: every close path goes through the same `close` that removes
+ * the same keydown listener `openSpaceInfo` registered — no dead names, no
+ * leaks across re-renders.
  */
 export function openSpaceInfo(root: HTMLElement, state: GameState, spaceId: number): void {
   closeSpaceInfo();
@@ -35,32 +42,30 @@ export function openSpaceInfo(root: HTMLElement, state: GameState, spaceId: numb
 
   popup.innerHTML = `<h3 class="space-info-name"><span class="space-info-icon space-icon-${kind}" aria-hidden="true"></span>${escapeHtml(t(`space.${kind}.name`))}</h3><p class="space-info-text">${escapeHtml(t(`space.${kind}.info`))}</p>${ownerLine}<button type="button" class="space-info-close" data-testid="space-info-close" aria-label="${escapeHtml(t('common.close'))}">×</button>`;
 
-  const close = (): void => {
-    shade.remove();
-    document.removeEventListener('keydown', onKey, true);
-  };
   const onKey = (event: KeyboardEvent): void => {
     if (event.key === 'Escape') {
       event.stopPropagation();
       close();
     }
   };
+  const close = (): void => {
+    shade.remove();
+    document.removeEventListener('keydown', onKey, true);
+    if (activeClose === close) activeClose = null;
+  };
+  activeClose = close;
+  document.addEventListener('keydown', onKey, true);
+
   shade.addEventListener('click', (event) => {
     if (event.target === shade) close();
   });
   popup.querySelector('.space-info-close')?.addEventListener('click', close);
-  document.addEventListener('keydown', onKey, true);
 
   shade.append(popup);
   root.append(shade);
-  (root as HTMLElement & { __spaceInfoClose?: () => void }).__spaceInfoClose = close;
 }
 
+/** The single close path every caller uses (BoardScene re-renders, Esc). */
 export function closeSpaceInfo(): void {
-  document.querySelector('.space-info-shade')?.remove();
-  document.removeEventListener('keydown', onEscape, true);
-}
-
-function onEscape(event: KeyboardEvent): void {
-  if (event.key === 'Escape') closeSpaceInfo();
+  activeClose?.();
 }

@@ -12,7 +12,8 @@ import { cameraTarget, gameplayZoom } from './board/camera';
 import { drawMapLayer, roadSegments, validate } from './board/mapLayer';
 import { drawForkArrows } from './board/forkArrows';
 import { drawAmbients } from './board/ambient';
-import { openSpaceInfo, closeSpaceInfo } from '../ui/spaceInfo';
+import { bindSpaceTaps } from './board/spaceTaps';
+import { closeSpaceInfo } from '../ui/spaceInfo';
 import { t } from '../i18n';
 
 /**
@@ -27,6 +28,7 @@ export default class BoardScene extends Phaser.Scene {
   private renderSignature = '';
   private wholeMap = false;
   private ringTween: Phaser.Tweens.Tween | null = null;
+  private latestState: GameState | null = null;
 
   constructor() {
     super('BoardScene');
@@ -212,8 +214,14 @@ export default class BoardScene extends Phaser.Scene {
     // Layer 6: tween-only ambient life, above tiles below tokens (spec §5).
     drawAmbients(this, state.board.spaces);
 
-    // Tap any space for its info popup (spec §7).
-    this.bindSpaceTaps(state);
+    // Tap any space for its info popup (spec §7). One listener total
+    // (Review 6a): bindSpaceTaps unbinds before rebinding each render.
+    this.latestState = state;
+    bindSpaceTaps(
+      this,
+      () => ({ state: this.latestState as GameState, wholeMap: this.wholeMap }),
+      () => this.toggleWholeMap(this.latestState as GameState, false),
+    );
 
     this.applyCamera(cameraTarget(state, this.wholeMap));
   }
@@ -235,23 +243,6 @@ export default class BoardScene extends Phaser.Scene {
             ease: 'Sine.easeInOut',
           })
         : null;
-  }
-
-  private bindSpaceTaps(state: GameState): void {
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (this.wholeMap) {
-        this.toggleWholeMap(state, false);
-        return;
-      }
-      const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-      let nearest: { id: number; distance: number } | null = null;
-      for (const space of state.board.spaces) {
-        const distance = Math.hypot(space.x - worldPoint.x, space.y - worldPoint.y);
-        if (!nearest || distance < nearest.distance) nearest = { id: space.id, distance };
-      }
-      // Tiles are ≥ 96 map px; accept a tap within a half-tile of a centre.
-      if (nearest && nearest.distance <= 64) openSpaceInfo(document.body, state, nearest.id);
-    });
   }
 
   /** Turn-start ribbon text (`turn-ribbon` DOM element, rendered by hud.ts). */
