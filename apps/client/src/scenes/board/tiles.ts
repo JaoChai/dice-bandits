@@ -1,7 +1,6 @@
 import type Phaser from 'phaser';
 import type { GameState, Space } from '@dice-bandits/engine';
 import { ART } from '../../art/manifest';
-import { SPACE_VISUALS } from '../../art/tables';
 
 export const DEPTH_TILES = 0;
 
@@ -27,8 +26,8 @@ export function drawTiles(
   const texture = scene.textures.exists(textureKey) ? scene.textures.get(textureKey) : undefined;
   const fallbackWarned = { value: false };
   for (const space of spaces) {
-    const frame = SPACE_VISUALS[space.kind].tile;
-    const frameName = String(frame);
+    // Review 2: art:tiles frames are named by kind (castle, town, …), not index.
+    const frameName = space.kind;
     if (texture?.has(frameName)) {
       images.push(
         scene.add
