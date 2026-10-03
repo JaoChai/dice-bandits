@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { hasAnim, registerAtlas, sheetKey, type Atlas } from '../../src/art/atlas';
+import { ART_ATLASES } from '../../src/art/manifest';
 vi.mock('phaser', () => ({ default: { Scene: class Scene {} } }));
 import BootScene from '../../src/scenes/BootScene';
 
@@ -70,6 +71,7 @@ describe('atlas runtime', () => {
       failedAtlases: new Set<string>(),
       warnedAtlases: new Set<string>(),
       activeAtlases: new Set<string>(),
+      artAtlases: new Set<string>(),
       load: {
         image,
         json,
@@ -90,13 +92,17 @@ describe('atlas runtime', () => {
     boot.preload();
     expect(text).toHaveBeenCalledWith('atlas-manifest', '/sprites/atlases.json');
     events.get('filecomplete-text-atlas-manifest')?.('atlas-manifest', 'text', '{"atlases":[]}');
-    expect(json).not.toHaveBeenCalled();
+    expect(json.mock.calls.filter(([, url]) => String(url).startsWith('/sprites/'))).toEqual([]);
     expect(image.mock.calls.map(([key]) => key)).not.toContain('hero-knight-atlas-image');
     boot.create();
 
     expect(info).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledTimes(37);
+    // 37 interim `/sprites` atlas fallbacks + 21 cartoon `/art` atlases that
+    // the empty double never "loads" (preload json/image are bare mocks) —
+    // both sets warn-and-continue per Global Constraints.
+    expect(warn).toHaveBeenCalledTimes(37 + ART_ATLASES.length);
     expect(warn).toHaveBeenCalledWith('[art] fallback', 'hero-knight');
+    expect(warn).toHaveBeenCalledWith('[art] fallback', 'art:hero-knight');
     expect(error).not.toHaveBeenCalled();
     info.mockRestore();
     warn.mockRestore();
@@ -111,6 +117,7 @@ describe('atlas runtime', () => {
       failedAtlases: new Set<string>(),
       warnedAtlases: new Set<string>(),
       activeAtlases: new Set<string>(),
+      artAtlases: new Set<string>(),
       load: {
         image,
         json,
@@ -126,10 +133,13 @@ describe('atlas runtime', () => {
       'text',
       '{"atlases":["hero-knight"]}',
     );
-    expect(json).toHaveBeenCalledTimes(1);
     expect(json).toHaveBeenCalledWith('hero-knight', '/sprites/hero-knight.json');
     expect(image).toHaveBeenCalledWith('hero-knight-atlas-image', '/sprites/hero-knight.png');
-    expect(json.mock.calls.map(([key]) => key)).toEqual(['hero-knight']);
+    // Only the /sprites manifest drives the interim pipeline's loader; the
+    // cartoon /art set loads unconditionally (M5a Task 5) and is excluded.
+    expect(json.mock.calls.filter(([, url]) => String(url).startsWith('/sprites/'))).toEqual([
+      ['hero-knight', '/sprites/hero-knight.json'],
+    ]);
   });
 
   it('treats invalid manifest JSON as empty without logging errors', () => {
@@ -141,6 +151,7 @@ describe('atlas runtime', () => {
       failedAtlases: new Set<string>(),
       warnedAtlases: new Set<string>(),
       activeAtlases: new Set<string>(),
+      artAtlases: new Set<string>(),
       load: {
         image: vi.fn(),
         text: vi.fn(),
@@ -152,7 +163,7 @@ describe('atlas runtime', () => {
     }) as BootScene;
     boot.preload();
     events.get('filecomplete-text-atlas-manifest')?.('atlas-manifest', 'text', '<!doctype html>');
-    expect(json).not.toHaveBeenCalled();
+    expect(json.mock.calls.filter(([, url]) => String(url).startsWith('/sprites/'))).toEqual([]);
     expect(error).not.toHaveBeenCalled();
     expect(warn).not.toHaveBeenCalled();
     error.mockRestore();
@@ -171,6 +182,7 @@ describe('atlas runtime', () => {
       failedAtlases: new Set<string>(),
       warnedAtlases: new Set<string>(),
       activeAtlases: new Set(['backdrop-meadow']),
+      artAtlases: new Set<string>(),
       load: {
         image: vi.fn(),
         text: vi.fn(),
@@ -208,6 +220,7 @@ describe('atlas runtime', () => {
       failedAtlases: new Set<string>(),
       warnedAtlases: new Set<string>(),
       activeAtlases: new Set<string>(),
+      artAtlases: new Set<string>(),
       load: {
         image: vi.fn(),
         text: vi.fn(),

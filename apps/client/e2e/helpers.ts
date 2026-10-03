@@ -165,4 +165,10 @@ export async function startJourney(page: Page, speed = 0): Promise<void> {
 export async function startBattleJourney(page: Page, speed = 0): Promise<void> {
   await startJourney(page, speed);
   await playUntil(page, (state) => state.phase.kind === 'battle');
+  await waitForBattleArt(page);
+}
+
+/** The DOM/controller can enter battle while Phaser is still loading assets. */
+export async function waitForBattleArt(page: Page): Promise<void> {
+  await page.waitForFunction(() => window.__db?.art.boardReady && window.__db.art.battleReady);
 }

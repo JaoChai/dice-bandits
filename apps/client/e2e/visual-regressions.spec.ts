@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { playUntil } from './helpers';
+import { playUntil, waitForBattleArt } from './helpers';
 
 test('reward dialog frame stays inside the viewport with all choices scrollable', async ({
   page,
@@ -55,6 +55,7 @@ for (const [region, seed] of [
       const spaceId = state.phase.battle.spaceId;
       return state.board.spaces.find((space) => space.id === spaceId)?.region === region;
     });
+    await waitForBattleArt(page);
     await expect
       .poll(() => page.evaluate(() => window.__db!.art.backdropKey))
       .toBe(`backdrop-${region}`);
@@ -87,12 +88,7 @@ test('snow battle survives atlas loading and renders without a page error', asyn
   );
   await expect(page.locator('.battle-panel')).toBeVisible();
   releaseAtlas();
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      ),
-  );
+  await waitForBattleArt(page);
   expect(await page.evaluate(() => window.__db!.art.backdropKey)).toBe('backdrop-snow');
   expect(errors, 'Phaser must not render a destroyed legacy frame').toEqual([]);
 });
