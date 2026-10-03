@@ -1,5 +1,9 @@
 export type BattleRect = { x: number; y: number; width: number; height: number };
-export const BATTLE_EXCHANGE_Y = 112;
+/** M5a logical canvas is 1280×720; battle layout is authored at that size. */
+export const BATTLE_FRAME = { width: 1280, height: 720 } as const;
+export const BATTLE_FIGHTER_HEIGHT = 280;
+export const BATTLE_CARD = { width: 180, height: 240 } as const;
+export const BATTLE_EXCHANGE_Y = 176;
 export type BattleLayout = {
   left: { x: number; y: number };
   right: { x: number; y: number };
@@ -9,9 +13,17 @@ export type BattleLayout = {
   cards: BattleRect;
 };
 
-export function battleLayout(width = 640, height = 360): BattleLayout {
-  const x = width / 640;
-  const y = height / 360;
+/**
+ * Cartoon battle composition on the 1280×720 stage: 280 px puppets standing
+ * on the ground line, dice strip below their feet, command cards stacked
+ * bottom-centre, HP strips along the top corners.
+ */
+export function battleLayout(
+  width: number = BATTLE_FRAME.width,
+  height: number = BATTLE_FRAME.height,
+): BattleLayout {
+  const x = width / BATTLE_FRAME.width;
+  const y = height / BATTLE_FRAME.height;
   const rect = (left: number, top: number, w: number, h: number): BattleRect => ({
     x: left * x,
     y: top * y,
@@ -19,11 +31,11 @@ export function battleLayout(width = 640, height = 360): BattleLayout {
     height: h * y,
   });
   return {
-    left: { x: 198 * x, y: 234 * y },
-    right: { x: 442 * x, y: 234 * y },
-    hpLeft: rect(10, 8, 202, 49),
-    hpRight: rect(428, 8, 202, 49),
-    dice: rect(90, 244, 460, 40),
-    cards: rect(92, 292, 456, 64),
+    left: { x: 340 * x, y: 660 * y },
+    right: { x: 940 * x, y: 660 * y },
+    hpLeft: rect(40, 36, 420, 96),
+    hpRight: rect(820, 36, 420, 96),
+    dice: rect(300, 678, 680, 42),
+    cards: rect(540, 430, BATTLE_CARD.width, BATTLE_CARD.height),
   };
 }

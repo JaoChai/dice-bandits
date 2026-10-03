@@ -196,7 +196,7 @@ function actionName(action: Action): string {
         ? t('action.skip')
         : t('action.duel', { target: action.target + 1 });
     case 'battlePick':
-      return t(`action.${action.pick}`);
+      return t(`battle.card.${action.pick}`);
     case 'pvpReward':
       return t(`action.${action.reward}`);
     case 'pickPerk':

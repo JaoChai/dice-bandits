@@ -1,19 +1,67 @@
 import type Phaser from 'phaser';
 import type { Combatant, GameState } from '@dice-bandits/engine';
-import { hasAnim } from '../../art/atlas';
-import { reducedMotion } from '../../art/motion';
-import { MONSTER_SHEETS } from '../../art/tables';
+import { ART } from '../../art/manifest';
+import { poseFor, puppetTweens, type Motion, type Pose } from '../../art/puppet';
+import { puppetOptions } from '../../art/motion';
 import type { BattleLayout } from './layout';
+import { BATTLE_FIGHTER_HEIGHT } from './layout';
 
-export function fighterKey(
+/** Cartoon atlas + pose for a combatant; falls back to a flat colour key. */
+export function fighterAtlas(
   state: GameState,
   fighter: Pick<Combatant, 'kind' | 'seat' | 'monsterId'>,
 ): string {
-  if (fighter.kind === 'player') return `hero-${state.players[fighter.seat!]?.classId ?? 'knight'}`;
-  return MONSTER_SHEETS[fighter.monsterId ?? ''] ?? 'icons';
+  if (fighter.kind === 'player')
+    return ART.heroes[state.players[fighter.seat!]?.classId ?? 'knight'];
+  const monsterId = fighter.monsterId ?? '';
+  return monsterId in ART.monsters
+    ? ART.monsters[monsterId as keyof typeof ART.monsters]
+    : ART.icons;
 }
 
-export type BattleFighters = { a: Phaser.GameObjects.Sprite; b: Phaser.GameObjects.Sprite };
+export type BattleFighters = {
+  a: Phaser.GameObjects.Sprite;
+  b: Phaser.GameObjects.Sprite;
+};
+
+/**
+ * Paper-puppet playback on a sprite: switch to the motion's pose frame, then
+ * chain the tween steps. `?speed=0` (duration 0) and reduced motion are
+ * handled inside `puppetTweens`.
+ */
+/**
+ * A sprite is "textured" when its texture manager entry carries the pose —
+ * the fake scenes in tests only provide `texture.has`, real Phaser provides
+ * `frame.name`; `has` is the contract both satisfy.
+ */
+function textured(sprite: Phaser.GameObjects.Sprite, pose: string): boolean {
+  try {
+    return sprite.texture.has(pose);
+  } catch {
+    return false;
+  }
+}
+
+function playMotion(scene: Phaser.Scene, sprite: Phaser.GameObjects.Sprite, motion: Motion): void {
+  const pose: Pose = poseFor(motion);
+  if (textured(sprite, pose)) sprite.setFrame(pose);
+  const steps = puppetTweens(motion, puppetOptions());
+  if (!steps.length) return;
+  const chain = (index: number): void => {
+    const step = steps[index];
+    if (!step) return;
+    scene.tweens.add({
+      targets: sprite,
+      ...step.props,
+      duration: step.duration,
+      ease: step.ease,
+      yoyo: step.yoyo,
+      repeat: step.repeat,
+      onComplete: () => chain(index + 1),
+    });
+  };
+  chain(0);
+}
 
 export function drawFighters(
   scene: Phaser.Scene,
@@ -23,19 +71,27 @@ export function drawFighters(
   if (state.phase.kind !== 'battle') throw new Error('drawFighters requires battle phase');
   const fighters = state.phase.battle;
   const make = (combatant: Combatant, side: 'a' | 'b') => {
-    const key = fighterKey(state, combatant);
+    const atlas = fighterAtlas(state, combatant);
+    const texture = scene.textures.exists(atlas) ? scene.textures.get(atlas) : undefined;
+    const textured = !!texture && texture.has('idle');
     const pos = side === 'a' ? layout.left : layout.right;
-    const atlas = scene.textures.get(key).has('0');
     const sprite = scene.add
-      .sprite(pos.x, pos.y, key, atlas ? 0 : undefined)
+      .sprite(pos.x, pos.y, atlas, textured ? 'idle' : undefined)
       .setOrigin(0.5, 1)
-      .setScale(2)
+      // 280 px puppets on the 1280×720 stage (plan Task 8); the pose cell's
+      // own aspect sets the width (atlas cells are 512 px source, 280 ship).
+      .setDisplaySize(BATTLE_FIGHTER_HEIGHT * 0.75, BATTLE_FIGHTER_HEIGHT)
       .setFlipX(side === 'b')
       .setDepth(5);
-    if (hasAnim(scene, key, 'idle') && !reducedMotion()) sprite.play(`${key}:idle`);
+    if (!textured) console.warn('[art] fallback', atlas);
+    else playMotion(scene, sprite, 'idle');
     if (combatant.secretUsed) {
       scene.add
-        .text(pos.x, 70, '★', { fontFamily: 'Chakra Petch', fontSize: '18px', color: '#ffd477' })
+        .text(pos.x, pos.y - BATTLE_FIGHTER_HEIGHT - 24, '★', {
+          fontFamily: 'Mitr, Chakra Petch, sans-serif',
+          fontSize: '28px',
+          color: '#F5C51C',
+        })
         .setOrigin(0.5)
         .setDepth(6);
     }
@@ -53,23 +109,24 @@ export function drawDicePools(scene: Phaser.Scene, state: GameState, layout: Bat
       dice.y + dice.height / 2,
       dice.width,
       dice.height,
-      0x1b2140,
-      0.87,
+      0x5c3317,
+      0.85,
     )
-    .setStrokeStyle(2, 0xe8a53c)
+    .setStrokeStyle(3, 0xf5c51c)
     .setDepth(7);
   const stats = [state.phase.battle.a.stats.atk, state.phase.battle.b.stats.atk];
   for (let side = 0; side < 2; side++) {
     const pool = Math.max(1, Math.min(5, Math.ceil(stats[side]! / 4)));
-    const startX = dice.x + 18 + side * (dice.width / 2);
+    const half = dice.width / 2;
+    const startX = dice.x + side * half + half / 2 - (pool - 1) * 30;
     for (let die = 0; die < pool; die++) {
       const x = startX + die * 30;
-      // Maximum of five 20px dice fits in each 230px half of the reserved row.
+      // Maximum of five 36px dice fits in each 340px half of the strip.
       scene.add
-        .rectangle(x + 10, dice.y + 20, 20, 20, 0xfff4dc)
-        .setStrokeStyle(2, 0x263449)
+        .rectangle(x, dice.y + dice.height / 2, 36, 36, 0xf5eedc)
+        .setStrokeStyle(3, 0x5c3317)
         .setDepth(8);
-      scene.add.circle(x + 10, dice.y + 20, 2, 0x263449).setDepth(9);
+      scene.add.circle(x, dice.y + dice.height / 2, 3, 0x5c3317).setDepth(9);
     }
   }
 }
