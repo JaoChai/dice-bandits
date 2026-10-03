@@ -27,7 +27,14 @@ export default class BoardScene extends Phaser.Scene {
     this.cameras.main.setScroll(0, 0);
     this.game.events.on('game-state', (state: GameState) => this.renderBoard(state));
     const initial = this.game.registry.get('state') as GameState | undefined;
-    if (initial) this.renderBoard(initial);
+    if (initial) {
+      this.renderBoard(initial);
+      // Boot's scene.start is queued. A battle may arrive after Boot checked
+      // state but before this scene is active, so main cannot launch it yet.
+      // Reconcile the latest registry state at the actual board startup.
+      if (initial.phase.kind === 'battle' && !this.scene.isActive('BattleScene'))
+        this.scene.launch('BattleScene');
+    }
   }
 
   async playEvents(events: GameEvent[]): Promise<void> {

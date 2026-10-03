@@ -153,8 +153,6 @@ export default class BootScene extends Phaser.Scene {
       }
     }
     this.scene.start('BoardScene');
-    const state = this.game?.registry?.get('state') as { phase?: { kind?: string } } | undefined;
-    if (state?.phase?.kind === 'battle') this.scene.launch('BattleScene');
   }
 
   /**

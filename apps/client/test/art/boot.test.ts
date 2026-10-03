@@ -4,6 +4,7 @@ import { ART_ATLASES } from '../../src/art/manifest';
 
 vi.mock('phaser', () => ({ default: { Scene: class {} } }));
 const { default: BootScene } = await import('../../src/scenes/BootScene');
+const { default: BoardScene } = await import('../../src/scenes/BoardScene');
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -49,6 +50,29 @@ function bootFixture() {
 }
 
 describe('BootScene cartoon loader contract', () => {
+  it('starts a battle that arrives between boot completion and the queued board create', () => {
+    const { boot, registry } = bootFixture();
+    const startBoard: Array<() => void> = [];
+    const launch = vi.fn();
+    const renderBoard = vi.fn();
+    const board = Object.assign(Object.create(BoardScene.prototype), {
+      game: { registry, events: new EventEmitter() },
+      cameras: { main: { setScroll: vi.fn() } },
+      scene: { isActive: vi.fn(() => false), launch },
+      renderBoard,
+    }) as InstanceType<typeof BoardScene>;
+    registry.set('state', { phase: { kind: 'awaitRoll' } });
+    // Phaser ScenePlugin.start queues operations; create is a later frame.
+    boot.scene.start.mockImplementation(() => startBoard.push(() => board.create()));
+    boot.create();
+    const battle = { phase: { kind: 'battle' } };
+    registry.set('state', battle);
+    // main.ts cannot launch yet: the board is not active in this queue gap.
+    startBoard[0]!();
+    expect(renderBoard).toHaveBeenCalledWith(battle);
+    expect(launch).toHaveBeenCalledWith('BattleScene');
+  });
+
   it('publishes every successfully registered named atlas before starting scenes', () => {
     const { boot, registry, frames } = bootFixture();
     registry.set('state', { phase: { kind: 'battle' } });
@@ -60,7 +84,7 @@ describe('BootScene cartoon loader contract', () => {
       expect(frames.get(`art:${atlas}`)).toHaveBeenCalledWith('idle', 0, 1, 2, 30, 40);
     }
     expect(boot.scene.start).toHaveBeenCalledWith('BoardScene');
-    expect(boot.scene.launch).toHaveBeenCalledWith('BattleScene');
+    expect(boot.scene.launch).not.toHaveBeenCalled();
   });
 
   it('warns at image loaderror and never publishes or registers the placeholder as ready art', () => {
