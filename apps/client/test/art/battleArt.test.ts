@@ -2,7 +2,6 @@ import { createGame } from '@dice-bandits/engine';
 import { describe, expect, it } from 'vitest';
 import { battleRegion } from '../../src/scenes/battle/backdrop';
 import { fighterAtlas } from '../../src/scenes/battle/fighters';
-import { battleLayout } from '../../src/scenes/battle/layout';
 import { ART } from '../../src/art/manifest';
 
 const state = createGame({

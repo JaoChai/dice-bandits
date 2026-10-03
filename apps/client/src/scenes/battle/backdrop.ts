@@ -1,7 +1,6 @@
 import type Phaser from 'phaser';
 import type { GameState, Region } from '@dice-bandits/engine';
 import { ART } from '../../art/manifest';
-import { REGION_VISUALS } from '../../art/tables';
 import { BATTLE_FRAME } from './layout';
 
 export function battleRegion(state: GameState, spaceId: number): Region {

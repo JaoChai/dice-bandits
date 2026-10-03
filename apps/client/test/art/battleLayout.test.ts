@@ -1,6 +1,5 @@
-import { createGame } from '@dice-bandits/engine';
 import { describe, expect, it } from 'vitest';
-import { BATTLE_EXCHANGE_Y, battleLayout, type BattleRect } from '../../src/scenes/battle/layout';
+import { battleLayout, type BattleRect } from '../../src/scenes/battle/layout';
 
 const intersects = (a: BattleRect, b: BattleRect) =>
   a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;

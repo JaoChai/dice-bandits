@@ -70,7 +70,7 @@ function spriteStub() {
     setAlpha: vi.fn(),
     setTint: vi.fn(),
     clearTint: vi.fn(),
-    texture: { key: 'probe', has: (_pose: string) => false } as {
+    texture: { key: 'probe', has: () => false } as {
       key: string;
       has: (pose: string) => boolean;
     },
@@ -96,7 +96,7 @@ function fightersScene(textures: string[]) {
   const scene = {
     textures: {
       exists: (key: string) => textures.includes(key),
-      get: (key: string) => ({ has: (frame: string) => textures.includes(key) }),
+      get: (key: string) => ({ has: () => textures.includes(key) }),
     },
     tweens: {
       add: vi.fn((spec: object) => {
