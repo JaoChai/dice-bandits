@@ -11,6 +11,7 @@ import { drawBuildings } from './board/buildings';
 import { cameraTarget, gameplayZoom } from './board/camera';
 import { drawMapLayer, roadSegments, validate } from './board/mapLayer';
 import { drawForkArrows } from './board/forkArrows';
+import { drawAmbients } from './board/ambient';
 import { openSpaceInfo, closeSpaceInfo } from '../ui/spaceInfo';
 import { t } from '../i18n';
 
@@ -207,6 +208,9 @@ export default class BoardScene extends Phaser.Scene {
       drawForkArrows(this, state, (to) => {
         this.game.events.emit('board-chooseBranch', to);
       });
+
+    // Layer 6: tween-only ambient life, above tiles below tokens (spec §5).
+    drawAmbients(this, state.board.spaces);
 
     // Tap any space for its info popup (spec §7).
     this.bindSpaceTaps(state);

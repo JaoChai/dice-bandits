@@ -1,4 +1,4 @@
-import { createGame, type GameState } from '@dice-bandits/engine';
+import { createGame, MAP, type GameState } from '@dice-bandits/engine';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reducedMotion } from '../../src/art/motion';
 
@@ -160,6 +160,7 @@ function makeScene() {
     create(): void;
     input: { on: ReturnType<typeof vi.fn> };
     cameras: { main: Record<string, ReturnType<typeof vi.fn> & number> };
+    tweens: { add: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> };
   };
   return { scene, objects, handlers };
 }
@@ -246,6 +247,40 @@ describe('BoardScene layering', () => {
     for (const option of state.phase.options) {
       expect(zones.some((zone) => zone.name === `fork-arrow-${option}`)).toBe(true);
     }
+  });
+});
+
+describe('BoardScene ambient life (M5a spec §5: tween-only accents)', () => {
+  it('adds at most one accent per region, tweens it, and flags the E2E probe at speed > 0', async () => {
+    window.diceBanditsSpeed = 1;
+    window.__db = {
+      getState: () => gameFor('ambient'),
+      art: {
+        boardReady: false,
+        battleReady: false,
+        ambientRunning: false,
+        shakeCount: 0,
+      },
+    };
+    const { drawAmbients } = await import('../../src/scenes/board/ambient');
+    const { scene, objects } = makeScene();
+    drawAmbients(scene as never, MAP.nodes);
+    const accents = objects.filter((o) => o.depth === 15 && o.kind === 'graphics');
+    expect(accents.length).toBeGreaterThan(0);
+    expect(accents.length).toBeLessThanOrEqual(4); // one per region, not per node
+    expect(scene.tweens.add).toHaveBeenCalledTimes(accents.length);
+    expect(window.__db!.art.ambientRunning).toBe(true);
+  });
+
+  it('draws nothing under reduced motion or speed 0', async () => {
+    window.diceBanditsSpeed = 0;
+    window.__db!.art.ambientRunning = false;
+    vi.mocked(reducedMotion).mockReturnValue(true);
+    const { drawAmbients } = await import('../../src/scenes/board/ambient');
+    const { scene } = makeScene();
+    drawAmbients(scene as never, MAP.nodes);
+    expect(scene.tweens.add).not.toHaveBeenCalled();
+    expect(window.__db?.art.ambientRunning ?? false).toBe(false);
   });
 });
 

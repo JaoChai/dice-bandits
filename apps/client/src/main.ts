@@ -328,12 +328,12 @@ function startGame(state: GameState): void {
   function dispatch(action: Action): void {
     void controller.dispatch(action);
   }
-  // Fork arrows (canvas) dispatch through the same controller as the DOM tray.
+  // The HUD mounts `#phaser-board`; Phaser must be created after it exists.
+  renderHud(app, controller.state, dispatch);
   game = createPhaserGame('phaser-board');
   game.events.on('board-chooseBranch', (to: number) => {
     void controller.dispatch({ type: 'chooseBranch', to });
   });
-  renderHud(app, controller.state, dispatch);
   game.registry.set('state', state);
   window.diceBanditsMapWhole = false;
   game.registry.set('onBoardOutdated', (): void => {
