@@ -32,6 +32,7 @@ interface Rec {
   tint?: number;
   played?: string;
   name?: string;
+  destroyed?: boolean;
 }
 
 /** Chainable Phaser game-object test double that records what the scene did. */
@@ -44,6 +45,10 @@ function gameObject(
   const proxy: unknown = new Proxy(rec, {
     get(target, prop: string | symbol) {
       if (typeof prop !== 'string') return undefined;
+      if (prop === 'destroy')
+        return () => {
+          target.destroyed = true;
+        };
       if (prop === 'depth') return target.depth;
       if (prop === 'setDepth')
         return (depth: number) => {
@@ -190,13 +195,14 @@ describe('BoardScene layering', () => {
     (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(state);
 
     const mapTiles = objects.filter((o) => o.depth === -10);
-    const road = objects.filter((o) => o.depth === -5);
+    const road = objects.filter((o) => o.depth === -5 && !o.destroyed);
     const tiles = objects.filter((o) => o.depth === 0);
     const tokens = objects.filter((o) => o.texture?.startsWith('token-'));
     const rings = objects.filter((o) => o.depth >= 40 && o.kind === 'graphics');
 
     expect(mapTiles.length).toBe(15); // 5x3 painted background tiles
-    expect(road.length).toBe(1); // one graphics pass for the whole road
+    expect(road.length).toBe(1); // one cached image for the whole road
+    expect(road[0]!.texture).toBe('board:road');
     expect(tiles.length).toBe(state.board.spaces.length); // one marker per space
     expect(tokens).toHaveLength(4);
     expect(rings.length).toBeGreaterThan(0);

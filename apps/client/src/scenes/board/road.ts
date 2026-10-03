@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { MAP } from '@dice-bandits/engine';
 
 export const DEPTH_ROAD = -5;
 /** Palette tokens (Global Constraints): cream fill, cocoa outline. */
@@ -31,11 +32,17 @@ function drawParallel(g: Phaser.GameObjects.Graphics, a: Point, b: Point, offset
 /**
  * Cream 64 map-px road with a 6 map-px cocoa outline along every undirected
  * edge, drawn as one graphics pass under the buildings/tiles, with rounded
- * joints (small discs at each endpoint). Map pixels: the follow camera
- * scales it; no per-zoom redraw needed.
+ * joints (small discs at each endpoint). The validated authored map never
+ * changes: rasterize once per game texture manager, then reuse an image.
+ * Leaving the Graphics live tessellates every 64 px joint on EVERY frame,
+ * including behind battles, starving DOM input on software-GL runners.
  */
 export function drawRoad(scene: Phaser.Scene, segments: Segment[]): void {
   if (segments.length === 0) return;
+  if (scene.textures.exists(ROAD_TEXTURE)) {
+    addRoadImage(scene);
+    return;
+  }
   const g = scene.add.graphics().setDepth(DEPTH_ROAD);
   const half = ROAD_WIDTH / 2;
   const edge = ROAD_EDGE_WIDTH / 2;
@@ -51,6 +58,15 @@ export function drawRoad(scene: Phaser.Scene, segments: Segment[]): void {
     g.fillCircle(a.x, a.y, half + edge);
     g.fillCircle(b.x, b.y, half + edge);
   }
+  g.generateTexture(ROAD_TEXTURE, MAP.width, MAP.height);
+  g.destroy();
+  addRoadImage(scene);
+}
+
+const ROAD_TEXTURE = 'board:road';
+
+function addRoadImage(scene: Phaser.Scene): void {
+  scene.add.image(0, 0, ROAD_TEXTURE).setOrigin(0).setDepth(DEPTH_ROAD);
 }
 
 export const ROAD_EDGE_WIDTH = 6;
