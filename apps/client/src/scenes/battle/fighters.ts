@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import type { Combatant, GameState } from '@dice-bandits/engine';
 import { ART } from '../../art/manifest';
-import { poseFor, puppetTweens, type Motion, type Pose } from '../../art/puppet';
+import { poseFor, puppetTweens, type Motion } from '../../art/puppet';
 import { puppetOptions } from '../../art/motion';
 import type { BattleLayout } from './layout';
 import { BATTLE_FIGHTER_HEIGHT } from './layout';
@@ -57,8 +57,62 @@ function frameHeight(
   }
 }
 
+type PuppetProps = Partial<{
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  angle: number;
+  alpha: number;
+  tint: number;
+}>;
+
+/**
+ * Puppet specs are RELATIVE (puppet.ts header): x/y/angle offset from the
+ * sprite's home pose, scaleX/scaleY relative to its base scale. Phaser
+ * tweens interpolate absolute values, so convert once here (reviewer item
+ * 2): the home pose is captured on first play, x offsets mirror for the
+ * flipped (b) side, and scales multiply the base scale.
+ */
+function absoluteProps(sprite: Phaser.GameObjects.Sprite, props: PuppetProps): PuppetProps {
+  const home = homePose(sprite);
+  const flip = sprite.flipX === true ? -1 : 1;
+  const out: PuppetProps = {};
+  if (props.x !== undefined) out.x = home.x + props.x * flip;
+  if (props.y !== undefined) out.y = home.y + props.y;
+  if (props.angle !== undefined) out.angle = home.angle + props.angle * flip;
+  if (props.scaleX !== undefined) out.scaleX = baseScale(sprite) * props.scaleX;
+  if (props.scaleY !== undefined) out.scaleY = baseScale(sprite) * props.scaleY;
+  if (props.alpha !== undefined) out.alpha = props.alpha;
+  if (props.tint !== undefined) out.tint = props.tint;
+  return out;
+}
+
+const HOMES = new WeakMap<object, { x: number; y: number; angle: number }>();
+
+function homePose(sprite: Phaser.GameObjects.Sprite): { x: number; y: number; angle: number } {
+  let home = HOMES.get(sprite);
+  if (!home) {
+    home = { x: sprite.x, y: sprite.y, angle: sprite.angle };
+    HOMES.set(sprite, home);
+  }
+  return home;
+}
+
+/**
+ * Base scale = the uniform scale drawFighters applied from the idle frame's
+ * height. A tween mid-flight changes scaleX/scaleY away from the base, so
+ * read it from `scale` when that is available and otherwise from scaleY.
+ */
+function baseScale(sprite: Phaser.GameObjects.Sprite): number {
+  const candidate = (sprite as unknown as { scale?: number }).scale;
+  if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0)
+    return candidate;
+  return typeof sprite.scaleY === 'number' && sprite.scaleY > 0 ? sprite.scaleY : 1;
+}
+
 function playMotion(scene: Phaser.Scene, sprite: Phaser.GameObjects.Sprite, motion: Motion): void {
-  const pose: Pose = poseFor(motion);
+  const pose = poseFor(motion);
   if (textured(sprite, pose)) sprite.setFrame(pose);
   const steps = puppetTweens(motion, puppetOptions());
   if (!steps.length) return;
@@ -67,7 +121,7 @@ function playMotion(scene: Phaser.Scene, sprite: Phaser.GameObjects.Sprite, moti
     if (!step) return;
     scene.tweens.add({
       targets: sprite,
-      ...step.props,
+      ...absoluteProps(sprite, step.props),
       duration: step.duration,
       ease: step.ease,
       yoyo: step.yoyo,
@@ -76,6 +130,15 @@ function playMotion(scene: Phaser.Scene, sprite: Phaser.GameObjects.Sprite, moti
     });
   };
   chain(0);
+}
+
+/** Test hook: run a named motion's tween chain on a standalone sprite. */
+export function playMotionForTest(
+  scene: Phaser.Scene,
+  sprite: Phaser.GameObjects.Sprite,
+  motion: Motion,
+): void {
+  playMotion(scene, sprite, motion);
 }
 
 export function drawFighters(

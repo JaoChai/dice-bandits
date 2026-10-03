@@ -4,7 +4,7 @@ import type Phaser from 'phaser';
 import { ART } from '../../src/art/manifest';
 import { poseFor, puppetTweens } from '../../src/art/puppet';
 import { puppetOptions } from '../../src/art/motion';
-import { drawFighters, fighterAtlas } from '../../src/scenes/battle/fighters';
+import { drawFighters, fighterAtlas, playMotionForTest } from '../../src/scenes/battle/fighters';
 import { battleLayout } from '../../src/scenes/battle/layout';
 
 /**
@@ -176,6 +176,164 @@ describe('cartoon battle fighters (Task 8)', () => {
     expect(sprites[1]!.setScale).toHaveBeenCalledWith(1);
     expect(sprites[0]!.setDisplaySize).not.toHaveBeenCalled();
     expect(sprites[1]!.setDisplaySize).not.toHaveBeenCalled();
+  });
+
+  it('writes puppet tween scales as absolute base*relative values (reviewer item 2)', () => {
+    // Base scale 280/274 for a 274 px idle cell; the idle breathe spec is
+    // scaleY 1.03 / scaleX 0.99 RELATIVE to that base (puppet.ts header).
+    // Phaser gets absolute numbers: scaleY ≈ base*1.03, never the raw 1.03.
+    const fakeTexture = (key: string, present: boolean) => ({
+      key,
+      has: () => present,
+      get: (pose: string) => ({ realHeight: pose === 'idle' ? 274 : 265, height: 274 }),
+    });
+    const spriteStub = () => {
+      const sprite = {
+        setOrigin: vi.fn(),
+        setScale: vi.fn(),
+        setFlipX: vi.fn(),
+        setDepth: vi.fn(),
+        setDisplaySize: vi.fn(),
+        setFrame: vi.fn(),
+        setAlpha: vi.fn(),
+        setTint: vi.fn(),
+        clearTint: vi.fn(),
+        // Real-sprite fields the tween conversion reads:
+        x: 340,
+        y: 660,
+        angle: 0,
+        flipX: false,
+        scaleX: 280 / 274,
+        scaleY: 280 / 274,
+        scale: 280 / 274,
+        texture: fakeTexture('k', true),
+      } as unknown as Phaser.GameObjects.Sprite & Record<string, unknown>;
+      for (const key of [
+        'setOrigin',
+        'setScale',
+        'setFlipX',
+        'setDepth',
+        'setDisplaySize',
+        'setFrame',
+        'setAlpha',
+        'setTint',
+        'clearTint',
+      ] as const)
+        (sprite as never as Record<string, ReturnType<typeof vi.fn>>)[key]!.mockReturnValue(sprite);
+      return sprite;
+    };
+    const tweens: Array<Record<string, unknown>> = [];
+    const scene = {
+      textures: { exists: () => true, get: (key: string) => fakeTexture(key, true) },
+      tweens: {
+        add: vi.fn((spec: Record<string, unknown>) => {
+          tweens.push(spec);
+          return spec;
+        }),
+      },
+      add: {
+        sprite: vi.fn(() => spriteStub()),
+        text: vi.fn(() => ({
+          setOrigin: vi.fn().mockReturnThis(),
+          setDepth: vi.fn().mockReturnThis(),
+        })),
+      },
+    } as unknown as Phaser.Scene;
+    drawFighters(
+      scene as unknown as Phaser.Scene,
+      battlePhaseState('mushroomBonk'),
+      battleLayout(1280, 720),
+    );
+    const base = 280 / 274;
+    const idle = tweens.find((spec) => typeof spec.scaleY === 'number');
+    expect(idle, 'idle breathe tween mounted').toBeDefined();
+    expect(idle!.scaleY).toBeCloseTo(base * 1.03, 5);
+    expect(idle!.scaleX).toBeCloseTo(base * 0.99, 5);
+    expect(idle!.scaleY).not.toBe(1.03);
+  });
+
+  it('mirrors x offsets and adds them to the home pose for the flipped side', () => {
+    // hurt's first x step is -10 relative; playMotion must convert it to an
+    // absolute x = home + offset (mirrored for the flipped side), never the
+    // raw offset (which would teleport the sprite to x≈-10).
+    const fakeTexture = (key: string, present: boolean) => ({
+      key,
+      has: () => present,
+      get: () => ({ realHeight: 280, height: 280 }),
+    });
+    const makeSprite = (homeX: number, flip: boolean) => {
+      const sprite = {
+        setOrigin: vi.fn(),
+        setScale: vi.fn(),
+        setFlipX: vi.fn(),
+        setDepth: vi.fn(),
+        setDisplaySize: vi.fn(),
+        setFrame: vi.fn(),
+        setAlpha: vi.fn(),
+        setTint: vi.fn(),
+        clearTint: vi.fn(),
+        x: homeX,
+        y: 660,
+        angle: 0,
+        flipX: flip,
+        scaleX: 1,
+        scaleY: 1,
+        scale: 1,
+        texture: fakeTexture('k', true),
+      } as unknown as Phaser.GameObjects.Sprite & Record<string, unknown>;
+      for (const key of [
+        'setOrigin',
+        'setScale',
+        'setFlipX',
+        'setDepth',
+        'setDisplaySize',
+        'setFrame',
+        'setAlpha',
+        'setTint',
+        'clearTint',
+      ] as const)
+        (sprite as never as Record<string, ReturnType<typeof vi.fn>>)[key]!.mockReturnValue(sprite);
+      return sprite;
+    };
+    const tweens: Array<Record<string, unknown>> = [];
+    const scene = {
+      textures: { exists: () => true, get: (key: string) => fakeTexture(key, true) },
+      tweens: {
+        add: vi.fn((spec: Record<string, unknown>) => {
+          tweens.push(spec);
+          return spec;
+        }),
+      },
+      add: { sprite: vi.fn(), text: vi.fn() },
+    } as unknown as Phaser.Scene;
+    // Left side (facing right): -10 offset from home x=340 → tween to 330.
+    // The chain mounts step 0 (the tint flash) first; x steps appear only
+    // after its onComplete fires, so drive the chain forward by hand.
+    playMotionForTest(
+      scene,
+      makeSprite(340, false) as unknown as Phaser.GameObjects.Sprite,
+      'hurt',
+    );
+    for (let step = 0; step < 5; step += 1) {
+      const current = tweens[tweens.length - 1];
+      const complete = current?.onComplete as (() => void) | undefined;
+      complete?.();
+    }
+    const leftHurt = tweens.find((spec) => typeof spec.x === 'number');
+    expect(leftHurt, 'hurt tween mounts an x step on the left fighter').toBeDefined();
+    expect(leftHurt!.x).toBe(330);
+    // Right side (flipped): the same -10 offset mirrors to +10 from home
+    // x=940 → tween to 950, lunging away from the centre like the spec says.
+    tweens.length = 0;
+    playMotionForTest(scene, makeSprite(940, true) as unknown as Phaser.GameObjects.Sprite, 'hurt');
+    for (let step = 0; step < 5; step += 1) {
+      const current = tweens[tweens.length - 1];
+      const complete = current?.onComplete as (() => void) | undefined;
+      complete?.();
+    }
+    const rightHurt = tweens.find((spec) => typeof spec.x === 'number');
+    expect(rightHurt, 'hurt tween mounts an x step on the flipped fighter').toBeDefined();
+    expect(rightHurt!.x).toBe(950);
   });
 
   it('stands fighters on their idle pose from the named-frame atlas', () => {
