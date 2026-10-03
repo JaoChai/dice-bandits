@@ -1,15 +1,32 @@
-import { createGame, type Action, type GameState } from '@dice-bandits/engine';
+import { createGame, legalActions, type GameState } from '@dice-bandits/engine';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setLang, t } from '../src/i18n';
-import { renderBattleUi } from '../src/ui/battleUi';
+import { renderHud } from '../src/ui/hud';
 
 /**
- * Task 8 RED: cartoon command cards. Every battle card renders an icon AND a
- * label translated from the `battle.card.*` i18n keys (not the board action
- * words), while keeping the existing `data-testid`s and dispatch behaviour.
+ * Task 8 (reviewer item 6): battle command cards must be labelled by the real
+ * production wiring — renderHud → actionName → battle.card.* — not an
+ * injected labeler. The i18n module is wrapped with a recording delegate that
+ * keeps real translations, because action.* and battle.card.* currently share
+ * identical strings in both languages: only the requested KEY proves which
+ * family the production code reads (a revert to `action.${pick}` fails the
+ * key assertions even though the label text would not change).
  */
 
-function battleState(): GameState {
+const tCalls: string[] = [];
+
+vi.mock('../src/i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/i18n')>();
+  return {
+    ...actual,
+    t: (key: string, params?: Record<string, string | number>) => {
+      tCalls.push(key);
+      return actual.t(key, params);
+    },
+  };
+});
+
+function battleState(pendingAttack: 'attack' | null = null): GameState {
   const state = createGame({
     seed: 'battle-ui',
     rounds: 12,
@@ -48,106 +65,75 @@ function battleState(): GameState {
       exchange: 1,
       half: 1,
       attackerSide: 'a',
-      pending: { attack: null, defense: null },
+      pending: { attack: pendingAttack, defense: null },
     },
   };
   return state;
 }
 
-const actions: Action[] = [
-  { type: 'battlePick', side: 'a', pick: 'attack' },
-  { type: 'battlePick', side: 'a', pick: 'strike' },
-  { type: 'battlePick', side: 'a', pick: 'secret' },
-  { type: 'battlePick', side: 'b', pick: 'defend' },
-  { type: 'battlePick', side: 'b', pick: 'counter' },
-  { type: 'useItem', item: 'potion', target: null },
-];
-
-const picks = actions.filter(
-  (action): action is Extract<Action, { type: 'battlePick' }> => action.type === 'battlePick',
-);
+let roots: HTMLElement[] = [];
 
 function render(state = battleState()) {
   const root = document.createElement('div');
-  root.innerHTML =
-    '<section class="game-shell"><header class="game-topline"><button data-action="exit">Back to title</button></header><nav class="action-bar"></nav></section>';
+  document.body.append(root);
+  roots.push(root);
   const dispatch = vi.fn();
-  renderBattleUi(
-    root,
-    state,
-    actions,
-    0,
-    dispatch,
-    (action) => (action.type === 'battlePick' ? t(`battle.card.${action.pick}`) : t('action.item')),
-    true,
-    true,
-  );
-  return { root, dispatch };
+  renderHud(root, state, dispatch);
+  // Real local-pvp flow: the pass-device dialog gates the picker; confirming
+  // it reveals the command cards (battleUi keeps the pass in a module set).
+  root.querySelector<HTMLButtonElement>('[data-testid="pass-ready"]')?.click();
+  return { root, dispatch, state };
 }
 
-afterEach(() => setLang('en'));
+afterEach(() => {
+  setLang('en');
+  for (const root of roots) root.remove();
+  roots = [];
+  tCalls.length = 0;
+});
 
 describe('cartoon battle command cards (Task 8)', () => {
-  it('labels the attack card from battle.card.attack in English and Thai', () => {
-    const { root } = render();
-    const card = root.querySelector<HTMLButtonElement>('[data-testid="pick-attack"]')!;
-    expect(card.querySelector('.card-label')?.textContent).toBe('Attack');
+  it('labels the attack card via battle.card.attack in English and Thai', () => {
+    const { root } = render(battleState());
+    const label = () =>
+      root.querySelector<HTMLButtonElement>('[data-testid="pick-attack"] .card-label')
+        ?.textContent;
+    expect(label()).toBe(t('battle.card.attack'));
+    expect(tCalls).toContain('battle.card.attack');
+    expect(tCalls).not.toContain('action.attack');
     setLang('th');
-    const rerendered = render();
-    expect(
-      rerendered.root.querySelector<HTMLButtonElement>('[data-testid="pick-attack"]')!.textContent,
-    ).toContain('โจมตี');
+    renderHud(root, battleState(), vi.fn());
+    expect(label()).toBe(t('battle.card.attack'));
+    expect(t('battle.card.attack')).toBe('โจมตี');
   });
 
-  it('labels the strike card from battle.card.strike', () => {
-    const { root } = render();
-    expect(root.querySelector('[data-testid="pick-strike"] .card-label')?.textContent).toBe(
-      t('battle.card.strike'),
-    );
+  it('labels every pick from battle.card keys, never the board action keys', () => {
+    render(battleState()); // attacker picks: attack / strike / secret
+    render(battleState('attack')); // defender picks: defend / counter / secret
+    for (const pick of ['attack', 'strike', 'secret', 'defend', 'counter'] as const) {
+      expect(tCalls, `battle.card.${pick} requested`).toContain(`battle.card.${pick}`);
+      expect(tCalls, `action.${pick} must not be requested`).not.toContain(`action.${pick}`);
+    }
   });
 
-  it('labels the secret card from battle.card.secret', () => {
-    const { root } = render();
-    expect(root.querySelector('[data-testid="pick-secret"] .card-label')?.textContent).toBe(
-      t('battle.card.secret'),
-    );
-  });
-
-  it('labels the defend and counter cards from their battle.card keys', () => {
-    const { root } = render();
-    expect(root.querySelector('[data-testid="pick-defend"] .card-label')?.textContent).toBe(
-      t('battle.card.defend'),
-    );
-    expect(root.querySelector('[data-testid="pick-counter"] .card-label')?.textContent).toBe(
-      t('battle.card.counter'),
-    );
-  });
-
-  it('renders icon and label on every command card with retained test ids', () => {
-    const { root, dispatch } = render();
-    for (const [index, action] of picks.entries()) {
-      const card = root.querySelector<HTMLButtonElement>(`[data-testid="pick-${action.pick}"]`);
-      expect(card, `card for ${action.pick}`).not.toBeNull();
+  it('renders icon and label on every command card with dispatch intact', () => {
+    const { root, dispatch, state } = render(battleState());
+    for (const pick of ['attack', 'strike', 'secret'] as const) {
+      const card = root.querySelector<HTMLButtonElement>(`[data-testid="pick-${pick}"]`);
+      expect(card, `card for ${pick}`).not.toBeNull();
       expect(card!.querySelector('.card-icon')).not.toBeNull();
       expect(card!.querySelector('.card-label')?.textContent).not.toBe('');
-      expect(card!.dataset.actionIndex).toBe(String(index));
     }
     root.querySelector<HTMLButtonElement>('[data-testid="pick-strike"]')!.click();
-    expect(dispatch).toHaveBeenCalledWith(picks[1]);
-  });
-
-  it('keeps the item card and its dispatch behaviour intact', () => {
-    const { root, dispatch } = render();
-    const item = root.querySelector<HTMLButtonElement>('[data-testid="action-useItem-potion"]');
-    expect(item).not.toBeNull();
-    expect(item!.querySelector('.card-icon')).not.toBeNull();
-    expect(item!.querySelector('.card-label')?.textContent).not.toBe('');
-    item!.click();
-    expect(dispatch).toHaveBeenCalledWith(actions.at(-1));
+    const strike = legalActions(state, 0).find(
+      (action) => action.type === 'battlePick' && action.pick === 'strike',
+    );
+    expect(strike).toBeDefined();
+    expect(dispatch).toHaveBeenCalledWith(strike);
   });
 
   it('shows hp/maxHp for both combatants as DOM text', () => {
-    const { root } = render();
+    const { root } = render(battleState());
     expect(root.querySelector('[data-testid="hp-left"]')?.textContent).toBe('38/48');
     expect(root.querySelector('[data-testid="hp-right"]')?.textContent).toBe('12/38');
   });
