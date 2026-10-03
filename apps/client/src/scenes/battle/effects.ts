@@ -7,8 +7,8 @@ import { hasAnim } from '../../art/atlas';
 import { reducedMotion } from '../../art/motion';
 import { t } from '../../i18n';
 
-/** Torso height for hit fx, damage numbers and the secret banner, from the 720p puppet. */
-export const HIT_TORSO_Y = BATTLE_FIGHTER_HEIGHT / 4;
+/** Chest height for hit fx, from the 720p puppet (upper half of the body). */
+export const HIT_TORSO_Y = BATTLE_FIGHTER_HEIGHT / 2;
 
 type Side = 'a' | 'b';
 type DamageEvent = {
@@ -79,7 +79,7 @@ export async function playHit(
       scene.cameras.main.shake(110 * speed, 0.003);
     }
     const number = scene.add
-      .text(pos.x, pos.y - BATTLE_FIGHTER_HEIGHT / 2 - 8, t('battle.damage', { value: amount }), {
+      .text(pos.x, pos.y - BATTLE_FIGHTER_HEIGHT - 36, t('battle.damage', { value: amount }), {
         fontFamily: 'Chakra Petch',
         fontSize: '20px',
         color: '#fff4dc',

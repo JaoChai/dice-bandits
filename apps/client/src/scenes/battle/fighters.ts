@@ -90,6 +90,18 @@ function absoluteProps(sprite: Phaser.GameObjects.Sprite, props: PuppetProps): P
 
 const HOMES = new WeakMap<object, { x: number; y: number; angle: number }>();
 
+/**
+ * Mount scale per sprite (review round 2, item 3): drawFighters stores the
+ * uniform scale it mounted with, and every later relative-scale conversion
+ * reads THIS, never the live sprite.scale — a mid-flight idle breathe tween
+ * would otherwise compound into the next motion (base*1.03*0.94 ...).
+ */
+const BASE_SCALES = new WeakMap<object, number>();
+
+function setBaseScale(sprite: Phaser.GameObjects.Sprite, scale: number): void {
+  BASE_SCALES.set(sprite, scale);
+}
+
 function homePose(sprite: Phaser.GameObjects.Sprite): { x: number; y: number; angle: number } {
   let home = HOMES.get(sprite);
   if (!home) {
@@ -101,10 +113,13 @@ function homePose(sprite: Phaser.GameObjects.Sprite): { x: number; y: number; an
 
 /**
  * Base scale = the uniform scale drawFighters applied from the idle frame's
- * height. A tween mid-flight changes scaleX/scaleY away from the base, so
- * read it from `scale` when that is available and otherwise from scaleY.
+ * height, captured in BASE_SCALES at mount time. Falls back to the live
+ * sprite scale only for sprites never mounted by drawFighters (standalone
+ * probe sprites).
  */
 function baseScale(sprite: Phaser.GameObjects.Sprite): number {
+  const stored = BASE_SCALES.get(sprite);
+  if (typeof stored === 'number' && Number.isFinite(stored) && stored > 0) return stored;
   const candidate = (sprite as unknown as { scale?: number }).scale;
   if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0)
     return candidate;
@@ -124,9 +139,18 @@ export function playMotion(
   if (textured(sprite, pose)) sprite.setFrame(pose);
   const steps = puppetTweens(motion, puppetOptions());
   if (!steps.length) return;
+  const kill = (): void => {
+    const tweens = scene.tweens as Phaser.Tweens.TweenManager & {
+      killTweensOf?: (target: unknown) => void;
+    };
+    tweens.killTweensOf?.(sprite);
+  };
   const chain = (index: number): void => {
     const step = steps[index];
     if (!step) return;
+    // Kill stale chains before mounting each step so a motion interrupted
+    // mid-chain cannot fight the fresh one (review round 2, item 3).
+    kill();
     scene.tweens.add({
       targets: sprite,
       ...absoluteProps(sprite, step.props),
@@ -175,6 +199,10 @@ export function drawFighters(
       .setScale(scale)
       .setFlipX(side === 'b')
       .setDepth(5);
+    // Register the mount scale BEFORE the first playMotion: the idle breathe
+    // and every later relative-scale conversion must multiply THIS number,
+    // not the live (tween-animated) sprite.scale (review round 2, item 3).
+    setBaseScale(sprite, scale);
     if (!textured) console.warn('[art] fallback', atlas);
     else playMotion(scene, sprite, 'idle');
     if (combatant.secretUsed) {

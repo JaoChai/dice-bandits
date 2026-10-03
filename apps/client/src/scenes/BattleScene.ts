@@ -130,7 +130,7 @@ export default class BattleScene extends Phaser.Scene {
     drawDicePools(this, state, layout);
     this.exchangeLabel = this.add
       .text(
-        BATTLE_FRAME.width / 4,
+        BATTLE_FRAME.width / 2,
         BATTLE_EXCHANGE_Y,
         t('battle.exchange', { exchange: battle.exchange }),
         {

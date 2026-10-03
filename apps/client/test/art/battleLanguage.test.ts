@@ -75,7 +75,7 @@ it('updates the canvas exchange label when switching English to Thai mid-battle'
   }) as InstanceType<typeof BattleScene>;
   scene.create();
   expect(scene.add.text).toHaveBeenCalledWith(
-    320,
+    640,
     expect.any(Number),
     'Exchange 1',
     expect.any(Object),
