@@ -1,8 +1,6 @@
 import { createGame, type GameState } from '@dice-bandits/engine';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reducedMotion } from '../../src/art/motion';
-import { HUD_RECTS } from '../../src/scenes/board/layout';
-import { placeAmbients, placeDecorations } from '../../src/art/decorations';
 
 vi.mock('phaser', () => ({
   default: {
@@ -21,15 +19,6 @@ vi.mock('../../src/art/motion', async (importOriginal) => ({
   reducedMotion: vi.fn(() => false),
 }));
 
-vi.mock('../../src/art/decorations', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/art/decorations')>();
-  return {
-    ...actual,
-    placeDecorations: vi.fn(actual.placeDecorations),
-    placeAmbients: vi.fn(actual.placeAmbients),
-  };
-});
-
 const { default: BoardScene } = await import('../../src/scenes/BoardScene');
 
 interface Rec {
@@ -42,6 +31,7 @@ interface Rec {
   scale?: number;
   tint?: number;
   played?: string;
+  name?: string;
 }
 
 /** Chainable Phaser game-object test double that records what the scene did. */
@@ -60,9 +50,9 @@ function gameObject(
           target.depth = depth;
           return proxy;
         };
-      if (prop === 'play')
-        return (key: string) => {
-          target.played = key;
+      if (prop === 'setName')
+        return (name: string) => {
+          target.name = name;
           return proxy;
         };
       if (prop === 'setOrigin')
@@ -85,10 +75,13 @@ function gameObject(
           target.tint = tint;
           return proxy;
         };
+      if (prop === 'play')
+        return (key: string) => {
+          target.played = key;
+          return proxy;
+        };
       if (prop === 'texture') return { key: target.texture };
       if (prop === 'anims') return { stop: () => proxy };
-      if (prop === 'x') return 0;
-      if (prop === 'y') return 0;
       return () => proxy;
     },
   });
@@ -101,30 +94,47 @@ function makeScene() {
   const scene = Object.assign(Object.create(BoardScene.prototype), {
     tokenObjects: new Map(),
     spacePositions: new Map(),
+    wholeMap: false,
+    ringTween: null,
     children: { removeAll: vi.fn() },
-    cameras: { main: { setScroll: vi.fn() } },
+    cameras: {
+      main: {
+        setScroll: vi.fn(),
+        setZoom: vi.fn(),
+        centerOn: vi.fn(),
+        width: 1280,
+        height: 720,
+        zoom: 0.4,
+        getWorldPoint: vi.fn(() => ({ x: 0, y: 0 })),
+      },
+    },
+    input: { on: vi.fn() },
     game: {
       events: {
         on: vi.fn((event: string, handler: (state: GameState) => void) =>
           handlers.set(event, handler),
         ),
+        emit: vi.fn(),
       },
       registry: { get: vi.fn(() => undefined) },
     },
     textures: {
-      exists: vi.fn((key: string) => key.startsWith('ambient-')),
+      exists: vi.fn(() => false),
       get: vi.fn(() => ({ has: () => true })),
     },
     anims: { exists: vi.fn(() => true) },
     cache: { json: { get: vi.fn(() => undefined) } },
-    tweens: { add: vi.fn() },
+    tweens: {
+      add: vi.fn(),
+      remove: vi.fn(),
+    },
     add: {
-      image: vi.fn((x: number, y: number, key: string, frame?: number) => {
+      image: vi.fn((x: number, y: number, key: string, frame?: number | string) => {
         const made = gameObject('image', key, frame);
         objects.push(made.rec);
         return made.proxy;
       }),
-      sprite: vi.fn((x: number, y: number, key: string, frame?: number) => {
+      sprite: vi.fn((x: number, y: number, key: string, frame?: number | string) => {
         const made = gameObject('sprite', key, frame);
         objects.push(made.rec);
         return made.proxy;
@@ -134,10 +144,22 @@ function makeScene() {
         objects.push(made.rec);
         return made.proxy;
       }),
+      rectangle: vi.fn(() => {
+        const made = gameObject('rectangle');
+        objects.push(made.rec);
+        return made.proxy;
+      }),
+      zone: vi.fn(() => {
+        const made = gameObject('zone');
+        objects.push(made.rec);
+        return made.proxy;
+      }),
     },
   }) as unknown as {
     renderBoard(state: GameState): void;
     create(): void;
+    input: { on: ReturnType<typeof vi.fn> };
+    cameras: { main: Record<string, ReturnType<typeof vi.fn> & number> };
   };
   return { scene, objects, handlers };
 }
@@ -157,51 +179,35 @@ function gameFor(seed: string): GameState {
 
 beforeEach(() => {
   vi.mocked(reducedMotion).mockReturnValue(false);
-  vi.mocked(placeDecorations).mockClear();
-  vi.mocked(placeAmbients).mockClear();
   delete (window as { __phaser_probe__?: unknown }).__phaser_probe__;
 });
 
 describe('BoardScene layering', () => {
-  it('renders ground below road below tiles below decor below ambient below tokens', () => {
+  it('renders painted map below road below tiles below tokens', () => {
     const { scene, objects } = makeScene();
     const state = gameFor('a');
     (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(state);
 
-    const ground = objects.filter((o) => o.depth <= -9);
+    const mapTiles = objects.filter((o) => o.depth === -10);
     const road = objects.filter((o) => o.depth === -5);
     const tiles = objects.filter((o) => o.depth === 0);
-    const decorAndAmbient = objects.filter((o) => o.depth >= 10 && o.depth < 12);
-    const ambientSprites = objects.filter((o) => o.texture?.startsWith('ambient-'));
     const tokens = objects.filter((o) => o.texture?.startsWith('token-'));
-    const rings = objects.filter((o) => o.depth >= 30 && o.kind === 'graphics');
+    const rings = objects.filter((o) => o.depth >= 40 && o.kind === 'graphics');
 
-    expect(ground.length).toBeGreaterThan(0);
-    expect(road.length).toBeGreaterThan(0);
+    expect(mapTiles.length).toBe(15); // 5x3 painted background tiles
+    expect(road.length).toBe(1); // one graphics pass for the whole road
     expect(tiles.length).toBe(state.board.spaces.length); // one marker per space
-    expect(decorAndAmbient.length).toBeGreaterThan(state.board.spaces.length);
-    expect(ambientSprites.length).toBeGreaterThan(0);
     expect(tokens).toHaveLength(4);
     expect(rings.length).toBeGreaterThan(0);
 
-    // tokens draw over every prop/ambient, bottom-anchored, idling
-    for (const token of tokens) {
-      expect(token.depth).toBe(30);
-      expect(token.origin).toEqual([0.5, 1]);
-      expect(token.played).toBe(`token-${token.texture?.split('-')[1]}:idle`);
-    }
-    for (const over of decorAndAmbient) expect(over.depth).toBeLessThan(30);
-    expect(rings[0]!.depth).toBeGreaterThan(30);
+    // ordering: map < road < tiles < tokens < rings
+    expect(Math.max(...mapTiles.map((tile) => tile.depth))).toBeLessThan(
+      Math.min(...road.map((segment) => segment.depth)),
+    );
+    expect(rings[0]!.depth).toBeGreaterThan(tokens[0]!.depth);
   });
 
-  it('skips the ambient layer entirely under prefers-reduced-motion', () => {
-    vi.mocked(reducedMotion).mockReturnValue(true);
-    const { scene, objects } = makeScene();
-    (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(gameFor('a'));
-    expect(objects.filter((o) => o.texture?.startsWith('ambient-'))).toHaveLength(0);
-  });
-
-  it('does not rebuild hundreds of static sprites for nonvisual battle state changes', () => {
+  it('does not rebuild the board for nonvisual battle state changes', () => {
     const { scene, objects } = makeScene();
     const state = gameFor('a');
     scene.renderBoard(state);
@@ -211,13 +217,34 @@ describe('BoardScene layering', () => {
     expect(objects).toHaveLength(drawn);
   });
 
-  it('passes the HUD rectangles as decoration exclusion zones', () => {
+  it('binds one tap handler and follows the active seat with the camera', () => {
     const { scene } = makeScene();
-    (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(gameFor('a'));
-    for (const spy of [placeDecorations, placeAmbients]) {
-      expect(spy).toHaveBeenCalledTimes(1);
-      const view = vi.mocked(spy).mock.calls[0]![2] as { avoid?: unknown };
-      expect(view.avoid).toEqual(HUD_RECTS);
+    const state = gameFor('a');
+    (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(state);
+    expect(scene.input.on).toHaveBeenCalledWith('pointerdown', expect.any(Function));
+    const main = scene.cameras.main as unknown as {
+      centerOn: ReturnType<typeof vi.fn>;
+      setZoom: ReturnType<typeof vi.fn>;
+    };
+    const player = state.players[state.turnSeat]!;
+    const space = state.board.spaces.find((candidate) => candidate.id === player.pos)!;
+    expect(main.centerOn).toHaveBeenCalledWith(space.x, space.y);
+    expect(main.setZoom).toHaveBeenCalled();
+  });
+
+  it('names a fork-arrow hit zone per option while chooseBranch is pending', async () => {
+    const { drawForkArrows } = await import('../../src/scenes/board/forkArrows');
+    const state = gameFor('a');
+    const fork = state.board.spaces.find((space) => space.next.length > 1)!;
+    state.players[state.turnSeat]!.pos = fork.id;
+    state.phase = { kind: 'chooseBranch', remaining: 2, options: [...fork.next] };
+    const { scene, objects } = makeScene();
+    const onChoose = vi.fn();
+    drawForkArrows(scene as unknown as Parameters<typeof drawForkArrows>[0], state, onChoose);
+    const zones = objects.filter((o) => o.kind === 'zone');
+    expect(zones.length).toBe(state.phase.options.length);
+    for (const option of state.phase.options) {
+      expect(zones.some((zone) => zone.name === `fork-arrow-${option}`)).toBe(true);
     }
   });
 });

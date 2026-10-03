@@ -64,7 +64,7 @@ export function renderHud(
         )
         .join('')
     : '';
-  const header = `<header class="game-topline"><strong class="pixel">${t('title.gameName')}</strong><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span><nav class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></nav>${audioToggleHtml()}<button class="text-button" data-action="exit">${t('setup.back')}</button></header>`;
+  const header = `<header class="game-topline"><strong class="pixel">${t('title.gameName')}</strong><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span><nav class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></nav>${audioToggleHtml()}<button class="text-button" data-testid="map-toggle" aria-pressed="false">${t('map.whole')}</button><button class="text-button" data-action="exit">${t('setup.back')}</button></header>`;
   if (!root.querySelector('.game-shell')) {
     root.innerHTML = `<section class="game-shell" data-testid="screen-board"><div class="board-stage" id="phaser-board"></div>${header}<div class="event-banner frame" data-testid="event-banner" role="status" tabindex="0"><span class="event-meta"><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span></span><span class="event-text">${state.round >= 10 ? t('event.FrenzyStarted') : ''}</span></div><div class="online-status" aria-live="polite"></div><section class="seat-hud">${seats}</section><nav class="action-tray action-bar frame" data-testid="action-tray" aria-label="${t('board.actions')}"></nav><div class="rotate-hint" data-testid="rotate-hint">${t('board.rotateHint')}</div></section>`;
     bindAudioToggle(root.querySelector('.game-topline [data-testid="audio-toggle"]'));
@@ -111,6 +111,26 @@ export function renderHud(
     });
   }
   root.querySelector('.seat-hud')!.innerHTML = seats;
+  // "<name>'s turn" ribbon (spec §7): re-created per render, cheapest correct.
+  const ribbonText = t('turn.ribbon', {
+    name: state.players[state.turnSeat]?.name ?? '',
+  });
+  let ribbon = root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]');
+  if (!ribbon) {
+    ribbon = document.createElement('div');
+    ribbon.className = 'turn-ribbon';
+    ribbon.dataset.testid = 'turn-ribbon';
+    ribbon.setAttribute('role', 'status');
+    root.querySelector('.game-shell')!.append(ribbon);
+  }
+  ribbon.textContent = ribbonText;
+  ribbon.classList.toggle('visible', true);
+  const mapToggle = root.querySelector<HTMLButtonElement>('[data-testid="map-toggle"]');
+  if (mapToggle) {
+    const whole = window.diceBanditsMapWhole === true;
+    mapToggle.setAttribute('aria-pressed', String(whole));
+    mapToggle.textContent = whole ? t('map.back') : t('map.whole');
+  }
   const banner = root.querySelector<HTMLElement>('[data-testid="event-banner"]')!;
   banner.querySelector('.round-label')!.textContent = t('board.round', {
     round: state.round,

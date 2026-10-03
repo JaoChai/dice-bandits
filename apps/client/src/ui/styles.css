@@ -1318,3 +1318,81 @@ h1 {
     bottom: 4px;
   }
 }
+
+/* M5a Task 6: turn ribbon + tap-a-space popup (DOM overlays on the board). */
+.turn-ribbon {
+  position: absolute;
+  top: 108px;
+  left: 50%;
+  z-index: 4;
+  transform: translateX(-50%);
+  border: 2px solid #f5c51c;
+  border-radius: 999px;
+  padding: 4px 18px;
+  background: #171324d9;
+  color: #f5eedc;
+  font-weight: 700;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.turn-ribbon.visible {
+  opacity: 1;
+}
+
+.space-info-shade {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: #17132466;
+}
+
+.space-info {
+  position: relative;
+  width: min(320px, 86vw);
+  border: 3px solid #f5c51c;
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: #f5eedc;
+  color: #5c3317;
+  box-shadow: 0 8px 24px #0009;
+}
+
+.space-info h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.space-info .space-info-text {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.space-info .space-info-owner {
+  display: block;
+  margin-top: 6px;
+  font-weight: 700;
+}
+
+.space-info-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: 0;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #5c3317;
+  color: #f5eedc;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-ribbon {
+    transition: none;
+  }
+}
