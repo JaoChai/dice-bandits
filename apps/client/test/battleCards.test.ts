@@ -96,8 +96,7 @@ describe('cartoon battle command cards (Task 8)', () => {
   it('labels the attack card via battle.card.attack in English and Thai', () => {
     const { root } = render(battleState());
     const label = () =>
-      root.querySelector<HTMLButtonElement>('[data-testid="pick-attack"] .card-label')
-        ?.textContent;
+      root.querySelector<HTMLButtonElement>('[data-testid="pick-attack"] .card-label')?.textContent;
     expect(label()).toBe(t('battle.card.attack'));
     expect(tCalls).toContain('battle.card.attack');
     expect(tCalls).not.toContain('action.attack');
