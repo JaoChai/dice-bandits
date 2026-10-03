@@ -195,7 +195,7 @@ export default class BoardScene extends Phaser.Scene {
       const x = space.x + offsets[playerIndex]!.x;
       const y = space.y + offsets[playerIndex]!.y;
       const token = createHeroToken(this, player.classId, x, y, !reducedMotion());
-      token.setTint(seatTint(colors[playerIndex]!));
+      // Review 4: the seat colour is the ring, never the character art.
       this.tokenObjects.set(player.seat, token);
       const ring = this.add.graphics().setDepth(40);
       ring.lineStyle(3, seatTint(colors[playerIndex]!), 1);

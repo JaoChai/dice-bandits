@@ -134,3 +134,61 @@ describe('Review Focus 4: duplicate classes keep distinct colours', () => {
     void seatFlagColors;
   });
 });
+
+describe('Review 4: one seat-colour system across rings and town flags', () => {
+  it('derives town flag colours from seatColors, indexed by owner seat', async () => {
+    const { seatColors, seatTint } = await import('../../src/art/colors');
+    const { drawTiles } = await import('../../src/scenes/board/tiles');
+    const state = gameFor('flag-colors');
+    // Two knights: seat 0 keeps blue, seat 1 must fall back — ring and flag
+    // must agree per seat.
+    state.players[0]!.classId = 'knight';
+    state.players[1]!.classId = 'knight';
+    const colors = seatColors(state.players.map((player) => player.classId));
+
+    const flagColors: number[] = [];
+    const graphicsCreated: Array<Record<string, unknown>> = [];
+    const image = { setDepth: () => image, setDisplaySize: () => image };
+    const scene = {
+      textures: {
+        exists: () => true,
+        get: () => ({ has: () => true }),
+      },
+      add: {
+        image: vi.fn(() => image),
+        graphics: vi.fn(() => {
+          const g: Record<string, unknown> = {
+            setDepth: () => g,
+            __fills: [] as number[],
+            fillStyle: (color: number) => {
+              (g.__fills as number[]).push(color);
+              return g;
+            },
+            fillRoundedRect: () => g,
+            fillRect: () => g,
+          };
+          graphicsCreated.push(g);
+          return g;
+        }),
+      },
+    };
+    const owners = new Map<number, number | null>([
+      [0, 0],
+      [1, 1],
+    ]);
+    const spaces = [
+      { id: 0, kind: 'town', x: 400, y: 400 },
+      { id: 1, kind: 'town', x: 800, y: 400 },
+    ] as never[];
+    drawTiles(scene as never, spaces, owners, state);
+
+    // Each owned space draws a flag whose first fillStyle is the seat colour.
+    const flagFor = (spaceId: number) => (graphicsCreated[spaceId]!.__fills as number[])[0]!;
+    expect(flagFor(0)).toBe(seatTint(colors[0]!));
+    expect(flagFor(1)).toBe(seatTint(colors[1]!));
+    // Duplicate knights: the two flags differ (no shared green/orange clash).
+    expect(flagFor(0)).not.toBe(flagFor(1));
+    flagColors.push(flagFor(0), flagFor(1));
+    expect(new Set(flagColors).size).toBe(2);
+  });
+});
