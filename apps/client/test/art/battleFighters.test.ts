@@ -90,13 +90,31 @@ function spriteStub() {
   return sprite;
 }
 
+/**
+ * Fake texture entry: `has` answers pose presence (both the test fakes and
+ * real Phaser satisfy this contract), `get` returns the frame's real pixel
+ * size so the uniform-scale math can be pinned against real atlas data.
+ */
+function fakeTexture(key: string, present: boolean) {
+  return {
+    key,
+    has: () => present,
+    get: (pose: string) => ({
+      // Thief idle cell is 168×280, its hurt cell 265 px tall in
+      // public/art/hero-thief.json; mushroomBonk idle is 330×274.
+      realHeight: pose === 'idle' ? 280 : 265,
+      height: pose === 'idle' ? 280 : 265,
+    }),
+  };
+}
+
 function fightersScene(textures: string[]) {
   const sprites: ReturnType<typeof spriteStub>[] = [];
   const tweens: object[] = [];
   const scene = {
     textures: {
       exists: (key: string) => textures.includes(key),
-      get: (key: string) => ({ has: () => textures.includes(key) }),
+      get: (key: string) => fakeTexture(key, textures.includes(key)),
     },
     tweens: {
       add: vi.fn((spec: object) => {
@@ -105,13 +123,9 @@ function fightersScene(textures: string[]) {
       }),
     },
     add: {
-      sprite: vi.fn((_x: number, _y: number, key: string, frame?: string) => {
+      sprite: vi.fn((_x: number, _y: number, key: string) => {
         const s = spriteStub();
-        s.texture.key = key;
-        s.texture = {
-          key,
-          has: (pose: string) => textures.includes(key) && (pose === 'idle' || !frame),
-        };
+        s.texture = fakeTexture(key, textures.includes(key));
         sprites.push(s);
         return s;
       }),
@@ -147,15 +161,21 @@ describe('cartoon battle fighters (Task 8)', () => {
     expect(sprites[1]!.setFlipX).toHaveBeenCalledWith(true);
   });
 
-  it('renders both fighters at 280 px tall on the 1280×720 canvas', () => {
-    const { scene, sprites } = fightersScene([ART.heroes.knight, ART.monsters.jellyBun]);
+  it('renders both fighters 280 px tall via one uniform scale per atlas aspect', () => {
+    const { scene, sprites } = fightersScene([ART.heroes.thief, ART.monsters.mushroomBonk]);
     drawFighters(
       scene as unknown as Phaser.Scene,
-      battlePhaseState('jellyBun'),
+      battlePhaseState('mushroomBonk'),
       battleLayout(1280, 720),
     );
-    expect(sprites[0]!.setDisplaySize).toHaveBeenCalledWith(expect.any(Number), 280);
-    expect(sprites[1]!.setDisplaySize).toHaveBeenCalledWith(expect.any(Number), 280);
+    // One uniform scale per fighter from the idle cell's real pixel height
+    // (reviewer item 1): the fake thief idle cell is 280 px tall → scale 1;
+    // a 274 px cell would get 280/274. Widths keep the cell's own aspect
+    // instead of a forced 210×280 box.
+    expect(sprites[0]!.setScale).toHaveBeenCalledWith(1);
+    expect(sprites[1]!.setScale).toHaveBeenCalledWith(1);
+    expect(sprites[0]!.setDisplaySize).not.toHaveBeenCalled();
+    expect(sprites[1]!.setDisplaySize).not.toHaveBeenCalled();
   });
 
   it('stands fighters on their idle pose from the named-frame atlas', () => {

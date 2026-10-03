@@ -42,6 +42,21 @@ function textured(sprite: Phaser.GameObjects.Sprite, pose: string): boolean {
   }
 }
 
+/** Source pixel height of a pose frame; fakes without frame data yield undefined. */
+function frameHeight(
+  texture: Phaser.Textures.Texture | undefined,
+  pose: string,
+): number | undefined {
+  try {
+    if (!texture) return undefined;
+    const frame = texture.get(pose) as Phaser.Textures.Frame | undefined;
+    const height = frame?.realHeight ?? frame?.height ?? 0;
+    return height > 0 ? height : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function playMotion(scene: Phaser.Scene, sprite: Phaser.GameObjects.Sprite, motion: Motion): void {
   const pose: Pose = poseFor(motion);
   if (textured(sprite, pose)) sprite.setFrame(pose);
@@ -75,12 +90,18 @@ export function drawFighters(
     const texture = scene.textures.exists(atlas) ? scene.textures.get(atlas) : undefined;
     const textured = !!texture && texture.has('idle');
     const pos = side === 'a' ? layout.left : layout.right;
+    const probe = texture as Phaser.Textures.Texture | undefined;
+    // One uniform scale per atlas: the pose cell's own aspect sets the width
+    // (plan Task 8; reviewer item 1). 280 px target height ÷ the idle frame's
+    // real pixel height; without frame data fall back to scale 1.
+    const idleHeight = textured
+      ? (frameHeight(probe, 'idle') ?? BATTLE_FIGHTER_HEIGHT)
+      : BATTLE_FIGHTER_HEIGHT;
+    const scale = BATTLE_FIGHTER_HEIGHT / idleHeight;
     const sprite = scene.add
       .sprite(pos.x, pos.y, atlas, textured ? 'idle' : undefined)
       .setOrigin(0.5, 1)
-      // 280 px puppets on the 1280×720 stage (plan Task 8); the pose cell's
-      // own aspect sets the width (atlas cells are 512 px source, 280 ship).
-      .setDisplaySize(BATTLE_FIGHTER_HEIGHT * 0.75, BATTLE_FIGHTER_HEIGHT)
+      .setScale(scale)
       .setFlipX(side === 'b')
       .setDepth(5);
     if (!textured) console.warn('[art] fallback', atlas);
