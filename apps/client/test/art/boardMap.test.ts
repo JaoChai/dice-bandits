@@ -118,6 +118,116 @@ describe('Review Focus 3: popup leaves fork arrows live', () => {
       expect(onChoose).toHaveBeenCalled();
     }
   });
+
+  it('anchors arrows at the active player position, not the first fork node (Review 5a)', async () => {
+    const { drawForkArrows } = await import('../../src/scenes/board/forkArrows');
+    const state = gameFor('fork-origin');
+    // The map has several forks; the player stands at the SECOND one, so the
+    // old "first space with two exits" bug would draw arrows from the wrong
+    // node (between the first fork and this fork's destinations).
+    const forks = state.board.spaces.filter((space) => space.next.length > 1);
+    expect(forks.length).toBeGreaterThan(1);
+    const origin = forks[1]!;
+    state.players[state.turnSeat]!.pos = origin.id;
+    state.phase = { kind: 'chooseBranch', remaining: 2, options: [...origin.next] };
+
+    const drawnAt: Array<{ x: number; y: number; name?: string }> = [];
+    const scene = {
+      game: undefined,
+      add: {
+        graphics: vi.fn(() => {
+          const proxy = new Proxy(
+            {},
+            {
+              get: (_target, prop: string) => (prop === 'setDepth' ? () => proxy : () => undefined),
+            },
+          );
+          return proxy;
+        }),
+        zone: vi.fn((x: number, y: number) => {
+          drawnAt.push({ x, y });
+          const proxy = {
+            setOrigin: () => proxy,
+            setDepth: () => proxy,
+            setInteractive: () => proxy,
+            setName: (name: string) => {
+              drawnAt.at(-1)!.name = name;
+              return proxy;
+            },
+            on: () => proxy,
+          };
+          return proxy;
+        }),
+      },
+      tweens: { add: vi.fn() },
+    };
+    drawForkArrows(scene as never, state, vi.fn());
+
+    // Each arrow sits along the origin→destination segment (cross-product
+    // distance from that segment stays small).
+    expect(drawnAt).toHaveLength(state.phase.options.length);
+    for (const to of state.phase.options) {
+      const destination = state.board.spaces.find((space) => space.id === to)!;
+      const arrow = drawnAt.find((entry) => entry.name === `fork-arrow-${to}`)!;
+      const cross =
+        (destination.x - origin.x) * (arrow.y - origin.y) -
+        (destination.y - origin.y) * (arrow.x - origin.x);
+      const length = Math.hypot(destination.x - origin.x, destination.y - origin.y);
+      expect(Math.abs(cross) / length).toBeLessThan(48);
+    }
+  });
+
+  it('exposes DOM-reachable fork-arrow-<spaceId> markers for E2E (Review 5b)', async () => {
+    const { drawForkArrows } = await import('../../src/scenes/board/forkArrows');
+    const state = gameFor('fork-dom');
+    const fork = state.board.spaces.find((space) => space.next.length > 1)!;
+    state.players[state.turnSeat]!.pos = fork.id;
+    state.phase = { kind: 'chooseBranch', remaining: 2, options: [...fork.next] };
+
+    document.body.innerHTML = '';
+    const scene = {
+      game: {
+        canvas: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }) },
+      },
+      cameras: { main: { scrollX: 0, scrollY: 0, zoom: 1, width: 1280, height: 720 } },
+      add: {
+        graphics: vi.fn(() => {
+          const proxy = new Proxy(
+            {},
+            {
+              get: (_target, prop: string) => (prop === 'setDepth' ? () => proxy : () => undefined),
+            },
+          );
+          return proxy;
+        }),
+        zone: vi.fn(() => {
+          const proxy = {
+            setOrigin: () => proxy,
+            setDepth: () => proxy,
+            setInteractive: () => proxy,
+            setName: () => proxy,
+            on: () => proxy,
+          };
+          return proxy;
+        }),
+      },
+      tweens: { add: vi.fn() },
+    };
+    drawForkArrows(scene as never, state, vi.fn());
+
+    const markers = [...document.querySelectorAll('[data-testid^="fork-arrow-"]')];
+    expect(markers).toHaveLength(state.phase.options.length);
+    for (const to of state.phase.options)
+      expect(markers.map((marker) => marker.getAttribute('data-testid'))).toContain(
+        `fork-arrow-${to}`,
+      );
+
+    // Redrawing removes the previous markers (no pile-up across renders).
+    drawForkArrows(scene as never, state, vi.fn());
+    expect(document.querySelectorAll('[data-testid^="fork-arrow-"]')).toHaveLength(
+      state.phase.options.length,
+    );
+  });
 });
 
 describe('Review Focus 4: duplicate classes keep distinct colours', () => {

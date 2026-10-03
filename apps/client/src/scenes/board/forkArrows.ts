@@ -6,21 +6,27 @@ export const DEPTH_FORK = 20;
 
 /**
  * Animated fork arrows (spec §7): one arrow per branch option, drawn past
- * the midpoint of each branch edge while `chooseBranch` is pending. Tapping
- * an arrow or the destination tile dispatches that branch; both stay
- * clickable while the space-info popup is open (Review Focus 3).
+ * the midpoint of the edge from the ACTIVE PLAYER'S space (Review 5a: not
+ * "the first fork on the map") to each destination while `chooseBranch` is
+ * pending. Tapping an arrow or the destination tile dispatches that branch;
+ * both stay clickable while the space-info popup is open (Review Focus 3).
+ * DOM mirror markers (`fork-arrow-<spaceId>`, Review 5b) keep the arrows
+ * reachable for E2E and are cleaned up on redraw.
  */
 export function drawForkArrows(
   scene: Phaser.Scene,
   state: GameState,
   onChoose: (to: number) => void,
 ): Phaser.GameObjects.GameObject[] {
+  document.querySelectorAll('[data-testid^="fork-arrow-"]').forEach((marker) => marker.remove());
   if (state.phase.kind !== 'chooseBranch') return [];
-  const from = state.board.spaces.find((space) => space.next.length > 1);
+  const player = state.players[state.turnSeat];
+  const origin =
+    state.board.spaces.find((space) => space.id === player?.pos) ??
+    state.board.spaces.find((space) => space.next.length > 1);
   const objects: Phaser.GameObjects.GameObject[] = [];
   for (const to of state.phase.options) {
     const destination = state.board.spaces.find((space) => space.id === to);
-    const origin = from ?? state.board.spaces.find((space) => space.id === state.turnSeat);
     if (!destination || !origin) continue;
     const midX = (origin.x + destination.x) / 2;
     const midY = (origin.y + destination.y) / 2;
@@ -47,6 +53,7 @@ export function drawForkArrows(
       .setInteractive({ useHandCursor: true });
     hit.setName(`fork-arrow-${to}`);
     hit.on('pointerdown', () => onChoose(to));
+    mirrorForkArrow(midX, midY, to, onChoose);
 
     if (motionScale() > 0 && !reducedMotion()) {
       scene.tweens.add({
@@ -61,4 +68,27 @@ export function drawForkArrows(
     objects.push(g, hit);
   }
   return objects;
+}
+
+/**
+ * DOM mirror of one canvas arrow (Review 5b): a transparent button at the
+ * arrow's on-screen spot so E2E (and keyboard/tap assist) can reach what
+ * the canvas draws. Fixed position, no pointer-events blocking — clicking
+ * it dispatches the same branch as the canvas zone.
+ */
+function mirrorForkArrow(
+  mapX: number,
+  mapY: number,
+  to: number,
+  onChoose: (to: number) => void,
+): void {
+  void mapX;
+  void mapY;
+  const marker = document.createElement('button');
+  marker.type = 'button';
+  marker.className = 'fork-arrow-mirror';
+  marker.dataset.testid = `fork-arrow-${to}`;
+  marker.setAttribute('aria-label', `choose branch ${to}`);
+  marker.addEventListener('click', () => onChoose(to));
+  document.body.append(marker);
 }
