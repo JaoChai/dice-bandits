@@ -124,6 +124,8 @@ describe('createGame', () => {
     expect(config.height).toBe(720);
     expect(config.pixelArt).toBe(false);
     expect(config.roundPixels).toBe(false);
+    // Smooth texture sampling is independent of expensive framebuffer MSAA.
+    expect(config.render).toEqual({ antialias: true, antialiasGL: false });
     expect(config.parent).toBe('phaser-board');
     expect(config.scale).toEqual({ mode: 0, autoCenter: 0 });
   });

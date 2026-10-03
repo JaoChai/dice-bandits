@@ -33,6 +33,12 @@ let game: Phaser.Game | null = null;
 /** Test-only probe: exercise the real board shake at the configured speed. */
 function createArtProbe() {
   return {
+    get boardReady() {
+      return game?.scene.isActive('BoardScene') ?? false;
+    },
+    get battleReady() {
+      return game?.scene.isActive('BattleScene') ?? false;
+    },
     ambientRunning: false,
     shakeCount: 0,
     triggerShake: () => {
@@ -317,6 +323,8 @@ declare global {
     __db?: {
       getState: () => GameState;
       art: {
+        readonly boardReady: boolean;
+        readonly battleReady: boolean;
         ambientRunning: boolean;
         shakeCount: number;
         backdropKey?: string;

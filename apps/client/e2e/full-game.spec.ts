@@ -2,11 +2,8 @@ import { expect, test } from '@playwright/test';
 import { playOneStep, startTestGame } from './helpers';
 
 test('plays a full game through the results screen', async ({ page }) => {
-  // A whole game is ~30 UI actions. The M5a 1280x720 non-pixel-art canvas
-  // roughly doubles CPU-rasterized frame cost on 2-core CI runners (whole
-  // journey ~90 s vs ~41 s at 640x360), so the budget matches the
-  // visual-regressions family (150 s).
-  test.setTimeout(150_000);
+  // Keep the original journey budget: smooth 720p textures do not require MSAA.
+  test.setTimeout(90_000);
   const startedAt = Date.now();
   await startTestGame(page);
   let iterations = 0;

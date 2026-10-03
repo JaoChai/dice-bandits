@@ -17,6 +17,9 @@ export function createGame(parent: string): Phaser.Game {
     backgroundColor: '#273449',
     pixelArt: false,
     roundPixels: false,
+    // Keep linear texture sampling, without a multisampled framebuffer.
+    // MSAA resolves every 720p frame even on an unchanged board (SwiftShader).
+    render: { antialias: true, antialiasGL: false },
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     scene: [BootScene, BoardScene, BattleScene],
   });
