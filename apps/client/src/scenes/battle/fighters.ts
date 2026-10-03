@@ -111,7 +111,15 @@ function baseScale(sprite: Phaser.GameObjects.Sprite): number {
   return typeof sprite.scaleY === 'number' && sprite.scaleY > 0 ? sprite.scaleY : 1;
 }
 
-function playMotion(scene: Phaser.Scene, sprite: Phaser.GameObjects.Sprite, motion: Motion): void {
+/** Play the motion's pose frame + tween chain on a battle sprite. Exported
+ * so `effects.ts` can drive hit reactions through the same paper-puppet
+ * conversion (reviewer item 3); `?speed=0` and reduced motion are handled
+ * inside `puppetTweens`. */
+export function playMotion(
+  scene: Phaser.Scene,
+  sprite: Phaser.GameObjects.Sprite,
+  motion: Motion,
+): void {
   const pose = poseFor(motion);
   if (textured(sprite, pose)) sprite.setFrame(pose);
   const steps = puppetTweens(motion, puppetOptions());

@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import type { BattleFighters } from './fighters';
 import type { BattleLayout } from './layout';
+import { playMotion } from './fighters';
 import { hasAnim } from '../../art/atlas';
 import { reducedMotion } from '../../art/motion';
 import { t } from '../../i18n';
@@ -58,8 +59,7 @@ export async function playHit(
   if (speed <= 0) return;
   const attackerSide = String(event.attacker) === String(rightId) ? 'b' : 'a';
   const attacker = fighters[attackerSide];
-  const attackKey = attacker.texture.key;
-  if (hasAnim(scene, attackKey, 'attack')) attacker.play(`${attackKey}:attack`);
+  playMotion(scene, attacker, 'attack');
   await pause(scene, 125 * speed);
   for (const { side, amount } of damageTargets(event, leftId, rightId)) {
     const pos = layout[side === 'a' ? 'left' : 'right'];
@@ -68,8 +68,7 @@ export async function playHit(
     await pause(scene, 90 * speed);
     slash?.destroy();
     const spark = effect(scene, 'spark', pos.x, pos.y - 66);
-    const hurtKey = target.texture.key;
-    if (hasAnim(scene, hurtKey, 'hurt')) target.play(`${hurtKey}:hurt`);
+    playMotion(scene, target, 'hurt');
     if (!reducedMotion()) {
       target.setTint(0xffffff);
       scene.cameras.main.flash(90 * speed, 255, 235, 225);
@@ -100,9 +99,9 @@ export async function playHit(
     );
     spark?.destroy();
     target.clearTint();
-    if (hasAnim(scene, hurtKey, 'idle') && !reducedMotion()) target.play(`${hurtKey}:idle`);
+    if (!reducedMotion()) playMotion(scene, target, 'idle');
   }
-  if (hasAnim(scene, attackKey, 'idle') && !reducedMotion()) attacker.play(`${attackKey}:idle`);
+  if (!reducedMotion()) playMotion(scene, attacker, 'idle');
 }
 
 export async function playCoinBurst(
