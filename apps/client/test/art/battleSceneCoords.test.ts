@@ -116,7 +116,8 @@ it('derives the exchange label from the frame, not the 640x360 constants', () =>
   render(battlePhaseState());
   const label = created.find((entry) => entry.kind === 'Exchange 1');
   expect(label, 'exchange label rendered').toBeDefined();
-  expect(label!.x).toBe(BATTLE_FRAME.width / 4);
+  // Round 2, reviewer item 2: centred on the 1280 stage, not the left quarter.
+  expect(label!.x).toBe(BATTLE_FRAME.width / 2);
   expect(BATTLE_EXCHANGE_Y).toBeLessThan(GROUND - BATTLE_FIGHTER_HEIGHT);
   expect(BATTLE_EXCHANGE_Y).toBeGreaterThan(layout.hpLeft.y + layout.hpLeft.height);
 });

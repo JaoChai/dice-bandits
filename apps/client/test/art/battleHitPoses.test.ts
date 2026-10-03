@@ -183,10 +183,20 @@ describe('playHit drives the cartoon puppet poses (reviewer item 3)', () => {
     await Promise.resolve();
     await settle(running, tweens, delayed);
     const ground = LAYOUT.left.y;
-    // slash (index 0), spark (index 1), damage number (text, index 2)
-    expect(sprites[0]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 4);
-    expect(sprites[1]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 4 + 2);
-    expect(textObjects[0]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 2 - 8);
+    // Round 2, reviewer item 2: hit fx must land in the fighter's UPPER half
+    // (between pos.y-H and pos.y-H/2), the damage number above the head
+    // (y < pos.y-H) — the old offsets (H/4, H/2+8) hit shin / mid-body.
+    const fxY = (y: number): number => ground - y;
+    // Band [H/2 - 4, H]: chest .. head (spark sits 2 px below chest).
+    expect(fxY(sprites[0]!.y)).toBeGreaterThanOrEqual(BATTLE_FIGHTER_HEIGHT / 2 - 4);
+    expect(fxY(sprites[0]!.y)).toBeLessThanOrEqual(BATTLE_FIGHTER_HEIGHT);
+    expect(fxY(sprites[1]!.y)).toBeGreaterThanOrEqual(BATTLE_FIGHTER_HEIGHT / 2 - 4);
+    expect(fxY(sprites[1]!.y)).toBeLessThanOrEqual(BATTLE_FIGHTER_HEIGHT);
+    expect(textObjects[0]!.y).toBeLessThan(ground - BATTLE_FIGHTER_HEIGHT);
+    // ...and they stay derived from the fighter height, not magic numbers.
+    expect(sprites[0]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 2);
+    expect(sprites[1]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 2 + 2);
+    expect(textObjects[0]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT - 36);
   });
 
   it('skips every pose and pause at speed 0', async () => {
