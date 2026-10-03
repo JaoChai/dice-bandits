@@ -3,6 +3,7 @@ import '@fontsource/chakra-petch/700.css';
 import '@fontsource/press-start-2p/400.css';
 import './ui/styles.css';
 import Phaser from 'phaser';
+import { createGame as createPhaserGame } from './game';
 import { createGame, type Action, type GameState } from '@dice-bandits/engine';
 import { GameController } from './controller';
 import { showSetup, showTitle } from './ui/screens';
@@ -17,7 +18,6 @@ import { musicForState } from './audio/events';
 import { showOnlineScreens, type OnlineSocket } from './online/screens';
 import { type RoomSession } from './online/session';
 import type { ServerMsg } from '@dice-bandits/room';
-import BootScene from './scenes/BootScene';
 import BoardScene from './scenes/BoardScene';
 import BattleScene from './scenes/BattleScene';
 import { animateThenRender } from './eventOrder';
@@ -166,17 +166,7 @@ export function startOnlineGame(
     }
     setMusic(musicForState(controller.state));
     renderOnlineHud();
-    game = new Phaser.Game({
-      type: Phaser.AUTO,
-      parent: 'phaser-board',
-      width: 640,
-      height: 360,
-      backgroundColor: '#273449',
-      pixelArt: true,
-      roundPixels: true,
-      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-      scene: [BootScene, BoardScene, BattleScene],
-    });
+    game = createPhaserGame('phaser-board');
     game.registry.set('state', controller.state);
     app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {
       game?.destroy(true);
@@ -300,17 +290,7 @@ function startGame(state: GameState): void {
     void controller.dispatch(action);
   }
   renderHud(app, controller.state, dispatch);
-  game = new Phaser.Game({
-    type: Phaser.AUTO,
-    parent: 'phaser-board',
-    width: 640,
-    height: 360,
-    backgroundColor: '#273449',
-    pixelArt: true,
-    roundPixels: true,
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    scene: [BootScene, BoardScene, BattleScene],
-  });
+  game = createPhaserGame('phaser-board');
   game.registry.set('state', state);
   app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {
     game?.destroy(true);

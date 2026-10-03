@@ -1,0 +1,136 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { data, type ClassId, type Region } from '@dice-bandits/engine';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { fakeConfig } = vi.hoisted(() => ({ fakeConfig: vi.fn() }));
+
+vi.mock('phaser', () => ({
+  default: {
+    Game: class {
+      constructor(config: unknown) {
+        fakeConfig(config);
+      }
+    },
+    AUTO: 0,
+    Scale: { FIT: 0, CENTER_BOTH: 0 },
+  },
+}));
+vi.mock('../../src/scenes/BootScene', () => ({ default: class BootScene {} }));
+vi.mock('../../src/scenes/BoardScene', () => ({ default: class BoardScene {} }));
+vi.mock('../../src/scenes/BattleScene', () => ({ default: class BattleScene {} }));
+
+const { ART, ART_ATLASES, HERO_POSES, MONSTER_POSES } = await import('../../src/art/manifest');
+const { createGame } = await import('../../src/game');
+
+const CLASSES: ClassId[] = ['knight', 'thief', 'mage', 'cleric'];
+const REGIONS: Region[] = ['meadow', 'desert', 'snow', 'volcano'];
+
+/** Pose names declared in a cartoon atlas JSON (named-frame format). */
+function atlasPoses(name: string): string[] {
+  const raw = JSON.parse(
+    readFileSync(resolve(import.meta.dirname, '../../public/art', `${name}.json`), 'utf8'),
+  ) as { frames?: Record<string, unknown> };
+  if (!raw.frames || typeof raw.frames !== 'object' || Array.isArray(raw.frames)) return [];
+  return Object.keys(raw.frames);
+}
+
+describe('ART manifest', () => {
+  it('maps every engine class to a hero atlas', () => {
+    const classes = Object.keys(data.CLASSES) as ClassId[];
+    expect(classes).toEqual(CLASSES);
+    for (const classId of classes) {
+      expect(ART.heroes[classId], `hero atlas for ${classId}`).toBe(`art:hero-${classId}`);
+    }
+  });
+
+  it('maps every engine monster to its own cartoon atlas', () => {
+    const monsters: Record<string, string> = ART.monsters;
+    for (const monsterId of Object.keys(data.MONSTERS)) {
+      expect(monsters[monsterId], `monster atlas for ${monsterId}`).toBe(
+        `art:monster-${monsterId}`,
+      );
+    }
+  });
+
+  it('exposes tiles, buildings, icons and ui atlas keys', () => {
+    expect(ART.tiles).toBe('art:tiles');
+    expect(ART.buildings).toBe('art:buildings');
+    expect(ART.icons).toBe('art:icons');
+    expect(ART.ui).toBe('art:ui');
+  });
+
+  it('maps every region to a backdrop atlas key', () => {
+    for (const region of REGIONS) {
+      expect(ART.backdrops[region]).toBe(`art:backdrop-${region}`);
+    }
+  });
+
+  it('describes the 5x3 map-tile grid of 640x600 tiles', () => {
+    expect(ART.mapTiles).toEqual({ cols: 5, rows: 3, tile: [640, 600] });
+  });
+
+  it('declares every hero pose in the hero atlas JSONs', () => {
+    expect([...HERO_POSES]).toEqual(['idle', 'attack', 'hurt', 'happy', 'sad', 'portrait']);
+    for (const classId of CLASSES) {
+      const poses = atlasPoses(`hero-${classId}`);
+      for (const pose of HERO_POSES) {
+        expect(poses, `hero-${classId} declares pose ${pose}`).toContain(pose);
+      }
+    }
+  });
+
+  it('declares every monster pose in the monster atlas JSONs', () => {
+    expect([...MONSTER_POSES]).toEqual(['idle', 'attack', 'hurt']);
+    for (const monsterId of Object.keys(data.MONSTERS)) {
+      const poses = atlasPoses(`monster-${monsterId}`);
+      for (const pose of MONSTER_POSES) {
+        expect(poses, `monster-${monsterId} declares pose ${pose}`).toContain(pose);
+      }
+    }
+  });
+
+  it('lists every shipped public/art atlas in its loader set', () => {
+    const shipped = readdirSync(resolve(import.meta.dirname, '../../public/art'))
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => name.replace(/\.json$/, ''))
+      .sort();
+    expect([...ART_ATLASES].sort()).toEqual(shipped);
+    const loaded = new Set(ART_ATLASES);
+    for (const key of [
+      ...Object.values(ART.heroes),
+      ...Object.values(ART.monsters),
+      ART.tiles,
+      ART.buildings,
+      ART.icons,
+      ART.ui,
+      ...Object.values(ART.backdrops),
+    ]) {
+      expect(loaded, `ART key ${key} is scheduled for loading`).toContain(key.replace(/^art:/, ''));
+    }
+  });
+});
+
+describe('createGame', () => {
+  beforeEach(() => {
+    fakeConfig.mockClear();
+    document.body.innerHTML = '<div id="app"><div id="phaser-board"></div></div>';
+    createGame('phaser-board');
+  });
+
+  it('configures a 1280x720 smooth-rendered FIT canvas in the requested parent', () => {
+    const config = capturedConfig();
+    expect(config.width).toBe(1280);
+    expect(config.height).toBe(720);
+    expect(config.pixelArt).toBe(false);
+    expect(config.roundPixels).toBe(false);
+    expect(config.parent).toBe('phaser-board');
+    expect(config.scale).toEqual({ mode: 0, autoCenter: 0 });
+  });
+});
+
+function capturedConfig(): Record<string, unknown> {
+  const config = fakeConfig.mock.calls.at(-1)?.[0];
+  if (!config) throw new Error('createGame did not construct a Phaser.Game');
+  return config as Record<string, unknown>;
+}
