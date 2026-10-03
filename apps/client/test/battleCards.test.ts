@@ -72,8 +72,13 @@ function render(state = battleState()) {
   root.innerHTML =
     '<section class="game-shell"><header class="game-topline"><button data-action="exit">Back to title</button></header><nav class="action-bar"></nav></section>';
   const dispatch = vi.fn();
-  renderBattleUi(root, state, actions, 0, dispatch, (action) =>
-    action.type === 'battlePick' ? t(`battle.card.${action.pick}`) : t('action.item'),
+  renderBattleUi(
+    root,
+    state,
+    actions,
+    0,
+    dispatch,
+    (action) => (action.type === 'battlePick' ? t(`battle.card.${action.pick}`) : t('action.item')),
     true,
     true,
   );

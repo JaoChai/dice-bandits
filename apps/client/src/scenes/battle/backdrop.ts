@@ -14,15 +14,19 @@ export function drawBackdrop(scene: Phaser.Scene, state: GameState, spaceId: num
   const key = ART.backdrops[battleRegion(state, spaceId)];
   let renderedKey = '';
   if (scene.textures.exists(key) && scene.textures.get(key).has('bg')) {
-    renderedKey = scene.add
-      .image(CANVAS_CENTRE.x, CANVAS_CENTRE.y, key, 'bg')
-      .setDepth(-10)
+    renderedKey = scene.add.image(CANVAS_CENTRE.x, CANVAS_CENTRE.y, key, 'bg').setDepth(-10)
       .texture.key;
   } else {
     // Global Constraints: missing/failed asset → flat-shape fallback + warn.
     console.warn('[art] fallback', key);
     scene.add
-      .rectangle(CANVAS_CENTRE.x, CANVAS_CENTRE.y, BATTLE_FRAME.width, BATTLE_FRAME.height, 0x273449)
+      .rectangle(
+        CANVAS_CENTRE.x,
+        CANVAS_CENTRE.y,
+        BATTLE_FRAME.width,
+        BATTLE_FRAME.height,
+        0x273449,
+      )
       .setDepth(-10);
   }
   if (import.meta.env.VITE_TEST_HOOKS === '1' && window.__db)
