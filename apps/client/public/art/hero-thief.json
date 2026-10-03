@@ -1,0 +1,53 @@
+{
+  "frames": {
+    "idle": {
+      "x": 76,
+      "y": 20,
+      "w": 168,
+      "h": 280,
+      "anchorX": 84,
+      "anchorY": 280
+    },
+    "attack": {
+      "x": 357,
+      "y": 37,
+      "w": 246,
+      "h": 263,
+      "anchorX": 123,
+      "anchorY": 263
+    },
+    "hurt": {
+      "x": 711,
+      "y": 35,
+      "w": 177,
+      "h": 265,
+      "anchorX": 88,
+      "anchorY": 265
+    },
+    "happy": {
+      "x": 1031,
+      "y": 29,
+      "w": 178,
+      "h": 271,
+      "anchorX": 89,
+      "anchorY": 271
+    },
+    "sad": {
+      "x": 1357,
+      "y": 40,
+      "w": 165,
+      "h": 260,
+      "anchorX": 82,
+      "anchorY": 260
+    },
+    "portrait": {
+      "x": 1662,
+      "y": 76,
+      "w": 195,
+      "h": 224,
+      "anchorX": 97,
+      "anchorY": 224
+    }
+  },
+  "image": "hero-thief.webp"
+}

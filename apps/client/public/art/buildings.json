@@ -1,0 +1,53 @@
+{
+  "frames": {
+    "castle": {
+      "x": 21,
+      "y": 29,
+      "w": 278,
+      "h": 271,
+      "anchorX": 139,
+      "anchorY": 271
+    },
+    "town1": {
+      "x": 345,
+      "y": 108,
+      "w": 270,
+      "h": 192,
+      "anchorX": 135,
+      "anchorY": 192
+    },
+    "town2": {
+      "x": 655,
+      "y": 91,
+      "w": 289,
+      "h": 209,
+      "anchorX": 144,
+      "anchorY": 209
+    },
+    "town3": {
+      "x": 11,
+      "y": 326,
+      "w": 297,
+      "h": 274,
+      "anchorX": 148,
+      "anchorY": 274
+    },
+    "shopCart": {
+      "x": 338,
+      "y": 359,
+      "w": 283,
+      "h": 241,
+      "anchorX": 141,
+      "anchorY": 241
+    },
+    "baronFort": {
+      "x": 653,
+      "y": 320,
+      "w": 293,
+      "h": 280,
+      "anchorX": 146,
+      "anchorY": 280
+    }
+  },
+  "image": "buildings.webp"
+}

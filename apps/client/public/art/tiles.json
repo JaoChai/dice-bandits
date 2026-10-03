@@ -1,0 +1,69 @@
+{
+  "frames": {
+    "castle": {
+      "x": 21,
+      "y": 11,
+      "w": 137,
+      "h": 159,
+      "anchorX": 68,
+      "anchorY": 159
+    },
+    "town": {
+      "x": 197,
+      "y": 10,
+      "w": 145,
+      "h": 160,
+      "anchorX": 72,
+      "anchorY": 160
+    },
+    "shop": {
+      "x": 377,
+      "y": 10,
+      "w": 145,
+      "h": 160,
+      "anchorX": 72,
+      "anchorY": 160
+    },
+    "chest": {
+      "x": 562,
+      "y": 10,
+      "w": 136,
+      "h": 160,
+      "anchorX": 68,
+      "anchorY": 160
+    },
+    "monster": {
+      "x": 21,
+      "y": 191,
+      "w": 137,
+      "h": 149,
+      "anchorX": 68,
+      "anchorY": 149
+    },
+    "event": {
+      "x": 197,
+      "y": 192,
+      "w": 145,
+      "h": 148,
+      "anchorX": 72,
+      "anchorY": 148
+    },
+    "trap": {
+      "x": 377,
+      "y": 192,
+      "w": 145,
+      "h": 148,
+      "anchorX": 72,
+      "anchorY": 148
+    },
+    "plain": {
+      "x": 562,
+      "y": 192,
+      "w": 135,
+      "h": 148,
+      "anchorX": 67,
+      "anchorY": 148
+    }
+  },
+  "image": "tiles.webp"
+}

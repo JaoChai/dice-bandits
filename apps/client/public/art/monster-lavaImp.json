@@ -1,0 +1,29 @@
+{
+  "frames": {
+    "idle": {
+      "x": 99,
+      "y": 20,
+      "w": 242,
+      "h": 280,
+      "anchorX": 121,
+      "anchorY": 280
+    },
+    "attack": {
+      "x": 493,
+      "y": 25,
+      "w": 334,
+      "h": 275,
+      "anchorX": 167,
+      "anchorY": 275
+    },
+    "hurt": {
+      "x": 961,
+      "y": 20,
+      "w": 277,
+      "h": 280,
+      "anchorX": 138,
+      "anchorY": 280
+    }
+  },
+  "image": "monster-lavaImp.webp"
+}

@@ -1,0 +1,85 @@
+{
+  "frames": {
+    "btn": {
+      "x": 50,
+      "y": 0,
+      "w": 300,
+      "h": 300,
+      "anchorX": 150,
+      "anchorY": 300
+    },
+    "btnPressed": {
+      "x": 450,
+      "y": 0,
+      "w": 300,
+      "h": 300,
+      "anchorX": 150,
+      "anchorY": 300
+    },
+    "btnDisabled": {
+      "x": 850,
+      "y": 0,
+      "w": 300,
+      "h": 300,
+      "anchorX": 150,
+      "anchorY": 300
+    },
+    "panel": {
+      "x": 1250,
+      "y": 0,
+      "w": 300,
+      "h": 300,
+      "anchorX": 150,
+      "anchorY": 300
+    },
+    "ribbon": {
+      "x": 1650,
+      "y": 0,
+      "w": 300,
+      "h": 300,
+      "anchorX": 150,
+      "anchorY": 300
+    },
+    "cardFrame": {
+      "x": 50,
+      "y": 300,
+      "w": 300,
+      "h": 300,
+      "anchorX": 150,
+      "anchorY": 300
+    },
+    "coinPill": {
+      "x": 450,
+      "y": 300,
+      "w": 300,
+      "h": 300,
+      "anchorX": 150,
+      "anchorY": 300
+    },
+    "hpBar": {
+      "x": 850,
+      "y": 300,
+      "w": 300,
+      "h": 300,
+      "anchorX": 150,
+      "anchorY": 300
+    },
+    "menuBtn": {
+      "x": 1250,
+      "y": 300,
+      "w": 300,
+      "h": 300,
+      "anchorX": 150,
+      "anchorY": 300
+    },
+    "soundBtn": {
+      "x": 1650,
+      "y": 300,
+      "w": 300,
+      "h": 300,
+      "anchorX": 150,
+      "anchorY": 300
+    }
+  },
+  "image": "ui.webp"
+}
