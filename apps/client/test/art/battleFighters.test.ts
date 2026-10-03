@@ -462,10 +462,7 @@ describe('motion restart safety (review round 2, item 3)', () => {
 
   it('base scale comes from the mount scale, not a mid-tween sprite.scale', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
-    const { scene, sprites, tweens } = fightersScene([
-      ART.heroes.thief,
-      ART.monsters.mushroomBonk,
-    ]);
+    const { scene, sprites, tweens } = fightersScene([ART.heroes.thief, ART.monsters.mushroomBonk]);
     drawFighters(
       scene as unknown as Phaser.Scene,
       battlePhaseState('mushroomBonk'),
