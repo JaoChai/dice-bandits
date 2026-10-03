@@ -41,7 +41,7 @@ test('battle art waits for the renderer, not the already visible DOM', async ({ 
         ambient: window.__db!.art.ambientRunning,
         backdrop: window.__db!.art.backdropKey,
       })),
-    ).toEqual({ board: true, battle: true, ambient: true, backdrop: 'backdrop-meadow' });
+    ).toEqual({ board: true, battle: true, ambient: true, backdrop: 'art:backdrop-meadow' });
     const renderer = await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('#phaser-board canvas')!;
       const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
