@@ -6,9 +6,10 @@ import { ART } from '../../art/manifest';
 /**
  * Painted map background (plan Task 6): `ART.mapTiles` describes the 5×3 grid
  * of 640×600 WebP tiles that tile the 3200×1800 authored map. Tiles are added
- * as plain images; the follow camera's Phaser culling keeps only visible ones
- * on the render list. Missing tiles draw a region-tinted flat fallback and
- * warn once, per Global Constraints.
+ * as images with an explicit camera-bounds gate. Phaser's ordinary Image
+ * willRender only checks flags, not bounds: without this gate all 15 large
+ * textures are submitted even when most are offscreen. Missing tiles draw
+ * a region-tinted flat fallback and warn once, per Global Constraints.
  */
 export function drawMapLayer(scene: Phaser.Scene): Phaser.GameObjects.Image[] {
   const images: Phaser.GameObjects.Image[] = [];
@@ -30,6 +31,20 @@ export function drawMapLayer(scene: Phaser.Scene): Phaser.GameObjects.Image[] {
             .setDepth(DEPTH_MAP) as unknown as Phaser.GameObjects.Image,
         );
       }
+      const image = images[images.length - 1]!;
+      const nativeWillRender = image.willRender;
+      image.willRender = (camera) => {
+        // CameraManager preRender updates worldView before willRender checks,
+        // so this follows pans/zoom without stale bounds or extra listeners.
+        const view = camera.worldView;
+        return (
+          nativeWillRender.call(image, camera) &&
+          x + tile[0] / 2 > view.x &&
+          x - tile[0] / 2 < view.x + view.width &&
+          y + tile[1] / 2 > view.y &&
+          y - tile[1] / 2 < view.y + view.height
+        );
+      };
     }
   }
   return images;
