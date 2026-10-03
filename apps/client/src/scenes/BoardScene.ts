@@ -120,28 +120,39 @@ export default class BoardScene extends Phaser.Scene {
 
   private applyCamera(target: ReturnType<typeof cameraTarget>): void {
     const camera = this.cameras.main;
-    camera.setZoom(target.zoom);
-    camera.centerOn(target.x, target.y);
+    // Review 7a: honour the target's duration — the camera eases to the
+    // active seat at turn start (spec §7); duration 0 snaps (?speed=0 or
+    // reduced motion).
+    if (target.duration <= 0) {
+      camera.setZoom(target.zoom);
+      camera.centerOn(target.x, target.y);
+      return;
+    }
+    this.tweens.add({
+      targets: camera,
+      zoom: target.zoom,
+      scrollX: target.x - camera.width * 0.5,
+      scrollY: target.y - camera.height * 0.5,
+      duration: target.duration,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   private panCameraTo(x: number, y: number): void {
-    const target = cameraTarget({
-      players: [{ pos: 0 }] as never,
-      turnSeat: 0,
-      board: { spaces: [{ id: 0, x, y }] as never },
-    } as unknown as GameState);
-    // panCameraTo follows an explicit token position; reuse the policy timing.
-    void target;
     const camera = this.cameras.main;
     if (this.wholeMap) return;
+    // Review 7b: Phaser's centerOn is scrollX = x - width*0.5 (zoom is
+    // applied about the camera centre). Tween to exactly that — the old
+    // width/(2*zoom) formula landed ~71 px off-centre, and the fake
+    // GameState built here was dead code.
     if (motionScale() <= 0 || reducedMotion()) {
       camera.centerOn(x, y);
       return;
     }
     this.tweens.add({
       targets: camera,
-      scrollX: x - camera.width / (2 * camera.zoom),
-      scrollY: y - camera.height / (2 * camera.zoom),
+      scrollX: x - camera.width * 0.5,
+      scrollY: y - camera.height * 0.5,
       duration: 200 * motionScale(),
       ease: 'Sine.easeOut',
     });

@@ -218,19 +218,53 @@ describe('BoardScene layering', () => {
     expect(objects).toHaveLength(drawn);
   });
 
-  it('binds one tap handler and follows the active seat with the camera', () => {
+  it('binds one tap handler and eases the camera to the active seat (Review 7a)', () => {
+    window.diceBanditsSpeed = 1;
     const { scene } = makeScene();
     const state = gameFor('a');
     (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(state);
     expect(scene.input.on).toHaveBeenCalledWith('pointerdown', expect.any(Function));
-    const main = scene.cameras.main as unknown as {
-      centerOn: ReturnType<typeof vi.fn>;
-      setZoom: ReturnType<typeof vi.fn>;
-    };
     const player = state.players[state.turnSeat]!;
     const space = state.board.spaces.find((candidate) => candidate.id === player.pos)!;
-    expect(main.centerOn).toHaveBeenCalledWith(space.x, space.y);
-    expect(main.setZoom).toHaveBeenCalled();
+    expect(scene.tweens.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targets: scene.cameras.main,
+        zoom: expect.any(Number),
+        scrollX: space.x - 640,
+        scrollY: space.y - 360,
+        duration: 600,
+        ease: 'Sine.easeInOut',
+      }),
+    );
+    expect(scene.cameras.main.setZoom).not.toHaveBeenCalled();
+  });
+
+  it('snaps the camera to the active seat under reduced motion (Review 7a)', () => {
+    window.diceBanditsSpeed = 1;
+    vi.mocked(reducedMotion).mockReturnValue(true);
+    const { scene } = makeScene();
+    const state = gameFor('a');
+    (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(state);
+    const player = state.players[state.turnSeat]!;
+    const space = state.board.spaces.find((candidate) => candidate.id === player.pos)!;
+    expect(scene.cameras.main.setZoom).toHaveBeenCalled();
+    expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(space.x, space.y);
+    expect(scene.tweens.add).not.toHaveBeenCalled();
+  });
+
+  it('pans to the exact centre-on offset while walking (Review 7b)', () => {
+    window.diceBanditsSpeed = 1;
+    const { scene } = makeScene();
+    (scene as unknown as { panCameraTo(x: number, y: number): void }).panCameraTo(470, 1150);
+    expect(scene.tweens.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targets: scene.cameras.main,
+        scrollX: 470 - 640,
+        scrollY: 1150 - 360,
+        ease: 'Sine.easeOut',
+      }),
+    );
+    expect(scene.cameras.main.centerOn).not.toHaveBeenCalled();
   });
 
   it('names a fork-arrow hit zone per option while chooseBranch is pending', async () => {

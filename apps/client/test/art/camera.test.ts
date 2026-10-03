@@ -39,21 +39,32 @@ describe('cameraTarget', () => {
     expect(target.y).toBe(space.y);
   });
 
-  it('zooms so about eight spaces span the 1280 px logical canvas', () => {
+  it('zooms so about seven spaces span the 1280 px logical canvas', () => {
     const target = cameraTarget(gameFor('camera-zoom'));
-    // Mean authored edge length across the fixed map.
+    // Mean authored edge length across ALL undirected edges (Review 7c: the
+    // old zoom loop averaged only a third of them).
     let total = 0;
     let count = 0;
+    const seen = new Set<string>();
     for (const node of MAP.nodes)
       for (const next of node.next) {
         const other = MAP.nodes[next]!;
-        if (other.id > node.id) continue;
+        const key = node.id < other.id ? `${node.id}-${other.id}` : `${other.id}-${node.id}`;
+        if (node.id !== other.id && seen.has(key)) continue;
+        if (node.id !== other.id) seen.add(key);
         total += Math.hypot(other.x - node.x, other.y - node.y);
         count += 1;
       }
     const mean = total / count;
-    expect(target.zoom).toBeCloseTo(1280 / (mean * 8), 2);
+    expect(count).toBe(42);
+    expect(target.zoom).toBeCloseTo(1280 / (mean * 7), 2);
     expect(target.zoom).toBeGreaterThan(0);
+  });
+
+  it('keeps 96 px tiles at ≥ 48 CSS px on a 915x412 viewport (Review 7c)', async () => {
+    const { tilePxAt } = await import('../../src/scenes/board/camera');
+    expect(tilePxAt(915, 412)).toBeGreaterThanOrEqual(48);
+    expect(tilePxAt(1280, 720)).toBeGreaterThanOrEqual(48);
   });
 
   it('whole-map zoom fits the full 3200x1800 world', () => {
