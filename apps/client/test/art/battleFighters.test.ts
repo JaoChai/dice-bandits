@@ -376,3 +376,135 @@ describe('puppet motion consumed by the battle fighters (Task 7 interface)', () 
     vi.unstubAllGlobals();
   });
 });
+
+describe('motion restart safety (review round 2, item 3)', () => {
+  /**
+   * Battle motions chain back-to-back on one sprite (attack → hurt → idle).
+   * Two hazards are pinned here:
+   * - base scale must be the drawFighters mount scale (WeakMap), NOT the
+   *   mid-tween `sprite.scale` — a running idle breathe tween drags
+   *   sprite.scale to base*1.03 and the old baseScale() read compounds it;
+   * - every new motion must killTweensOf(sprite) first so stale chains
+   *   cannot fight the fresh one.
+   */
+
+  /** Sprite fields as playMotion's conversion reads them. */
+  type Body = Phaser.GameObjects.Sprite & {
+    scaleX: number;
+    scaleY: number;
+    scale: number;
+    setFrame: ReturnType<typeof vi.fn>;
+  };
+
+  type TweenSpec = Record<string, unknown> & { scaleX?: number; scaleY?: number };
+
+  function makeSprite(base: number, flip: boolean) {
+    const texture = {
+      key: 'k',
+      has: () => true,
+      get: () => ({ realHeight: 280, height: 280 }),
+    };
+    const sprite = {
+      setOrigin: vi.fn(),
+      setScale: vi.fn(),
+      setFlipX: vi.fn(),
+      setDepth: vi.fn(),
+      setDisplaySize: vi.fn(),
+      setFrame: vi.fn(),
+      setAlpha: vi.fn(),
+      setTint: vi.fn(),
+      clearTint: vi.fn(),
+      x: 340,
+      y: 660,
+      angle: 0,
+      flipX: flip,
+      scaleX: base,
+      scaleY: base,
+      scale: base,
+      texture,
+    } as unknown as Body;
+    for (const key of [
+      'setOrigin',
+      'setScale',
+      'setFlipX',
+      'setDepth',
+      'setDisplaySize',
+      'setFrame',
+      'setAlpha',
+      'setTint',
+      'clearTint',
+    ] as const)
+      (sprite as unknown as Record<string, ReturnType<typeof vi.fn>>)[key]!.mockReturnValue(sprite);
+    return sprite;
+  }
+
+  function killScene() {
+    const tweens: Array<Record<string, unknown>> = [];
+    const killed: unknown[] = [];
+    const scene = {
+      textures: {
+        exists: () => true,
+        get: () => ({ has: () => true, get: () => ({ realHeight: 280, height: 280 }) }),
+      },
+      tweens: {
+        add: vi.fn((spec: Record<string, unknown>) => {
+          tweens.push(spec);
+          return spec;
+        }),
+        killTweensOf: vi.fn((target: unknown) => {
+          killed.push(target);
+        }),
+      },
+      add: { sprite: vi.fn(), text: vi.fn() },
+    } as unknown as Phaser.Scene;
+    return { scene, tweens, killed };
+  }
+
+  it('base scale comes from the mount scale, not a mid-tween sprite.scale', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const { scene, sprites, tweens } = fightersScene([
+      ART.heroes.thief,
+      ART.monsters.mushroomBonk,
+    ]);
+    drawFighters(
+      scene as unknown as Phaser.Scene,
+      battlePhaseState('mushroomBonk'),
+      battleLayout(1280, 720),
+    );
+    const fighter = sprites[0] as unknown as Body;
+    // The fightersScene fake's idle cell is 280 px → mount scale 1.
+    const mount = 1;
+    expect(fighter.setScale).toHaveBeenCalledWith(mount);
+    // Mid-flight idle breathe: sprite.scale no longer equals the mount scale.
+    fighter.scaleX = mount * 1.03;
+    fighter.scaleY = mount * 1.03;
+    fighter.scale = mount * 1.03;
+    const before = tweens.length;
+    playMotionForTest(scene as unknown as Phaser.Scene, fighter, 'attack');
+    // attack step 0 carries both scales; only look at freshly mounted specs
+    // (the pre-existing idle breathe tween also has scale numbers).
+    const attack = (tweens as unknown as TweenSpec[])
+      .slice(before)
+      .find((spec) => typeof spec.scaleX === 'number' && typeof spec.scaleY === 'number');
+    // attack's wind-up squash must multiply the MOUNT scale (1), not the
+    // mid-tween sprite.scale (1.03): scaleY ≈ 1.06, never 1.03*1.06.
+    expect(attack, 'attack mounts its scale step').toBeDefined();
+    expect(attack!.scaleY).toBeCloseTo(mount * 1.06, 5);
+    expect(attack!.scaleY).not.toBeCloseTo(mount * 1.03 * 1.06, 5);
+    expect(attack!.scaleX).toBeCloseTo(mount * 0.94, 5);
+    vi.unstubAllGlobals();
+  });
+
+  it('restarts a motion with killTweensOf before mounting the fresh chain', () => {
+    const { scene, tweens, killed } = killScene();
+    const sprite = makeSprite(1, false);
+    playMotionForTest(scene, sprite, 'hurt');
+    expect(killed.length, 'stale tweens killed before the new chain').toBeGreaterThan(0);
+    expect(killed).toContain(sprite);
+    expect(tweens.length, 'fresh chain still mounts').toBeGreaterThan(0);
+    // Every chain step re-kills before adding, so a mid-chain restart cannot
+    // leave both chains running.
+    const adds = (scene.tweens as unknown as { add: ReturnType<typeof vi.fn> }).add;
+    expect(adds.mock.calls.length).toBe(killed.length);
+  });
+});
