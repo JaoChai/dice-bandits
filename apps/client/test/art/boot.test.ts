@@ -61,8 +61,7 @@ describe('BootScene cartoon loader contract', () => {
     const mapKeys = queued.filter((key) => key.startsWith('map-r'));
     expect(mapKeys).toHaveLength(15);
     for (let row = 0; row < 3; row += 1)
-      for (let col = 0; col < 5; col += 1)
-        expect(queued).toContain(`map-r${row}c${col}`);
+      for (let col = 0; col < 5; col += 1) expect(queued).toContain(`map-r${row}c${col}`);
   });
 
   it('starts a battle that arrives between boot completion and the queued board create', () => {

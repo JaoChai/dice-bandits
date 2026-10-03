@@ -41,9 +41,13 @@ describe('Review 6b: spaceInfo keeps one close path', () => {
   }
 
   const keydownAdds = () =>
-    addSpy.mock.calls.filter((call: Parameters<typeof document.addEventListener>) => call[0] === 'keydown');
+    addSpy.mock.calls.filter(
+      (call: Parameters<typeof document.addEventListener>) => call[0] === 'keydown',
+    );
   const keydownRemoves = () =>
-    removeSpy.mock.calls.filter((call: Parameters<typeof document.removeEventListener>) => call[0] === 'keydown');
+    removeSpy.mock.calls.filter(
+      (call: Parameters<typeof document.removeEventListener>) => call[0] === 'keydown',
+    );
 
   it('open → closeSpaceInfo removes the listener it added', async () => {
     const { openSpaceInfo, closeSpaceInfo } = await setup('escape-leak');

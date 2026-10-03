@@ -65,11 +65,10 @@ describe('Review 3: buildings sit beside their tile at authored spots', () => {
   it('offsets and scales town buildings so they clear the 96 px tile', () => {
     const { scene, placed } = buildingScene();
     const state = gameFor('buildings-tier');
+    void state;
     const towns: Town[] = [{ spaceId: 1, owner: 0, value: 10, guardianLevel: 0 }];
-    drawBuildings(
-      scene as never,
-      towns,
-      (spaceId) => (spaceId === 1 ? { x: 600, y: 1200 } : undefined),
+    drawBuildings(scene as never, towns, (spaceId) =>
+      spaceId === 1 ? { x: 600, y: 1200 } : undefined,
     );
     expect(placed).toHaveLength(3);
     const building = placed.find((entry) => entry.frame === 'town1')!;

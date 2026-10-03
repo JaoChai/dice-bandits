@@ -8,10 +8,7 @@ import { describe, expect, it } from 'vitest';
  * only the popup card itself does.
  */
 describe('space-info shade lets canvas clicks through', () => {
-  const css = readFileSync(
-    join(import.meta.dirname, '../../src/ui/styles.css'),
-    'utf8',
-  );
+  const css = readFileSync(join(import.meta.dirname, '../../src/ui/styles.css'), 'utf8');
 
   it('disables pointer events on the shade but keeps them on the popup card', () => {
     const shadeBlock = css.match(/\.space-info-shade\s*\{[^}]*\}/)?.[0] ?? '';

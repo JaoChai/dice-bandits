@@ -98,7 +98,11 @@ function tileScene() {
 it('renders the cartoon tile at the fixed 96 map-px display size', () => {
   const { scene, image } = tileScene();
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-  drawTiles(scene as never, [{ id: 0, kind: 'castle', x: 470, y: 1150 } as unknown as Space], new Map());
+  drawTiles(
+    scene as never,
+    [{ id: 0, kind: 'castle', x: 470, y: 1150 } as unknown as Space],
+    new Map(),
+  );
   expect(image.setDisplaySize).toHaveBeenCalledWith(96, 96);
   expect(warn).not.toHaveBeenCalled();
   warn.mockRestore();

@@ -33,11 +33,7 @@ interface Placement {
   y: number;
 }
 
-function addBuilding(
-  scene: Phaser.Scene,
-  frame: string,
-  at: Placement,
-): Phaser.GameObjects.Image {
+function addBuilding(scene: Phaser.Scene, frame: string, at: Placement): Phaser.GameObjects.Image {
   const texture = scene.textures.get(ART.buildings);
   const native = texture.get(frame);
   const width = (native.width || 1) * BUILDING_SCALE;
@@ -75,9 +71,7 @@ export function drawBuildings(
     // the scaled building; the bottom-centre origin plants it on the ground.
     const halfTile = 96 / 2;
     const width = texture.get(frame).width * BUILDING_SCALE;
-    images.push(
-      addBuilding(scene, frame, { x: at.x + halfTile + width / 2, y: at.y + halfTile }),
-    );
+    images.push(addBuilding(scene, frame, { x: at.x + halfTile + width / 2, y: at.y + halfTile }));
   }
   return images;
 }
