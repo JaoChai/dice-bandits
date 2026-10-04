@@ -1318,3 +1318,104 @@ h1 {
     bottom: 4px;
   }
 }
+
+/* M5a Task 6: turn ribbon + tap-a-space popup (DOM overlays on the board). */
+.turn-ribbon {
+  position: absolute;
+  top: 108px;
+  left: 50%;
+  z-index: 4;
+  transform: translateX(-50%);
+  border: 2px solid #f5c51c;
+  border-radius: 999px;
+  padding: 4px 18px;
+  background: #171324d9;
+  color: #f5eedc;
+  font-weight: 700;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.turn-ribbon.visible {
+  opacity: 1;
+}
+
+.space-info-shade {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: #17132466;
+  /* Review 5b: the shade never intercepts clicks — canvas fork arrows stay
+     tappable while the popup is open; only the card itself takes pointers. */
+  pointer-events: none;
+}
+
+.fork-arrow-mirror {
+  position: fixed;
+  z-index: 31;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.fork-arrow-mirror:focus-visible {
+  outline: 3px solid #f5c51c;
+  border-radius: 8px;
+}
+
+.space-info {
+  position: relative;
+  width: min(320px, 86vw);
+  border: 3px solid #f5c51c;
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: #f5eedc;
+  color: #5c3317;
+  box-shadow: 0 8px 24px #0009;
+  /* Review 5b: the card re-enables what the shade disabled. */
+  pointer-events: auto;
+}
+
+.space-info h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.space-info .space-info-text {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.space-info .space-info-owner {
+  display: block;
+  margin-top: 6px;
+  font-weight: 700;
+}
+
+.space-info-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: 0;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #5c3317;
+  color: #f5eedc;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-ribbon {
+    transition: none;
+  }
+}

@@ -2,8 +2,8 @@ import type Phaser from 'phaser';
 import { hasAnim, sheetKey } from '../../art/atlas';
 
 /**
- * Above every board layer (ground -10, road -5, tiles 0, props/ambient 10+)
- * and above the fx band (31/35); only selection rings (40) draw over tokens.
+ * Above every board layer (painted map -10, road -5, tiles 0, buildings -2);
+ * only selection rings (40+) draw over tokens.
  */
 const TOKEN_DEPTH = 30;
 

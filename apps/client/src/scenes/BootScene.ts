@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { registerAtlas, type Atlas } from '../art/atlas';
-import { ART_ATLASES } from '../art/manifest';
+import { ART, ART_ATLASES } from '../art/manifest';
 
 const regions = ['meadow', 'desert', 'snow', 'volcano'] as const;
 const classes = ['knight', 'thief', 'mage', 'cleric'] as const;
@@ -108,6 +108,12 @@ export default class BootScene extends Phaser.Scene {
       this.load.json(`art-json-${atlas}`, `/art/${atlas}.json`);
       this.load.image(`art-image-${atlas}`, `/art/${atlas}.webp`);
     }
+    // Authored 5×3 map background (Review 1): plain images under the exact
+    // `map-r<row>c<col>` keys mapLayer.ts looks up. A missing tile keeps its
+    // key out of the texture manager, so mapLayer warns and falls back.
+    for (let row = 0; row < ART.mapTiles.rows; row += 1)
+      for (let col = 0; col < ART.mapTiles.cols; col += 1)
+        this.load.image(`map-r${row}c${col}`, `/art/map/r${row}c${col}.webp`);
     this.load.on('loaderror', (file: { key: string }) => {
       const atlas = typeof file.key === 'string' ? file.key.replace(/^art-image-/, '') : '';
       if (!atlas || file.key === atlas || !ART_ATLASES.includes(atlas as never)) return;

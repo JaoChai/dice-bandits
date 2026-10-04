@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { data, type ClassId, type Region } from '@dice-bandits/engine';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { fakeConfig } = vi.hoisted(() => ({ fakeConfig: vi.fn() }));
 
@@ -13,6 +13,7 @@ vi.mock('phaser', () => ({
       }
     },
     AUTO: 0,
+    CANVAS: 1,
     Scale: { FIT: 0, CENTER_BOTH: 0 },
   },
 }));
@@ -112,6 +113,7 @@ describe('ART manifest', () => {
 });
 
 describe('createGame', () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     fakeConfig.mockClear();
     document.body.innerHTML = '<div id="app"><div id="phaser-board"></div></div>';
@@ -128,6 +130,68 @@ describe('createGame', () => {
     expect(config.render).toEqual({ antialias: true, antialiasGL: false });
     expect(config.parent).toBe('phaser-board');
     expect(config.scale).toEqual({ mode: 0, autoCenter: 0 });
+  });
+
+  it('falls back to Canvas instead of software WebGL when hardware contexts are refused', () => {
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    createGame('phaser-board');
+    expect(capturedConfig().type).toBe(1);
+    expect(getContext).toHaveBeenCalledWith('webgl2', { failIfMajorPerformanceCaveat: true });
+    expect(getContext).toHaveBeenCalledWith('webgl', { failIfMajorPerformanceCaveat: true });
+  });
+
+  it('retains AUTO on hardware WebGL2 and releases the capability probe context', () => {
+    const loseContext = vi.fn();
+    const getExtension = vi.fn((name: string) =>
+      name === 'WEBGL_lose_context' ? { loseContext } : null,
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ getExtension } as never);
+    createGame('phaser-board');
+    expect(capturedConfig().type).toBe(0);
+    expect(getExtension).toHaveBeenCalledWith('WEBGL_lose_context');
+    expect(loseContext).toHaveBeenCalledOnce();
+  });
+
+  it('keeps hardware WebGL1 available when WebGL2 is unsupported', () => {
+    const loseContext = vi.fn();
+    const getContext = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce({
+        getExtension: (name: string) => (name === 'WEBGL_lose_context' ? { loseContext } : null),
+      } as never);
+    createGame('phaser-board');
+    expect(capturedConfig().type).toBe(0);
+    expect(getContext).toHaveBeenCalledWith('webgl', { failIfMajorPerformanceCaveat: true });
+    expect(loseContext).toHaveBeenCalledOnce();
+  });
+
+  it('falls back safely when context creation throws', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+      throw new Error('WebGL unavailable');
+    });
+    expect(() => createGame('phaser-board')).not.toThrow();
+    expect(capturedConfig().type).toBe(1);
+  });
+
+  it('rejects SwiftShader even when Chromium accepts the major-performance-caveat probe', () => {
+    const loseContext = vi.fn();
+    const getParameter = vi.fn(() => 'SwiftShader Device (Subzero)');
+    const getExtension = vi.fn((name: string) =>
+      name === 'WEBGL_debug_renderer_info'
+        ? { UNMASKED_RENDERER_WEBGL: 37446 }
+        : name === 'WEBGL_lose_context'
+          ? { loseContext }
+          : null,
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      getExtension,
+      getParameter,
+    } as never);
+    createGame('phaser-board');
+    expect(capturedConfig().type).toBe(1);
+    expect(getParameter).toHaveBeenCalledWith(37446);
+    expect(loseContext).toHaveBeenCalledOnce();
   });
 });
 

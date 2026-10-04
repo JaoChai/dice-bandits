@@ -50,6 +50,20 @@ function bootFixture() {
 }
 
 describe('BootScene cartoon loader contract', () => {
+  it('queues all 15 authored map tiles under the keys mapLayer looks up', () => {
+    const { boot } = bootFixture();
+    const queued: string[] = [];
+    (boot.load as unknown as { image: unknown }).image = vi.fn((key: string) => {
+      queued.push(key);
+      return undefined as never;
+    });
+    (boot as unknown as { loadArtAtlases: () => void }).loadArtAtlases();
+    const mapKeys = queued.filter((key) => key.startsWith('map-r'));
+    expect(mapKeys).toHaveLength(15);
+    for (let row = 0; row < 3; row += 1)
+      for (let col = 0; col < 5; col += 1) expect(queued).toContain(`map-r${row}c${col}`);
+  });
+
   it('starts a battle that arrives between boot completion and the queued board create', () => {
     const { boot, registry } = bootFixture();
     const startBoard: Array<() => void> = [];
@@ -57,6 +71,7 @@ describe('BootScene cartoon loader contract', () => {
     const renderBoard = vi.fn();
     const board = Object.assign(Object.create(BoardScene.prototype), {
       game: { registry, events: new EventEmitter() },
+      events: new EventEmitter(),
       cameras: { main: { setScroll: vi.fn() } },
       scene: { isActive: vi.fn(() => false), launch },
       renderBoard,
@@ -71,6 +86,11 @@ describe('BootScene cartoon loader contract', () => {
     startBoard[0]!();
     expect(renderBoard).toHaveBeenCalledWith(battle);
     expect(launch).toHaveBeenCalledWith('BattleScene');
+    board.game.events.emit('game-state', battle);
+    expect(renderBoard).toHaveBeenCalledTimes(2);
+    board.events.emit('shutdown');
+    board.game.events.emit('game-state', battle);
+    expect(renderBoard).toHaveBeenCalledTimes(2);
   });
 
   it('publishes every successfully registered named atlas before starting scenes', () => {
