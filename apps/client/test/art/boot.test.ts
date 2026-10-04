@@ -71,6 +71,7 @@ describe('BootScene cartoon loader contract', () => {
     const renderBoard = vi.fn();
     const board = Object.assign(Object.create(BoardScene.prototype), {
       game: { registry, events: new EventEmitter() },
+      events: new EventEmitter(),
       cameras: { main: { setScroll: vi.fn() } },
       scene: { isActive: vi.fn(() => false), launch },
       renderBoard,
@@ -85,6 +86,11 @@ describe('BootScene cartoon loader contract', () => {
     startBoard[0]!();
     expect(renderBoard).toHaveBeenCalledWith(battle);
     expect(launch).toHaveBeenCalledWith('BattleScene');
+    board.game.events.emit('game-state', battle);
+    expect(renderBoard).toHaveBeenCalledTimes(2);
+    board.events.emit('shutdown');
+    board.game.events.emit('game-state', battle);
+    expect(renderBoard).toHaveBeenCalledTimes(2);
   });
 
   it('publishes every successfully registered named atlas before starting scenes', () => {
