@@ -20,6 +20,11 @@ const drafts: SeatDraft[] = Array.from({ length: 4 }, (_, i) => ({
   personality: 'greedy',
 }));
 
+/** Default seat name is the class hero name (spec §4); players can still type their own. */
+function heroName(classId: ClassId): string {
+  return t(`hero.${classId}`);
+}
+
 function languageToggle(): string {
   return `<div class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" class="${getLang() === 'th' ? 'selected' : ''}" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" class="${getLang() === 'en' ? 'selected' : ''}" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></div>`;
 }
@@ -48,7 +53,7 @@ export function showTitle(
     const saved = loadGame();
     const room = latestSession();
     unsubscribe();
-    root.innerHTML = `<main class="screen title-screen frame" data-testid="screen-title"><header>${languageToggle()}<button type="button" class="text-button" data-testid="audio-settings">${t('audio.settings')}</button></header><div class="title-art" aria-hidden="true">🎲</div><h1 class="pixel logo-pixel">${t('title.gameName')}</h1><p>${t('title.subtitle')}</p><div class="title-actions"><button class="primary pixel" data-action="new">${t('title.newGame')}</button>${saved ? `<button class="secondary" data-action="continue">${t('title.continue')}</button>` : ''}<button class="secondary" data-testid="online-create">${t('online.create')}</button><button class="secondary" data-testid="online-join">${t('online.join')}</button>${room ? `<button class="secondary" data-testid="online-back">${t('online.backToRoom', { code: room.code })}</button>` : ''}</div></main>`;
+    root.innerHTML = `<main class="screen title-screen card" data-testid="screen-title" style="background-image:url('/art/title.webp')"><header>${languageToggle()}<button type="button" class="text-button" data-testid="audio-settings">${t('audio.settings')}</button></header><h1 class="game-logo">${t('title.gameName')}</h1><p>${t('title.subtitle')}</p><div class="title-actions"><button class="primary" data-action="new">${t('title.newGame')}</button>${saved ? `<button class="secondary" data-action="continue">${t('title.continue')}</button>` : ''}<button class="secondary" data-testid="online-create">${t('online.create')}</button><button class="secondary" data-testid="online-join">${t('online.join')}</button>${room ? `<button class="secondary" data-testid="online-back">${t('online.backToRoom', { code: room.code })}</button>` : ''}</div></main>`;
     if (discarded) {
       const toast = document.createElement('div');
       toast.className = 'toast';
@@ -106,10 +111,10 @@ export function showSetup(onStart: (config: GameConfig) => void): void {
     const seatRows = drafts
       .map(
         (seat, index) =>
-          `<fieldset class="seat-row" data-seat="${index}"><legend>${t('setup.seat', { seat: index + 1 })}</legend><label><select data-field="control" aria-label="${t('setup.seat', { seat: index + 1 })}"><option value="human" ${seat.control === 'human' ? 'selected' : ''}>${t('setup.human')}</option><option value="bot" ${seat.control === 'bot' ? 'selected' : ''}>${t('setup.bot')}</option><option value="empty" ${seat.control === 'empty' ? 'selected' : ''}>${t('setup.empty')}</option></select></label><span class="seat-portrait portrait-${seat.classId}" role="img" aria-label="${t(`class.${seat.classId}`)}"></span>${seat.control === 'empty' ? '' : `<label>${t('setup.name')}<input data-field="name" value="${escapeHtml(seat.name || t('setup.defaultName', { n: index + 1 }))}" maxlength="18" required></label><label>${t('setup.class')}<select data-field="classId" aria-label="${t('setup.class')}">${classes.map((classId) => `<option value="${classId}" ${seat.classId === classId ? 'selected' : ''}>${t(`class.${classId}`)}</option>`).join('')}</select></label>${seat.control === 'bot' ? `<label>${t('setup.personality')}<select data-field="personality">${personalities.map((personality) => `<option value="${personality}" ${seat.personality === personality ? 'selected' : ''}>${t(`personality.${personality}`)}</option>`).join('')}</select></label>` : ''}`}</fieldset>`,
+          `<fieldset class="seat-row" data-seat="${index}"><legend>${t('setup.seat', { seat: index + 1 })}</legend><label><select data-field="control" aria-label="${t('setup.seat', { seat: index + 1 })}"><option value="human" ${seat.control === 'human' ? 'selected' : ''}>${t('setup.human')}</option><option value="bot" ${seat.control === 'bot' ? 'selected' : ''}>${t('setup.bot')}</option><option value="empty" ${seat.control === 'empty' ? 'selected' : ''}>${t('setup.empty')}</option></select></label><span class="seat-portrait portrait-${seat.classId}" role="img" aria-label="${t(`class.${seat.classId}`)}"></span>${seat.control === 'empty' ? '' : `<label>${t('setup.name')}<input data-field="name" value="${escapeHtml(seat.name || heroName(seat.classId))}" maxlength="18" required></label><label>${t('setup.class')}<select data-field="classId" aria-label="${t('setup.class')}">${classes.map((classId) => `<option value="${classId}" ${seat.classId === classId ? 'selected' : ''}>${t(`class.${classId}`)}</option>`).join('')}</select></label>${seat.control === 'bot' ? `<label>${t('setup.personality')}<select data-field="personality">${personalities.map((personality) => `<option value="${personality}" ${seat.personality === personality ? 'selected' : ''}>${t(`personality.${personality}`)}</option>`).join('')}</select></label>` : ''}`}</fieldset>`,
       )
       .join('');
-    root.innerHTML = `<main class="screen setup-screen frame" data-testid="screen-setup"><header><button class="text-button" data-action="back">← ${t('setup.back')}</button>${languageToggle()}</header><h1 class="pixel">${t('setup.title')}</h1><p>${t('setup.instructions')}</p><form id="setup-form"><div class="seat-list">${seatRows}</div><p class="error" role="alert">${error ? t('setup.invalid') : ''}</p><button class="primary pixel" type="submit">${t('setup.start')}</button></form></main>`;
+    root.innerHTML = `<main class="screen setup-screen card" data-testid="screen-setup"><header><button class="text-button" data-action="back">← ${t('setup.back')}</button>${languageToggle()}</header><h1>${t('setup.title')}</h1><p>${t('setup.instructions')}</p><form id="setup-form"><div class="seat-list">${seatRows}</div><p class="error" role="alert">${error ? t('setup.invalid') : ''}</p><button class="primary" type="submit">${t('setup.start')}</button></form></main>`;
     bindLanguageToggle(root, render);
     root
       .querySelector('[data-action="back"]')
@@ -143,7 +148,7 @@ export function showSetup(onStart: (config: GameConfig) => void): void {
         seed: testHooks.seed ?? `dice-bandits-${Date.now()}`,
         rounds: 30,
         seats: active.map((seat) => ({
-          name: seat.name.trim() || t('setup.defaultName', { n: drafts.indexOf(seat) + 1 }),
+          name: seat.name.trim() || heroName(seat.classId),
           classId: seat.classId,
           control: seat.control as 'human' | 'bot',
           personality: seat.control === 'bot' ? seat.personality : null,

@@ -1,11 +1,10 @@
-@import './frame.css';
 * {
   box-sizing: border-box;
 }
 :root {
-  color: #fff4dc;
-  background: #171324;
-  font-family: 'Chakra Petch', sans-serif;
+  color: var(--t-ink, #5c3317);
+  background: var(--t-bg, #f5eedc);
+  font-family: 'Mitr', sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -62,7 +61,7 @@ h1 {
   line-height: 1.35;
 }
 .pixel {
-  font-family: 'Press Start 2P', monospace;
+  font-family: 'Mitr', sans-serif;
   font-size: 0.72rem;
   line-height: 1.8;
 }
@@ -674,7 +673,7 @@ h1 {
 .room-code strong {
   display: inline-block;
   color: #ffd477;
-  font-family: 'Press Start 2P', monospace;
+  font-family: 'Mitr', sans-serif;
   font-size: clamp(1.15rem, 5vw, 1.65rem);
   letter-spacing: 0.12em;
   line-height: 1.6;
@@ -1187,7 +1186,7 @@ h1 {
   border: 2px solid #e8a53c;
   color: #fff4dc;
   font:
-    700 14px/1.2 'Chakra Petch',
+    700 14px/1.2 'Mitr',
     sans-serif;
   text-shadow: 1px 1px #080a14;
 }
@@ -1259,7 +1258,7 @@ h1 {
   transform: translateX(-50%);
   color: #fff4dc;
   font:
-    700 13px/1 'Chakra Petch',
+    700 13px/1 'Mitr',
     sans-serif;
   text-shadow: 0 1px #171324;
   pointer-events: none;

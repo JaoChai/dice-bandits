@@ -1,6 +1,6 @@
-import '@fontsource/chakra-petch/400.css';
-import '@fontsource/chakra-petch/700.css';
-import '@fontsource/press-start-2p/400.css';
+import '@fontsource/mitr/400.css';
+import '@fontsource/mitr/600.css';
+import './ui/theme.css';
 import './ui/styles.css';
 import Phaser from 'phaser';
 import { createGame as createPhaserGame } from './game';
@@ -218,11 +218,6 @@ export function startOnlineGame(
       showOnlineError('error.boardOutdated');
     });
     bindMapToggle(app, game, () => controller.state);
-    app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {
-      destroyGame();
-      history.pushState(null, '', '/');
-      showTitle(startSetup);
-    });
     if (import.meta.env.VITE_TEST_HOOKS === '1') {
       window.__db = {
         getState: () => controller.state,
@@ -254,6 +249,14 @@ function openOnline(options: { mode?: 'create' | 'join'; code?: string }): void 
 app.addEventListener('dice-bandits:online', (event) => {
   const detail = (event as CustomEvent<{ mode?: 'create' | 'join'; code?: string }>).detail;
   openOnline(detail);
+});
+// Board menu exit (bubbles out of the HUD's shell): tear down the game and go
+// home. One module-level listener covers hot-seat and online boards; the old
+// per-game `[data-action="exit"]` button no longer exists (spec §9 menu).
+app.addEventListener('dice-bandits:menu-exit', () => {
+  destroyGame();
+  history.pushState(null, '', '/');
+  showTitle(startSetup);
 });
 app.addEventListener('dice-bandits:home', () => {
   history.pushState(null, '', '/');
@@ -346,10 +349,6 @@ function startGame(state: GameState): void {
     showOnlineErrorScreen('error.boardOutdated');
   });
   bindMapToggle(app, game, () => controller.state);
-  app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {
-    destroyGame();
-    showTitle(startSetup);
-  });
   if (import.meta.env.VITE_TEST_HOOKS === '1') {
     window.__db = {
       getState: () => controller.state,

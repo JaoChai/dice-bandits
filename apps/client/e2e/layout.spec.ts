@@ -20,7 +20,10 @@ import {
 test('board and battle fit the viewport without truncation', async ({ page }) => {
   await startJourney(page);
   for (const lang of ['en', 'th'] as const) {
-    await page.locator(`.game-topline [data-lang="${lang}"]`).click();
+    await page.locator('[data-testid="menu-button"]').click();
+    await page.locator(`.menu-panel [data-lang="${lang}"]`).click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.menu-panel')).toHaveCount(0);
     await assertInside(page, '[data-testid="screen-board"] *:visible');
     await assertNoEllipsis(page, '[data-testid="event-banner"]');
     await assertMinFont(page, '.seat-card', 12);
@@ -140,7 +143,10 @@ test('four-player hot-seat HUD controls fit without overlap at readable sizes', 
   await expect(page.locator('.seat-card')).toHaveCount(4);
 
   for (const lang of ['th', 'en'] as const) {
-    await page.locator(`.game-topline [data-lang="${lang}"]`).click();
+    await page.locator('[data-testid="menu-button"]').click();
+    await page.locator(`.menu-panel [data-lang="${lang}"]`).click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.menu-panel')).toHaveCount(0);
     const layout = await page.evaluate(() => {
       const shell = document.querySelector('.game-shell')!;
       const elements = [

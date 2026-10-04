@@ -1,7 +1,8 @@
 import { createGame, type GameConfig, type GameState } from '@dice-bandits/engine';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ServerMsg } from '@dice-bandits/room';
-import { setLang, t } from '../src/i18n';
+import { setLang } from '../src/i18n';
 import { saveSession } from '../src/online/session';
 import type { RoomSocketOptions } from '../src/online/socket';
 import { showOnlineScreens, type OnlineSocket } from '../src/online/screens';
@@ -68,13 +69,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('pixel frame re-skin', () => {
-  it('title shows the pixel logo', () => {
+describe('cartoon re-skin', () => {
+  it('title uses the title atlas key art as its background', () => {
     mount();
     showTitle();
-    const logo = document.querySelector<HTMLElement>('.logo-pixel');
-    expect(logo).not.toBeNull();
-    expect(logo?.textContent).toBe(t('title.gameName'));
+    const screen = document.querySelector<HTMLElement>('.title-screen');
+    expect(screen).not.toBeNull();
+    expect(screen?.style.backgroundImage).toContain('/art/title.webp');
+    expect(document.querySelector('.logo-pixel')).toBeNull();
+  });
+
+  it('drops the pixel fonts: Mitr is wired in, Press Start 2P and Chakra Petch are gone', () => {
+    const main = readFileSync('src/main.ts', 'utf8');
+    expect(main).toContain('@fontsource/mitr/400.css');
+    expect(main).toContain('@fontsource/mitr/600.css');
+    expect(main).not.toContain('press-start-2p');
+    expect(main).not.toContain('chakra-petch');
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      dependencies: Record<string, string>;
+    };
+    expect(pkg.dependencies['@fontsource/mitr']).toBe('5.3.0');
+    expect(pkg.dependencies).not.toHaveProperty('@fontsource/press-start-2p');
+    expect(pkg.dependencies).not.toHaveProperty('@fontsource/chakra-petch');
+    const cssPath = new URL('./src/ui/frame.css', import.meta.url).pathname;
+    expect(() => readFileSync(cssPath, 'utf8')).toThrow();
   });
 
   it('setup shows a class portrait for every seat', () => {
@@ -94,7 +112,7 @@ describe('pixel frame re-skin', () => {
     });
   });
 
-  it('perk dialog uses the pixel frame and keeps its perk test ids', () => {
+  it('perk dialog uses the cartoon card and keeps its perk test ids', () => {
     const root = mount();
     const dispatch = vi.fn();
     showPhaseDialog(
@@ -106,14 +124,14 @@ describe('pixel frame re-skin', () => {
       ],
       dispatch,
     );
-    expect(document.querySelector('.game-dialog.frame')).not.toBeNull();
+    expect(document.querySelector('.game-dialog.card')).not.toBeNull();
     expect(document.querySelector('[data-testid="perk-hpUp"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="perk-atkUp"]')).not.toBeNull();
     document.querySelector<HTMLButtonElement>('[data-testid="perk-atkUp"]')!.click();
     expect(dispatch).toHaveBeenCalledWith({ type: 'pickPerk', perk: 'atkUp' });
   });
 
-  it('shop dialog uses the pixel frame and keeps its shop test ids', () => {
+  it('shop dialog uses the cartoon card and keeps its shop test ids', () => {
     const root = mount();
     showPhaseDialog(
       root,
@@ -121,22 +139,22 @@ describe('pixel frame re-skin', () => {
       [{ type: 'shopBuy', item: 'potion' }, { type: 'leave' }],
       vi.fn(),
     );
-    expect(document.querySelector('.game-dialog.frame')).not.toBeNull();
+    expect(document.querySelector('.game-dialog.card')).not.toBeNull();
     expect(document.querySelector('[data-testid="shop-shopBuy-potion"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="shop-leave-leave"]')).not.toBeNull();
   });
 
-  it('reward dialog uses the pixel frame', () => {
+  it('reward dialog uses the cartoon card', () => {
     const root = mount();
     showActionDialog(
       root,
       [{ type: 'pvpReward', reward: 'rob', item: null, townId: null, alias: null }],
       vi.fn(),
     );
-    expect(document.querySelector('.game-dialog.frame')).not.toBeNull();
+    expect(document.querySelector('.game-dialog.card')).not.toBeNull();
   });
 
-  it('results screen uses the pixel frame', () => {
+  it('results screen uses the cartoon card', () => {
     const root = mount();
     const state = withPhase({
       kind: 'gameOver',
@@ -150,18 +168,18 @@ describe('pixel frame re-skin', () => {
       () => {},
       () => {},
     );
-    expect(document.querySelector('.results-screen.frame')).not.toBeNull();
+    expect(document.querySelector('.results-screen.card')).not.toBeNull();
     expect(document.querySelector('[data-testid="results"]')).not.toBeNull();
   });
 
-  it('pass-device dialog uses the pixel frame', () => {
+  it('pass-device dialog uses the cartoon card', () => {
     mount().innerHTML = passDeviceMarkup('Ada');
-    expect(document.querySelector('.game-dialog.frame')).not.toBeNull();
+    expect(document.querySelector('.game-dialog.card')).not.toBeNull();
     expect(document.querySelector('[data-testid="pass-screen"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="pass-ready"]')).not.toBeNull();
   });
 
-  it('lobby uses the pixel frame and keeps its seat row ids', async () => {
+  it('lobby uses the cartoon card and keeps its seat row ids', async () => {
     mount();
     saveSession({ code: 'ABCDE', seat: 0, token: 'token', name: 'Ada' });
     showOnlineScreens({
@@ -185,15 +203,15 @@ describe('pixel frame re-skin', () => {
         },
       ],
     });
-    expect(document.querySelector('.screen.online-screen.frame')).not.toBeNull();
+    expect(document.querySelector('.screen.online-screen.card')).not.toBeNull();
     expect(document.querySelector('[data-testid="lobby-seat-0"]')).not.toBeNull();
   });
 
-  it('title and setup screens use the pixel frame', () => {
+  it('title and setup screens use the cartoon card', () => {
     mount();
     showTitle();
-    expect(document.querySelector('.screen.title-screen.frame')).not.toBeNull();
+    expect(document.querySelector('.screen.title-screen.card')).not.toBeNull();
     showSetup(vi.fn());
-    expect(document.querySelector('.screen.setup-screen.frame')).not.toBeNull();
+    expect(document.querySelector('.screen.setup-screen.card')).not.toBeNull();
   });
 });
