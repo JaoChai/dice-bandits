@@ -31,9 +31,8 @@ describe('M5a Task 11c: legacy pixel-atlas pipeline removal', () => {
     expect(existsSync(atlasModule), 'src/art/atlas.ts must stay deleted').toBe(false);
   });
 
-  it('dropped the legacy interim visual tables', async () => {
-    const tables = await import('../../src/art/tables');
-    for (const legacy of ['REGION_VISUALS', 'SPACE_VISUALS', 'MONSTER_SHEETS'])
-      expect(tables, legacy).not.toHaveProperty(legacy);
+  it('deleted the legacy interim visual tables module', () => {
+    const tablesModule = join(process.cwd(), 'src', 'art', 'tables.ts');
+    expect(existsSync(tablesModule), 'src/art/tables.ts must stay deleted').toBe(false);
   });
 });
