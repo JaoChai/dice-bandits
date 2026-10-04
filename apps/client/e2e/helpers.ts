@@ -116,10 +116,6 @@ const ACTION_SELECTORS = [
  */
 export async function playOneStep(page: Page): Promise<void> {
   const started = Date.now();
-  const before = await page.evaluate(() => {
-    const s = window.__db.getState();
-    return { round: s.round, seat: s.turnSeat, phase: s.phase.kind };
-  });
   const deadline = Date.now() + 15_000;
   for (;;) {
     for (const selector of ACTION_SELECTORS) {
@@ -134,7 +130,6 @@ export async function playOneStep(page: Page): Promise<void> {
           console.log(
             'PROBE action',
             JSON.stringify({
-              before,
               selector,
               clickMs: Date.now() - clicked,
               stepMs: Date.now() - started,
