@@ -65,7 +65,7 @@ export function renderBattleUi(
       const pick = action.type === 'battlePick' ? action.pick : 'item';
       const label = escapeHtml(actionName(action));
       const className = action.type === 'battlePick' ? 'command-card' : 'item-card';
-      return `<button type="button" class="action-button ${className}" data-testid="${battleActionTestId(action)}" data-action-index="${index}"${awaitingView ? ' disabled' : ''}><span class="card-icon" style="${iconStyle(CARD_ICON[pick], 32)}" aria-hidden="true"></span><span class="card-label">${label}</span></button>`;
+      return `<button type="button" class="action-button ${className}" data-testid="${battleActionTestId(action)}" data-action-index="${index}"${awaitingView ? ' disabled' : ''}><span class="card-icon" style="${iconStyle(CARD_ICON[pick])}" aria-hidden="true"></span><span class="card-label">${label}</span></button>`;
     })
     .join('');
 
@@ -86,7 +86,7 @@ export function renderBattleUi(
     const player = state.players[battleSeat]!;
     root.insertAdjacentHTML(
       'beforeend',
-      `<div class="dialog-shade pass-device" data-testid="pass-screen"><section class="game-dialog" role="dialog" aria-modal="true"><div class="pass-portrait portrait-${player.classId}" style="${portraitStyle(player.classId, 72)}" role="img" aria-label="${t(`class.${player.classId}`)}"></div><h2>${t('battle.passDevice', { name: escapeHtml(player.prank?.alias ?? player.name) })}</h2><button class="primary" data-testid="pass-ready">${t('battle.ready')}</button></section></div>`,
+      `<div class="dialog-shade pass-device" data-testid="pass-screen"><section class="game-dialog" role="dialog" aria-modal="true"><div class="pass-portrait portrait-${player.classId}" style="${portraitStyle(player.classId)}" role="img" aria-label="${t(`class.${player.classId}`)}"></div><h2>${t('battle.passDevice', { name: escapeHtml(player.prank?.alias ?? player.name) })}</h2><button class="primary" data-testid="pass-ready">${t('battle.ready')}</button></section></div>`,
     );
     root.querySelector('[data-testid="pass-ready"]')?.addEventListener('click', () => {
       readyPasses.add(passKey);

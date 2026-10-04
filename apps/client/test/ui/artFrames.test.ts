@@ -58,12 +58,11 @@ describe('cartoon frame tables (M5a T11a)', () => {
   it('emits a box-independent percentage crop (review round 1, item 1)', () => {
     const expected =
       "background-image:url('/art/hero-knight.webp');background-size:909.953% 142.18%;background-position:96.782% 100%";
-    // The same style must be correct for every CSS box these elements get:
-    // 40px corner/setup portraits, the 32px ≤700px variant, the 72px pass
-    // screen. Percentages, never px — a px crop is pinned to one box size.
-    expect(artBackground('hero-knight', PORTRAIT_FRAMES.knight, 1920, 300, 40)).toBe(expected);
-    expect(artBackground('hero-knight', PORTRAIT_FRAMES.knight, 1920, 300, 32)).toBe(expected);
-    expect(artBackground('hero-knight', PORTRAIT_FRAMES.knight, 1920, 300, 72)).toBe(expected);
+    // Percentages, never px — a px crop is pinned to one box size. The
+    // caller passes no box at all: the style is correct for the 40px
+    // corner/setup portraits, the 32px ≤700px variant and the 72px pass
+    // screen alike.
+    expect(artBackground('hero-knight', PORTRAIT_FRAMES.knight, 1920, 300)).toBe(expected);
     expect(expected).not.toContain('px');
   });
 
@@ -71,7 +70,7 @@ describe('cartoon frame tables (M5a T11a)', () => {
     // scroll is 110×120; top-left pinning ran the 120-wide window into the
     // piggy frame (~4 display px of pig at the card's right edge). Centred
     // window position x would be 34.949% without the (fmax−w)/2 shift.
-    expect(artBackground('icons', ICON_FRAMES.scroll, 512, 512, 32)).toBe(
+    expect(artBackground('icons', ICON_FRAMES.scroll, 512, 512)).toBe(
       "background-image:url('/art/icons.webp');background-size:426.667% 426.667%;background-position:33.673% 34.694%",
     );
   });

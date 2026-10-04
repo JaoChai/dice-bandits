@@ -70,9 +70,6 @@ export function artBackground(
   frame: ArtFrame,
   sheetW: number,
   sheetH: number,
-  // Kept for signature stability with the existing callers (hud/screens/
-  // battleUi); the percentage output below is box-independent and ignores it.
-  _boxPx: number,
 ): string {
   const fmax = Math.max(frame.w, frame.h);
   const padX = (fmax - frame.w) / 2;
@@ -85,18 +82,12 @@ export function artBackground(
   );
 }
 
-/** Portrait of `classId` fitted into a square `boxPx` box (HUD, setup, pass). */
-export function portraitStyle(classId: ClassId, boxPx: number): string {
-  return artBackground(
-    `hero-${classId}`,
-    PORTRAIT_FRAMES[classId],
-    HERO_SHEET.w,
-    HERO_SHEET.h,
-    boxPx,
-  );
+/** Portrait of `classId` fitted to its element's box (HUD, setup, pass). */
+export function portraitStyle(classId: ClassId): string {
+  return artBackground(`hero-${classId}`, PORTRAIT_FRAMES[classId], HERO_SHEET.w, HERO_SHEET.h);
 }
 
-/** Card icon `name` fitted into a square `boxPx` box (battle command cards). */
-export function iconStyle(name: IconName, boxPx: number): string {
-  return artBackground('icons', ICON_FRAMES[name], ICON_SHEET.w, ICON_SHEET.h, boxPx);
+/** Card icon `name` fitted to its element's box (battle command cards). */
+export function iconStyle(name: IconName): string {
+  return artBackground('icons', ICON_FRAMES[name], ICON_SHEET.w, ICON_SHEET.h);
 }
