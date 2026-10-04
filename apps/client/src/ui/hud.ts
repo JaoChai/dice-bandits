@@ -5,6 +5,7 @@ import { data } from '@dice-bandits/engine';
 import { getLang, setLang, t } from '../i18n';
 import { getAudioSettings, setAudioSettings } from '../audio';
 import { renderBattleUi } from './battleUi';
+import { portraitStyle } from './artFrames';
 import { showActionDialog, showPhaseDialog } from './dialogs';
 import { renderMenu } from './menu';
 
@@ -245,7 +246,7 @@ function playerCard(state: GameState, player: Player, seats?: PublicSeat[]): str
       : '';
   const classes = ['corner-tl', 'corner-tr', 'corner-bl', 'corner-br'];
   const accent = ['#f15b4a', '#52c2ed', '#a5d65b', '#cd76d7'][player.seat % 4]!;
-  return `<article class="seat-card ${classes[player.seat % 4]} ${player.seat === state.turnSeat ? 'is-active' : ''}" style="--seat-color:${accent}"><div class="seat-portrait portrait-${player.classId}" role="img" aria-label="${t(`class.${player.classId}`)}"></div><div class="seat-details"><strong>${escapeHtml(name)}</strong><div class="seat-stats"><span class="gold-pill" aria-label="${player.gold} ${escapeHtml(t('board.gold'))}">${player.gold} ${t('board.gold')}</span><span aria-label="${escapeHtml(t('board.level'))} ${player.level}">${t('board.levelShort')} ${player.level}</span><span aria-label="${towns} ${escapeHtml(t('board.towns'))}">${towns} ${t('board.towns')}</span></div><div class="seat-health" role="meter" aria-label="${escapeHtml(t('board.hp'))}" aria-valuemin="0" aria-valuemax="${player.stats.maxHp}" aria-valuenow="${player.hp}"><svg class="hp-heart" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21 3 12C-3 6 5-2 12 5c7-7 15 1 9 7Z"/></svg><div class="hp-track"><span style="width:${hp}%"></span></div></div>${compactCards}${takeoverBadge}</div></article>`;
+  return `<article class="seat-card ${classes[player.seat % 4]} ${player.seat === state.turnSeat ? 'is-active' : ''}" style="--seat-color:${accent}"><div class="seat-portrait portrait-${player.classId}" style="${portraitStyle(player.classId)}" role="img" aria-label="${t(`class.${player.classId}`)}"></div><div class="seat-details"><strong>${escapeHtml(name)}</strong><div class="seat-stats"><span class="gold-pill" aria-label="${player.gold} ${escapeHtml(t('board.gold'))}">${player.gold} ${t('board.gold')}</span><span aria-label="${escapeHtml(t('board.level'))} ${player.level}">${t('board.levelShort')} ${player.level}</span><span aria-label="${towns} ${escapeHtml(t('board.towns'))}">${towns} ${t('board.towns')}</span></div><div class="seat-health" role="meter" aria-label="${escapeHtml(t('board.hp'))}" aria-valuemin="0" aria-valuemax="${player.stats.maxHp}" aria-valuenow="${player.hp}"><svg class="hp-heart" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21 3 12C-3 6 5-2 12 5c7-7 15 1 9 7Z"/></svg><div class="hp-track"><span style="width:${hp}%"></span></div></div>${compactCards}${takeoverBadge}</div></article>`;
 }
 
 function actionName(action: Action): string {

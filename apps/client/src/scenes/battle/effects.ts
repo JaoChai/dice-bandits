@@ -3,7 +3,7 @@ import type { BattleFighters } from './fighters';
 import type { BattleLayout } from './layout';
 import { BATTLE_FIGHTER_HEIGHT } from './layout';
 import { playMotion } from './fighters';
-import { hasAnim } from '../../art/atlas';
+import { ART } from '../../art/manifest';
 import { reducedMotion } from '../../art/motion';
 import { t } from '../../i18n';
 
@@ -43,12 +43,10 @@ function effect(
   name: 'slash' | 'spark' | 'coin',
   x: number,
   y: number,
-): Phaser.GameObjects.Sprite | undefined {
-  const frame = { slash: 0, spark: 3, coin: 6 }[name];
-  if (!scene.textures.exists('fx') || !scene.textures.get('fx').has(String(frame))) return;
-  const sprite = scene.add.sprite(x, y, 'fx', frame).setScale(2).setDepth(12);
-  if (hasAnim(scene, 'fx', name) && !reducedMotion()) sprite.play(`fx:${name}`);
-  return sprite;
+): Phaser.GameObjects.Image | undefined {
+  const frame = { slash: 'sword', spark: 'star', coin: 'coin' }[name];
+  if (!scene.textures.exists(ART.icons) || !scene.textures.get(ART.icons).has(frame)) return;
+  return scene.add.image(x, y, ART.icons, frame).setDisplaySize(48, 48).setDepth(12);
 }
 
 export async function playHit(

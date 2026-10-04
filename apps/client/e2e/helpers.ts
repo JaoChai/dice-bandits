@@ -71,7 +71,7 @@ export async function renderedBoardGeometry(page: Page) {
       scrollY: camera.scrollY,
       canvas: { left: canvas.left, top: canvas.top, right: canvas.right, bottom: canvas.bottom },
       tiles: images.filter((image) => image.texture.key === 'art:tiles').map(bounds),
-      tokens: images.filter((image) => image.texture.key.startsWith('token-')).map(bounds),
+      tokens: images.filter((image) => image.texture.key.startsWith('art:hero-')).map(bounds),
     };
   });
 }

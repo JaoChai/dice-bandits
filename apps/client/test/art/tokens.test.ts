@@ -48,42 +48,71 @@ describe('board hero tokens', () => {
     ]);
   });
 
-  it('creates an animated token sprite when its idle animation exists', () => {
-    const sprite = {
+  it('creates a cartoon image token from the art atlas idle frame', () => {
+    const made: { x: number; y: number; key: string; frame?: string }[] = [];
+    const image = {
       setOrigin: vi.fn().mockReturnThis(),
       setDepth: vi.fn().mockReturnThis(),
-      setScale: vi.fn().mockReturnThis(),
-      play: vi.fn().mockReturnThis(),
+      setDisplaySize: vi.fn().mockReturnThis(),
     };
     const scene = {
-      add: { sprite: vi.fn().mockReturnValue(sprite), image: vi.fn() },
-      anims: { exists: vi.fn((key: string) => key === 'token-mage:idle') },
+      add: {
+        image: vi.fn((x: number, y: number, key: string, frame?: string) => {
+          made.push({ x, y, key, frame });
+          return image;
+        }),
+        sprite: vi.fn(),
+      },
+      textures: {
+        exists: vi.fn((key: string) => key === 'art:hero-mage'),
+        get: vi.fn((key: string) => ({
+          key,
+          has: (frame: string) => key === 'art:hero-mage' && frame === 'idle',
+          get: () => ({ width: 206, height: 280 }),
+        })),
+      },
     };
 
     const token = createHeroToken(scene as never, 'mage', 24, 36);
 
-    expect(scene.add.sprite).toHaveBeenCalledWith(24, 36, 'token-mage');
-    expect(scene.add.image).not.toHaveBeenCalled();
-    expect(sprite.setOrigin).toHaveBeenCalledWith(0.5, 1);
-    expect(sprite.play).toHaveBeenCalledWith('token-mage:idle');
-    expect(token).toBe(sprite);
+    expect(made[0]).toEqual({ x: 24, y: 36, key: 'art:hero-mage', frame: 'idle' });
+    expect(scene.add.sprite).not.toHaveBeenCalled();
+    expect(image.setOrigin).toHaveBeenCalledWith(0.5, 1);
+    // 72 map px tall, width keeps the idle frame's aspect ratio (206x280).
+    expect(image.setDisplaySize).toHaveBeenCalledWith(53, 72);
+    expect(token).toBe(image);
   });
 
-  it('uses the legacy hero image when the token idle animation is missing', () => {
+  it('falls back to the flat white shape with a warn when the art token is missing', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const image = {
-      setDisplaySize: vi.fn().mockReturnThis(),
+      setOrigin: vi.fn().mockReturnThis(),
       setDepth: vi.fn().mockReturnThis(),
+      setDisplaySize: vi.fn().mockReturnThis(),
+      setTint: vi.fn().mockReturnThis(),
     };
     const scene = {
-      add: { sprite: vi.fn(), image: vi.fn().mockReturnValue(image) },
-      anims: { exists: vi.fn().mockReturnValue(false) },
+      add: {
+        image: vi.fn((_x: number, _y: number, key: string, frame?: string) => {
+          made.push({ x: _x, y: _y, key, frame });
+          return image;
+        }),
+        sprite: vi.fn(),
+      },
+      textures: {
+        exists: vi.fn().mockReturnValue(false),
+        get: vi.fn(() => ({ key: '__MISSING', has: () => false })),
+      },
     };
+    const made: { x: number; y: number; key: string; frame?: string }[] = [];
 
     const token = createHeroToken(scene as never, 'knight', 24, 36);
 
-    expect(scene.add.sprite).not.toHaveBeenCalled();
-    expect(scene.add.image).toHaveBeenCalledWith(24, 36, 'hero-knight');
-    expect(image.setDisplaySize).toHaveBeenCalledWith(14, 14);
+    expect(made[0]).toEqual({ x: 24, y: 36, key: '__WHITE', frame: undefined });
+    expect(warn).toHaveBeenCalledWith('[art] fallback', 'art:hero-knight');
+    expect(image.setDisplaySize).toHaveBeenCalledWith(28, 28);
+    expect(image.setTint).toHaveBeenCalledWith(0x8e8e93);
     expect(token).toBe(image);
+    warn.mockRestore();
   });
 });

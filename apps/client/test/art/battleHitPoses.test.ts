@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type Phaser from 'phaser';
-import { playHit } from '../../src/scenes/battle/effects';
+import { playCoinBurst, playHit } from '../../src/scenes/battle/effects';
 import { BATTLE_FIGHTER_HEIGHT } from '../../src/scenes/battle/layout';
 
 /**
@@ -52,7 +52,7 @@ function effectSprite(textureKey: string, present: boolean): EffectSprite {
   return sprite;
 }
 
-function hitScene(textures: string[]) {
+function hitScene(textures: string[], iconFrames: string[] | null = ['sword', 'star', 'coin']) {
   const sprites: Array<Phaser.GameObjects.Sprite & Record<string, unknown>> = [];
   const tweens: Spec[] = [];
   const frames: Array<{ key: string; pose: string }> = [];
@@ -60,10 +60,11 @@ function hitScene(textures: string[]) {
   const textObjects: Array<Record<string, unknown>> = [];
   const scene = {
     textures: {
-      exists: (key: string) => textures.includes(key) || key === 'fx',
+      exists: (key: string) =>
+        textures.includes(key) || (key === 'art:icons' && iconFrames !== null),
       get: (key: string) => ({
         has: (frame: string) =>
-          key === 'fx' ? ['0', '3', '6'].includes(frame) : textures.includes(key),
+          key === 'art:icons' ? (iconFrames?.includes(frame) ?? false) : textures.includes(key),
       }),
     },
     anims: { exists: () => false },
@@ -81,7 +82,7 @@ function hitScene(textures: string[]) {
     },
     cameras: { main: { flash: vi.fn(), shake: vi.fn() } },
     add: {
-      sprite: vi.fn((x: number, y: number, key: string, frame?: string | number) => {
+      image: vi.fn((x: number, y: number, key: string, frame?: string | number) => {
         const sprite = effectSprite(key, true);
         sprite.x = x;
         sprite.y = y;
@@ -166,7 +167,7 @@ describe('playHit drives the cartoon puppet poses (reviewer item 3)', () => {
   });
 
   it('places hit fx and damage numbers from the fighter height, not 640x360 constants', async () => {
-    const { scene, sprites, tweens, delayed, textObjects } = hitScene([
+    const { scene, sprites, frames, tweens, delayed, textObjects } = hitScene([
       'art:hero-knight',
       'art:monster-jellyBun',
     ]);
@@ -182,6 +183,15 @@ describe('playHit drives the cartoon puppet poses (reviewer item 3)', () => {
     );
     await Promise.resolve();
     await settle(running, tweens, delayed);
+    expect(frames).toEqual([
+      { key: 'art:icons', pose: 'sword' },
+      { key: 'art:icons', pose: 'star' },
+    ]);
+    for (const image of sprites) {
+      expect(image.setDisplaySize).toHaveBeenCalledWith(48, 48);
+      expect(image.setDepth).toHaveBeenCalledWith(12);
+      expect(image.destroy).toHaveBeenCalledOnce();
+    }
     const ground = LAYOUT.left.y;
     // Round 2, reviewer item 2: hit fx must land in the fighter's UPPER half
     // (between pos.y-H and pos.y-H/2), the damage number above the head
@@ -198,6 +208,54 @@ describe('playHit drives the cartoon puppet poses (reviewer item 3)', () => {
     expect(sprites[1]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 2 + 2);
     expect(textObjects[0]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT - 36);
   });
+
+  it('fans five cartoon coins and destroys each after its tween', async () => {
+    const { scene, sprites, frames, tweens } = hitScene([]);
+    const running = playCoinBurst(scene as unknown as Phaser.Scene, LAYOUT, 'b', 1);
+    expect(frames).toEqual(Array.from({ length: 5 }, () => ({ key: 'art:icons', pose: 'coin' })));
+    expect(sprites.map(({ x, y }) => ({ x, y }))).toEqual([
+      { x: 904, y: 605 },
+      { x: 922, y: 605 },
+      { x: 940, y: 605 },
+      { x: 958, y: 605 },
+      { x: 976, y: 605 },
+    ]);
+    expect(tweens).toHaveLength(5);
+    for (const [index, tween] of tweens.entries()) {
+      expect(tween.targets).toBe(sprites[index]);
+      expect(tween.alpha).toBe(0);
+      expect(tween.duration).toBe(320);
+      (tween.onComplete as () => void)();
+    }
+    await running;
+    for (const image of sprites) {
+      expect(image.setDisplaySize).toHaveBeenCalledWith(48, 48);
+      expect(image.destroy).toHaveBeenCalledOnce();
+    }
+  });
+
+  it.each([null, []])(
+    'skips missing icon atlas or frames (%j) without stopping hit feedback',
+    async (icons) => {
+      const { scene, sprites, tweens, delayed, textObjects } = hitScene(
+        ['art:hero-knight', 'art:monster-jellyBun'],
+        icons,
+      );
+      const running = playHit(
+        scene as unknown as Phaser.Scene,
+        FIGHTERS() as never,
+        LAYOUT,
+        EVENT,
+        0,
+        'jellyBun',
+        1,
+      );
+      await settle(running, tweens, delayed);
+      await playCoinBurst(scene as unknown as Phaser.Scene, LAYOUT, 'a', 1);
+      expect(sprites).toHaveLength(0);
+      expect(textObjects).toHaveLength(1);
+    },
+  );
 
   it('skips every pose and pause at speed 0', async () => {
     const { scene, tweens, delayed } = hitScene(['art:hero-knight', 'art:monster-jellyBun']);

@@ -3,11 +3,8 @@ import type { ClassId, Region } from '@dice-bandits/engine';
 /**
  * Cartoon art manifest (plan M5a Task 5).
  *
- * Texture keys are namespaced with an `art:` prefix: the interim pixel-art
- * pipeline (`public/sprites/`, deleted in Task 11) still owns the plain keys
- * (`hero-knight`, `tiles`, `backdrop-*`, `icons`) until Tasks 6–11 rewrite
- * its consumers, so the two sets must never collide in the texture manager.
- * Scenes that render cartoon art resolve sprites exclusively through `ART`.
+ * Texture keys are namespaced with an `art:` prefix; scenes that render
+ * cartoon art resolve sprites exclusively through `ART`.
  */
 export const HERO_POSES = ['idle', 'attack', 'hurt', 'happy', 'sad', 'portrait'] as const;
 export const MONSTER_POSES = ['idle', 'attack', 'hurt'] as const;

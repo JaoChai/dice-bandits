@@ -234,7 +234,7 @@ describe('BoardScene layering', () => {
     const mapTiles = objects.filter((o) => o.depth === -10);
     const road = objects.filter((o) => o.depth === -5);
     const tiles = objects.filter((o) => o.depth === 0);
-    const tokens = objects.filter((o) => o.texture?.startsWith('token-'));
+    const tokens = objects.filter((o) => o.texture === '__WHITE');
     const rings = objects.filter((o) => o.depth >= 40 && o.kind === 'graphics');
 
     expect(mapTiles.length).toBe(15); // 5x3 painted background tiles

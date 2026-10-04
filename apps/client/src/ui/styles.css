@@ -229,14 +229,6 @@ h1 {
   background: #fffdf5;
   color: var(--t-ink);
 }
-.seat-row .portrait {
-  grid-column: 3;
-  grid-row: 2 / span 2;
-  width: 42px;
-  height: 42px;
-  object-fit: contain;
-  image-rendering: pixelated;
-}
 .error {
   min-height: 1em;
   margin: 0;
@@ -670,8 +662,9 @@ h1 {
 .pass-portrait {
   width: 72px;
   height: 72px;
-  object-fit: contain;
-  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
   margin: 0 auto;
 }
 .pass-device h2 {
@@ -1072,19 +1065,6 @@ h1 {
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
-  image-rendering: pixelated;
-}
-.portrait-knight {
-  background-image: url('/sprites/hero-knight-portrait.png');
-}
-.portrait-thief {
-  background-image: url('/sprites/hero-thief-portrait.png');
-}
-.portrait-mage {
-  background-image: url('/sprites/hero-mage-portrait.png');
-}
-.portrait-cleric {
-  background-image: url('/sprites/hero-cleric-portrait.png');
 }
 .seat-details {
   min-width: 0;
@@ -1380,16 +1360,16 @@ h1 {
   display: block;
   flex: 0 0 32px;
   width: 32px;
-  background-image: url('/sprites/cards.png');
-  background-size: 600% 100%;
-  background-position: calc(var(--card-frame) * 20%) 0;
+  height: 32px;
   background-repeat: no-repeat;
-  image-rendering: pixelated;
 }
 .card-label {
   display: block;
   width: 100%;
   font-size: 12px;
+  color: var(--c-cocoa);
+  background: var(--c-cream);
+  border-radius: 4px;
 }
 @media (max-height: 480px) and (orientation: landscape) {
   .battle-hp-card {
