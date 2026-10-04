@@ -3,6 +3,10 @@ on: { push: { branches: [main] }, pull_request: {} }
 jobs:
   checks:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        omit: [road, map]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -10,11 +14,13 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npm run e2e -- -- e2e/native-probe.spec.ts --retries=0 --trace=on
+      - run: npm run e2e -- -- e2e/full-game.spec.ts e2e/audio.spec.ts --retries=0 --trace=on
+        env:
+          VITE_PROBE_OMIT: ${{ matrix.omit }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: probe-evidence
+          name: probe-evidence-${{ matrix.omit }}
           path: |
             apps/client/playwright-report/
             apps/client/test-results/
