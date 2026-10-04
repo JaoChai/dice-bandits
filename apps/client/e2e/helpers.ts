@@ -1,5 +1,107 @@
 import { expect, type Page } from '@playwright/test';
 import type { GameState } from '@dice-bandits/engine';
+import type Phaser from 'phaser';
+
+type BoardProbeWindow = Window & { __m5aGame?: Phaser.Game };
+
+/** Test-runner-only instrumentation: retain the real Game constructed by the
+ * shipped bundle. No app hook/source change, fake camera, or geometry constants.
+ * Fail explicitly if bundling changes the unique construction seam. */
+export async function observeBoardGame(page: Page): Promise<void> {
+  await page.route('**/assets/index-*.js', async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    const construction = /new [\w.$]+\.Game\(\{/g;
+    expect(body.match(construction), 'one real Phaser Game construction').toHaveLength(1);
+    await route.fulfill({
+      response,
+      body: body.replace(construction, (match) => `window.__m5aGame=${match}`),
+    });
+  });
+}
+
+/** Actual display-object bounds projected through the live rendered matrix,
+ * then through the canvas's measured CSS scale. Wait for postrender so the
+ * camera matrix cannot lag behind a just-clicked toggle. */
+export async function renderedBoardGeometry(page: Page) {
+  return page.evaluate(async () => {
+    const game = (window as BoardProbeWindow).__m5aGame!;
+    await new Promise<void>((resolve) => game.events.once('postrender', resolve));
+    const scene = game.scene.getScene('BoardScene');
+    const camera = scene.cameras.main;
+    const canvas = game.canvas.getBoundingClientRect();
+    const project = (x: number, y: number) => {
+      const point = camera.getViewMatrix().transformPoint(x, y);
+      return {
+        x: canvas.left + (point.x / game.canvas.width) * canvas.width,
+        y: canvas.top + (point.y / game.canvas.height) * canvas.height,
+      };
+    };
+    const images = scene.children.getChildren().filter((child) => 'texture' in child) as Array<
+      Phaser.GameObjects.Image | Phaser.GameObjects.Sprite
+    >;
+    const bounds = (image: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite) => {
+      const rect = image.getBounds();
+      const corners = [
+        project(rect.left, rect.top),
+        project(rect.right, rect.top),
+        project(rect.right, rect.bottom),
+        project(rect.left, rect.bottom),
+      ];
+      const left = Math.min(...corners.map((point) => point.x));
+      const right = Math.max(...corners.map((point) => point.x));
+      const top = Math.min(...corners.map((point) => point.y));
+      const bottom = Math.max(...corners.map((point) => point.y));
+      return {
+        left,
+        right,
+        top,
+        bottom,
+        width: right - left,
+        height: bottom - top,
+        centre: project(image.x, image.y),
+        visible: image.visible && image.alpha > 0 && camera.visible,
+        world: { x: image.x, y: image.y },
+        frame: image.frame.name,
+      };
+    };
+    return {
+      zoom: camera.zoom,
+      scrollX: camera.scrollX,
+      scrollY: camera.scrollY,
+      canvas: { left: canvas.left, top: canvas.top, right: canvas.right, bottom: canvas.bottom },
+      tiles: images.filter((image) => image.texture.key === 'art:tiles').map(bounds),
+      tokens: images.filter((image) => image.texture.key.startsWith('token-')).map(bounds),
+    };
+  });
+}
+
+/** Opt-in mutation sanity checks alter REAL rendered objects/scene, never the
+ * measured result. Normal runs leave gameplay unchanged. */
+export async function mutateBoardForCoverage(
+  page: Page,
+  mutation: string | undefined,
+): Promise<void> {
+  if (!mutation) return;
+  await page.evaluate((kind) => {
+    const scene = (window as BoardProbeWindow).__m5aGame!.scene.getScene('BoardScene');
+    if (kind === 'tile-size') {
+      for (const child of scene.children.getChildren()) {
+        if ('texture' in child) {
+          const image = child as Phaser.GameObjects.Image;
+          if (image.texture.key === 'art:tiles') image.setDisplaySize(32, 32);
+        }
+      }
+    } else if (kind === 'camera-toggle') {
+      // Equivalent to removing toggleWholeMap's applyCamera call: the real
+      // handler/button/wholeMap flag still run, but the camera never moves.
+      const board = scene as Phaser.Scene & { applyCamera: (...args: unknown[]) => void };
+      board.applyCamera = () => {};
+    } else {
+      throw new Error(`Unknown coverage mutation: ${kind}`);
+    }
+  }, mutation);
+}
 
 /** Every rendered box in the selection must remain inside its containing box. */
 export async function assertInside(
