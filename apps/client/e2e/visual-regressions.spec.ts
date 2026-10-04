@@ -72,6 +72,44 @@ for (const [region, seed] of [
   });
 }
 
+test('snow battle survives atlas loading and renders without a page error', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  let releaseAtlas!: () => void;
+  const atlasGate = new Promise<void>((resolve) => {
+    releaseAtlas = resolve;
+  });
+  let atlasRequested = false;
+  let atlasReleased = false;
+  await page.route('**/art/hero-knight.json', async (route) => {
+    atlasRequested = true;
+    await atlasGate;
+    atlasReleased = true;
+    await route.continue();
+  });
+  await page.goto('/?seed=snow-7&speed=0', { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-action="new"]').click();
+  for (let seat = 1; seat < 4; seat++)
+    await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
+  await page.locator('#setup-form button[type="submit"]').click();
+  try {
+    await expect.poll(() => atlasRequested, 'the cartoon atlas gate is hit').toBe(true);
+    await playUntil(page, (state) => {
+      if (state.phase.kind !== 'battle') return false;
+      const spaceId = state.phase.battle.spaceId;
+      return state.board.spaces.find((space) => space.id === spaceId)?.region === 'snow';
+    });
+    await expect(page.locator('.battle-panel')).toBeVisible();
+    expect(atlasReleased, 'atlas still held while the snow battle opens').toBe(false);
+  } finally {
+    releaseAtlas();
+  }
+  await waitForBattleArt(page);
+  expect(await page.evaluate(() => window.__db!.art.backdropKey)).toBe('art:backdrop-snow');
+  expect(errors, 'snow battle must survive a delayed cartoon atlas').toEqual([]);
+});
+
 /** Legacy interim pixel-pipeline texture keys that must no longer exist. */
 const LEGACY_KEY_PATTERN =
   /^(hero|token|portrait|monster|ground|props|ambient|backdrop)-|^tile-(meadow|desert|snow|volcano)$|^(tiles|fx|cards|icons)$|-atlas-image$/;
