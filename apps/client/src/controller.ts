@@ -44,6 +44,16 @@ export class GameController {
   }
 
   async dispatch(action: Action): Promise<void> {
+    const probeStart = performance.now();
+    console.log(
+      'PROBE dispatch',
+      JSON.stringify({
+        action,
+        round: this.currentState.round,
+        seat: this.currentState.turnSeat,
+        phase: this.currentState.phase.kind,
+      }),
+    );
     // The HUD may expose the next action before the current animation finishes.
     // Never let a second state update tear down its scene/tween mid-await.
     if (this.dispatching) return;
@@ -62,6 +72,15 @@ export class GameController {
       await this.runBotsIfNeeded();
     } finally {
       this.dispatching = false;
+      console.log(
+        'PROBE dispatch-done',
+        JSON.stringify({
+          ms: performance.now() - probeStart,
+          round: this.currentState.round,
+          seat: this.currentState.turnSeat,
+          phase: this.currentState.phase.kind,
+        }),
+      );
     }
   }
 
@@ -114,11 +133,21 @@ export class GameController {
   }
 
   private async dispatchBotAction(seat: number): Promise<void> {
+    const probeStart = performance.now();
     try {
       const result = step(this.currentState, chooseAction(this.currentState, seat));
       this.currentState = jsonState(result.state);
       saveGame(this.currentState);
       await this.onEvents(result.events, this.currentState);
+      console.log(
+        'PROBE bot-done',
+        JSON.stringify({
+          ms: performance.now() - probeStart,
+          round: this.currentState.round,
+          seat,
+          phase: this.currentState.phase.kind,
+        }),
+      );
     } catch (error) {
       console.error(error);
       saveGame(this.currentState);
