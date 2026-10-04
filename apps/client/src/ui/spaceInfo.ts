@@ -48,12 +48,20 @@ export function openSpaceInfo(root: HTMLElement, state: GameState, spaceId: numb
       close();
     }
   };
+  // Capture before Phaser's target handler: blank-map taps dismiss, while a
+  // different tile can open its own popup in the same pointer sequence. Do not
+  // consume the event — fork arrows and other underlying controls stay usable.
+  const onOutside = (event: PointerEvent): void => {
+    if (event.target instanceof Node && !popup.contains(event.target)) close();
+  };
   const close = (): void => {
     shade.remove();
+    document.removeEventListener('pointerdown', onOutside, true);
     document.removeEventListener('keydown', onKey, true);
     if (activeClose === close) activeClose = null;
   };
   activeClose = close;
+  document.addEventListener('pointerdown', onOutside, true);
   document.addEventListener('keydown', onKey, true);
 
   shade.addEventListener('click', (event) => {
