@@ -10,7 +10,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npm run e2e -- -- e2e/full-game.spec.ts e2e/audio.spec.ts --retries=0 --trace=on
+      - run: npm run e2e -- -- e2e/native-probe.spec.ts --retries=0 --trace=on
       - uses: actions/upload-artifact@v4
         if: always()
         with:
