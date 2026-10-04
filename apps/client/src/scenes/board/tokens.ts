@@ -1,11 +1,15 @@
 import type Phaser from 'phaser';
-import { hasAnim, sheetKey } from '../../art/atlas';
+import { ART } from '../../art/manifest';
 
-/**
- * Above every board layer (painted map -10, road -5, tiles 0, buildings -2);
- * only selection rings (40+) draw over tokens.
- */
-const TOKEN_DEPTH = 30;
+/** Above every board layer (painted map -10, road -5, tiles 0, buildings -2);
+ * only selection rings (40+) draw over tokens. */
+export const TOKEN_DEPTH = 30;
+
+/** Board token target height in map pixels (card T11b). */
+const TOKEN_HEIGHT = 72;
+
+/** Flat-shape fallback per Global Constraints: palette grey square. */
+const FALLBACK_TINT = 0x8e8e93;
 
 export function tokenOffsets(countAtSpace: number): { x: number; y: number }[] {
   if (countAtSpace <= 0) return [];
@@ -35,19 +39,33 @@ export function tokenLayout(positions: number[]): { x: number; y: number }[] {
   });
 }
 
+/**
+ * Hero token as the cartoon art: the class atlas' `idle` pose, feet anchored
+ * on the space, 72 map px tall with the frame's aspect ratio. Missing art
+ * degrades to the flat grey shape (Global Constraints) with the standard
+ * `[art] fallback` warn — never a crash.
+ */
 export function createHeroToken(
   scene: Phaser.Scene,
   classId: string,
   x: number,
   y: number,
-  playIdle = true,
-): Phaser.GameObjects.Image | Phaser.GameObjects.Sprite {
-  const key = sheetKey('token', classId);
-  if (!hasAnim(scene, key, 'idle')) {
-    return scene.add.image(x, y, `hero-${classId}`).setDisplaySize(14, 14).setDepth(TOKEN_DEPTH);
+): Phaser.GameObjects.Image {
+  const key = ART.heroes[classId as keyof typeof ART.heroes] ?? '';
+  if (key && scene.textures.exists(key) && scene.textures.get(key).has('idle')) {
+    const frame = scene.textures.get(key).get('idle');
+    const height = frame.height || TOKEN_HEIGHT;
+    const width = Math.round((frame.width / height) * TOKEN_HEIGHT);
+    return scene.add
+      .image(x, y, key, 'idle')
+      .setOrigin(0.5, 1)
+      .setDisplaySize(width, TOKEN_HEIGHT)
+      .setDepth(TOKEN_DEPTH);
   }
-
-  const sprite = scene.add.sprite(x, y, key).setOrigin(0.5, 1).setDepth(TOKEN_DEPTH);
-  if (playIdle) sprite.play(`${key}:idle`);
-  return sprite;
+  console.warn('[art] fallback', key);
+  return scene.add
+    .image(x, y, '__WHITE')
+    .setDisplaySize(28, 28)
+    .setTint(FALLBACK_TINT)
+    .setDepth(TOKEN_DEPTH);
 }
