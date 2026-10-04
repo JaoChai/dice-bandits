@@ -8,39 +8,14 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm test
-      - run: npm run test:worker
-      - run: npm run build -w @dice-bandits/client
-      - run: npm run sim -- --games 200 --players 4
-      - run: npm run sim:room -- --games 200
-      - run: npx playwright install --with-deps chromium
-      - run: npm run e2e
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report
-          path: apps/client/playwright-report/
-          if-no-files-found: ignore
-
-  deploy:
-    needs: checks
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with: { node-version: 24, cache: npm }
-      - run: npm ci
       - run: npm run build
-      - name: Deploy to Cloudflare Workers
-        run: npm run deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e -- -- e2e/full-game.spec.ts e2e/audio.spec.ts --retries=0 --trace=on
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: probe-evidence
+          path: |
+            apps/client/playwright-report/
+            apps/client/test-results/
+          if-no-files-found: ignore

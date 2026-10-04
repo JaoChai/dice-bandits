@@ -81,6 +81,9 @@ export async function playUntil(
 }
 
 export async function startTestGame(page: Page, speed = 0): Promise<void> {
+  page.on('console', (message) => {
+    if (message.text().startsWith('PROBE')) console.log(message.text());
+  });
   await page.goto(`/?seed=e2e-1&speed=${speed}`);
   await page.locator('[data-action="new"]').click();
   for (let seat = 1; seat < 4; seat += 1) {
@@ -112,15 +115,35 @@ const ACTION_SELECTORS = [
  * At speed=0 the tray is populated synchronously and the wait never engages.
  */
 export async function playOneStep(page: Page): Promise<void> {
+  const started = Date.now();
+  const before = await page.evaluate(() => {
+    const s = window.__db.getState();
+    return { round: s.round, seat: s.turnSeat, phase: s.phase.kind };
+  });
   const deadline = Date.now() + 15_000;
   for (;;) {
     for (const selector of ACTION_SELECTORS) {
       const button = page.locator(selector).first();
-      if (await button.count()) {
+      const counted = Date.now();
+      const count = await button.count();
+      console.log('PROBE count', JSON.stringify({ selector, count, ms: Date.now() - counted }));
+      if (count) {
         try {
+          const clicked = Date.now();
           await button.click({ timeout: 5_000 });
+          console.log(
+            'PROBE action',
+            JSON.stringify({
+              before,
+              selector,
+              clickMs: Date.now() - clicked,
+              stepMs: Date.now() - started,
+              wall: Date.now(),
+            }),
+          );
           return;
-        } catch {
+        } catch (error) {
+          console.log('PROBE click-error', String(error));
           break; // state changed mid-click (overlay closed/moved); re-poll
         }
       }
