@@ -54,28 +54,34 @@ const HERO_SHEET = { w: 1920, h: 300 } as const;
 const ICON_SHEET = { w: 512, h: 512 } as const;
 
 /**
- * Inline CSS that shows `frame` of `/art/<image>` fitted into a square box of
- * `boxPx`: the whole sheet is scaled so the frame fills the box, then shifted
- * so the frame lands on the box origin. Pair with
- * `background-repeat: no-repeat` (styles.css) — the rest of the sheet is
- * cropped by the box.
+ * Inline CSS that shows `frame` of `/art/<image>` fitted into whatever square
+ * box its element has. `background-size` scales the sheet so the frame's
+ * larger side fills 100% of the box; `background-position` shifts the sheet so
+ * the frame sits centred in it. Both are percentages of the element, so ONE
+ * inline style is correct for every CSS size the element gets — the 40px
+ * corner/setup portraits, the 32px ≤700px variant, the 72px pass screen and
+ * any future media query (a px crop is pinned to one box size and clips the
+ * rest). The centred window also keeps neighbouring frames of the sheet out
+ * of the crop. Pair with `background-repeat: no-repeat` (styles.css) — the
+ * rest of the sheet is cropped by the box.
  */
 export function artBackground(
   image: string,
   frame: ArtFrame,
   sheetW: number,
   sheetH: number,
-  boxPx: number,
+  // Kept for signature stability with the existing callers (hud/screens/
+  // battleUi); the percentage output below is box-independent and ignores it.
+  _boxPx: number,
 ): string {
-  const scale = boxPx / Math.max(frame.w, frame.h);
-  const width = Math.round(sheetW * scale);
-  const height = Math.round(sheetH * scale);
-  const left = Math.round(frame.x * scale);
-  const top = Math.round(frame.y * scale);
+  const fmax = Math.max(frame.w, frame.h);
+  const padX = (fmax - frame.w) / 2;
+  const padY = (fmax - frame.h) / 2;
+  const pct = (value: number): number => Math.round(value * 1000) / 1000;
   return (
     `background-image:url('/art/${image}.webp');` +
-    `background-size:${width}px ${height}px;` +
-    `background-position:${-left}px ${-top}px`
+    `background-size:${pct((sheetW / fmax) * 100)}% ${pct((sheetH / fmax) * 100)}%;` +
+    `background-position:${pct(((frame.x - padX) / (sheetW - fmax)) * 100)}% ${pct(((frame.y - padY) / (sheetH - fmax)) * 100)}%`
   );
 }
 
