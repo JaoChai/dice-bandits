@@ -905,10 +905,16 @@ describe('battle art atlases', () => {
       expect(info.width, name).toBe(640);
       expect(info.height, name).toBe(360);
       const colours = new Set<string>();
+      let nonOpaque = 0;
+      let firstAt = -1;
       for (let i = 0; i < data.length; i += info.channels) {
-        expect(data[i + 3], name).toBe(255);
+        if (data[i + 3] !== 255) {
+          nonOpaque++;
+          if (firstAt === -1) firstAt = i / info.channels;
+        }
         colours.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
       }
+      expect({ nonOpaque, firstAt }, name).toEqual({ nonOpaque: 0, firstAt: -1 });
       expect(colours.size, `${name}: degenerate backdrop`).toBeGreaterThanOrEqual(8);
     }
   });
