@@ -1367,6 +1367,9 @@ h1 {
   display: block;
   width: 100%;
   font-size: 12px;
+  color: var(--c-cocoa);
+  background: var(--c-cream);
+  border-radius: 4px;
 }
 @media (max-height: 480px) and (orientation: landscape) {
   .battle-hp-card {
