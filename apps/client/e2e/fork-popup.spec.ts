@@ -23,7 +23,9 @@ async function continueSave(page: Page, state: GameState): Promise<void> {
   await page.goto('/?speed=0&seed=rf3-fork-19');
   await page.locator('[data-action="continue"]').click();
   await expect(page.locator('[data-testid="screen-board"] canvas')).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.__db?.art.boardReady)).toBe(true);
+  // Canvas mounts before Boot finishes loading art; use the same scene-ready
+  // wait as renderer.spec.ts rather than the shorter DOM assertion poll.
+  await page.waitForFunction(() => window.__db?.art.boardReady);
   await expect.poll(() => page.evaluate(() => window.__db?.getState().players[0]?.pos)).toBe(19);
 }
 
