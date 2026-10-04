@@ -97,6 +97,7 @@ function makeScene() {
     wholeMap: false,
     ringTween: null,
     children: { removeAll: vi.fn() },
+    events: { once: vi.fn() },
     cameras: {
       main: {
         setScroll: vi.fn(),
@@ -181,10 +182,50 @@ function gameFor(seed: string): GameState {
 
 beforeEach(() => {
   vi.mocked(reducedMotion).mockReturnValue(false);
+  document.querySelectorAll('[data-testid^="fork-arrow-"]').forEach((marker) => marker.remove());
   delete (window as { __phaser_probe__?: unknown }).__phaser_probe__;
 });
 
 describe('BoardScene layering', () => {
+  it('draws arrows when rolling from a fork without moving the player', () => {
+    const { scene } = makeScene();
+    const state = gameFor('fork-start');
+    state.players[0]!.pos = 19;
+    scene.renderBoard(state);
+    scene.renderBoard({
+      ...state,
+      phase: { kind: 'chooseBranch', remaining: 1, options: [20, 37] },
+    });
+    expect(document.querySelector('[data-testid="fork-arrow-20"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="fork-arrow-37"]')).not.toBeNull();
+  });
+
+  it('replaces arrows when branch options change without a position change', () => {
+    const { scene } = makeScene();
+    const state = gameFor('fork-options');
+    state.players[0]!.pos = 19;
+    scene.renderBoard({
+      ...state,
+      phase: { kind: 'chooseBranch', remaining: 1, options: [20, 37] },
+    });
+    scene.renderBoard({ ...state, phase: { kind: 'chooseBranch', remaining: 1, options: [37] } });
+    expect(document.querySelector('[data-testid="fork-arrow-20"]')).toBeNull();
+    expect(document.querySelectorAll('[data-testid="fork-arrow-37"]')).toHaveLength(1);
+  });
+
+  it('removes branch controls after movement leaves chooseBranch', () => {
+    const { scene } = makeScene();
+    const state = gameFor('fork-leave');
+    state.players[0]!.pos = 19;
+    scene.renderBoard({
+      ...state,
+      phase: { kind: 'chooseBranch', remaining: 1, options: [20, 37] },
+    });
+    state.players[0]!.pos = 37;
+    scene.renderBoard(state);
+    expect(document.querySelectorAll('[data-testid^="fork-arrow-"]')).toHaveLength(0);
+  });
+
   it('renders painted map below road below tiles below tokens', () => {
     const { scene, objects } = makeScene();
     const state = gameFor('a');

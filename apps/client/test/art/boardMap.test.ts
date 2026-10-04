@@ -185,11 +185,32 @@ describe('Review Focus 3: popup leaves fork arrows live', () => {
     state.phase = { kind: 'chooseBranch', remaining: 2, options: [...fork.next] };
 
     document.body.innerHTML = '';
+    const frameHandlers = new Set<() => void>();
     const scene = {
       game: {
-        canvas: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }) },
+        canvas: {
+          width: 3200,
+          height: 1800,
+          getBoundingClientRect: () => ({
+            left: 100,
+            top: 20,
+            right: 1380,
+            bottom: 740,
+            width: 1280,
+            height: 720,
+          }),
+        },
+        events: {
+          on: (_event: string, handler: () => void) => frameHandlers.add(handler),
+          off: (_event: string, handler: () => void) => frameHandlers.delete(handler),
+        },
       },
-      cameras: { main: { scrollX: 0, scrollY: 0, zoom: 1, width: 1280, height: 720 } },
+      cameras: {
+        main: {
+          visible: true,
+          matrixCombined: { transformPoint: (x: number, y: number) => ({ x, y }) },
+        },
+      },
       add: {
         graphics: vi.fn(() => {
           const proxy = new Proxy(
@@ -216,17 +237,32 @@ describe('Review Focus 3: popup leaves fork arrows live', () => {
     drawForkArrows(scene as never, state, vi.fn());
 
     const markers = [...document.querySelectorAll('[data-testid^="fork-arrow-"]')];
+    frameHandlers.forEach((handler) => handler());
     expect(markers).toHaveLength(state.phase.options.length);
     for (const to of state.phase.options)
       expect(markers.map((marker) => marker.getAttribute('data-testid'))).toContain(
         `fork-arrow-${to}`,
       );
 
+    for (const to of state.phase.options) {
+      const destination = state.board.spaces.find((space) => space.id === to)!;
+      const marker = document.querySelector<HTMLButtonElement>(`[data-testid="fork-arrow-${to}"]`)!;
+      expect(parseFloat(marker.style.left)).toBeCloseTo(
+        100 + ((fork.x + destination.x) / 2) * (1280 / 3200),
+      );
+      expect(parseFloat(marker.style.top)).toBeCloseTo(
+        20 + ((fork.y + destination.y) / 2) * (720 / 1800),
+      );
+    }
     // Redrawing removes the previous markers (no pile-up across renders).
     drawForkArrows(scene as never, state, vi.fn());
     expect(document.querySelectorAll('[data-testid^="fork-arrow-"]')).toHaveLength(
       state.phase.options.length,
     );
+    expect(frameHandlers.size).toBe(state.phase.options.length);
+    drawForkArrows(scene as never, { ...state, phase: { kind: 'awaitRoll' } }, vi.fn());
+    expect(document.querySelectorAll('[data-testid^="fork-arrow-"]')).toHaveLength(0);
+    expect(frameHandlers.size).toBe(0);
   });
 });
 
@@ -237,11 +273,6 @@ describe('Review Focus 4: duplicate classes keep distinct colours', () => {
     expect(new Set(colors).size).toBe(4);
     const tints = colors.map(seatTint);
     expect(new Set(tints).size).toBe(4);
-    // Flag palette matches the seat palette ordering for the owner pip.
-    const { seatFlagColors } = (await import('../../src/scenes/board/tiles')) as unknown as {
-      seatFlagColors?: number[];
-    };
-    void seatFlagColors;
   });
 });
 

@@ -1353,6 +1353,24 @@ h1 {
   pointer-events: none;
 }
 
+.fork-arrow-mirror {
+  position: fixed;
+  z-index: 31;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.fork-arrow-mirror:focus-visible {
+  outline: 3px solid #f5c51c;
+  border-radius: 8px;
+}
+
 .space-info {
   position: relative;
   width: min(320px, 86vw);

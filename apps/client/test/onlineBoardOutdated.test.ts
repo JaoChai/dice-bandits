@@ -30,6 +30,7 @@ vi.mock('../src/scenes/BattleScene', () => ({ default: class BattleScene {} }));
 
 import type { OnlineSocket } from '../src/online/screens';
 import { default as BoardScene } from '../src/scenes/BoardScene';
+import { closeSpaceInfo, openSpaceInfo } from '../src/ui/spaceInfo';
 
 let startOnlineGame: typeof import('../src/main').startOnlineGame;
 
@@ -175,6 +176,8 @@ function realSceneOn(gameMock: {
 }
 
 beforeEach(async () => {
+  closeSpaceInfo();
+  document.querySelectorAll('[data-testid^="fork-arrow-"]').forEach((marker) => marker.remove());
   if (!document.querySelector('#app')) document.body.innerHTML = '<div id="app"></div>';
   document.querySelector<HTMLElement>('#app')!.innerHTML = '';
   ({ startOnlineGame } = await import('../src/main'));
@@ -188,6 +191,43 @@ beforeEach(async () => {
 });
 
 describe('startOnlineGame boardOutdated flow', () => {
+  it.each(['exit', 'gameOver', 'boardOutdated'] as const)(
+    'removes body-owned popup, key listener and fork markers on %s',
+    async (path) => {
+      const socket = new FakeSocket();
+      startOnlineGame(socket, { code: 'VALID', seat: 0, token: 'token', name: 'Ada' }, makeView());
+      await vi.waitFor(() => expect(fakeGame).toHaveBeenCalled());
+      const mounted = fakeGame.mock.results.at(-1)!.value;
+      openSpaceInfo(document.body, game, 19);
+      const marker = document.createElement('button');
+      marker.dataset.testid = 'fork-arrow-37';
+      document.body.append(marker);
+      if (path === 'exit') {
+        document.querySelector<HTMLButtonElement>('[data-action="exit"]')!.click();
+      } else if (path === 'gameOver') {
+        const state = structuredClone(game);
+        state.phase = { kind: 'gameOver', ranking: [0, 1], winners: [0], highlights: [] };
+        socket.receive(makeView({ state }));
+        await vi.waitFor(() =>
+          expect(document.querySelector('[data-testid="results"]')).not.toBeNull(),
+        );
+      } else {
+        const onOutdated = mounted.registry.set.mock.calls.find(
+          ([key]: [string]) => key === 'onBoardOutdated',
+        )[1];
+        onOutdated();
+      }
+      expect(document.querySelector('[data-testid="space-info"]')).toBeNull();
+      expect(document.querySelector('[data-testid^="fork-arrow-"]')).toBeNull();
+      // A leaked capture handler consumes Escape before other screens see it.
+      const onEscape = vi.fn();
+      document.addEventListener('keydown', onEscape);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.removeEventListener('keydown', onEscape);
+      expect(onEscape).toHaveBeenCalledOnce();
+    },
+  );
+
   it('shows error.boardOutdated and returns to title for a board from another map', async () => {
     const { setLang } = await import('../src/i18n');
     const { loadSession } = await import('../src/online/session');

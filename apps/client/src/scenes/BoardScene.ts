@@ -10,7 +10,7 @@ import { drawTiles } from './board/tiles';
 import { drawBuildings } from './board/buildings';
 import { cameraTarget, gameplayZoom } from './board/camera';
 import { drawMapLayer, roadSegments, validate } from './board/mapLayer';
-import { drawForkArrows } from './board/forkArrows';
+import { clearForkArrows, drawForkArrows } from './board/forkArrows';
 import { drawAmbients } from './board/ambient';
 import { bindSpaceTaps } from './board/spaceTaps';
 import { closeSpaceInfo } from '../ui/spaceInfo';
@@ -36,7 +36,13 @@ export default class BoardScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.setScroll(0, 0);
-    this.game.events.on('game-state', (state: GameState) => this.renderBoard(state));
+    const onState = (state: GameState): void => this.renderBoard(state);
+    this.game.events.on('game-state', onState);
+    this.events.once('shutdown', () => {
+      this.game.events.off('game-state', onState);
+      clearForkArrows(this);
+      closeSpaceInfo();
+    });
     const initial = this.game.registry.get('state') as GameState | undefined;
     if (initial) {
       this.renderBoard(initial);
@@ -170,11 +176,13 @@ export default class BoardScene extends Phaser.Scene {
     const signature = JSON.stringify([
       state.config.seed,
       state.turnSeat,
+      state.phase.kind === 'chooseBranch' ? state.phase.options : null,
       state.towns.map((town) => [town.spaceId, town.owner, town.value]),
       state.players.map((player) => [player.pos, player.classId, !!player.prank]),
     ]);
     if (signature === this.renderSignature) return;
     this.renderSignature = signature;
+    clearForkArrows(this);
     this.children.removeAll(true);
     this.tokenObjects.clear();
     this.spacePositions.clear();

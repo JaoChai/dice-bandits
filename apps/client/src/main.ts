@@ -25,10 +25,20 @@ import { renderHud } from './ui/hud';
 import { renderEventToast } from './ui/dialogs';
 import { renderResults } from './ui/results';
 import { shake } from './fx';
+import { clearForkArrows } from './scenes/board/forkArrows';
+import { closeSpaceInfo } from './ui/spaceInfo';
 
 const app = getMount();
 initAudio();
 let game: Phaser.Game | null = null;
+
+/** Phaser destroy is deferred; remove body-owned board UI synchronously. */
+function destroyGame(): void {
+  closeSpaceInfo();
+  clearForkArrows();
+  game?.destroy(true);
+  game = null;
+}
 
 /** Test-only probe: exercise the real board shake at the configured speed. */
 function createArtProbe() {
@@ -80,8 +90,7 @@ export function startOnlineGame(
   session: RoomSession,
   firstView: Extract<ServerMsg, { type: 'view' }>,
 ): void {
-  game?.destroy(true);
-  game = null;
+  destroyGame();
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
 
@@ -92,8 +101,7 @@ export function startOnlineGame(
     });
   };
   const showOnlineError = (key: string): void => {
-    game?.destroy(true);
-    game = null;
+    destroyGame();
     app.innerHTML = `<main class="screen online-screen" data-testid="screen-online-error"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button></header><p class="error" role="alert" data-testid="online-error">${escapeHtml(t(key))}</p></main>`;
     app.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', () => {
       history.pushState(null, '', '/');
@@ -101,8 +109,7 @@ export function startOnlineGame(
     });
   };
   const showOnlineResults = (state: GameState): void => {
-    game?.destroy(true);
-    game = null;
+    destroyGame();
     setMusic('board');
     renderResults(
       app,
@@ -212,8 +219,7 @@ export function startOnlineGame(
     });
     bindMapToggle(app, game, () => controller.state);
     app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {
-      game?.destroy(true);
-      game = null;
+      destroyGame();
       history.pushState(null, '', '/');
       showTitle(startSetup);
     });
@@ -275,13 +281,13 @@ function startSetup(): void {
 }
 
 function startGame(state: GameState): void {
+  destroyGame();
   if (state.phase.kind === 'gameOver') {
     setMusic('board');
     renderResults(app, state, startSetup, () => showTitle(startSetup));
     return;
   }
   setMusic(musicForState(state));
-  game?.destroy(true);
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
   const controller = new GameController({
@@ -316,8 +322,7 @@ function startGame(state: GameState): void {
         },
       );
       if (nextState.phase.kind === 'gameOver') {
-        game?.destroy(true);
-        game = null;
+        destroyGame();
         setMusic('board');
         renderResults(app, nextState, startSetup, () => {
           showTitle(startSetup);
@@ -337,14 +342,12 @@ function startGame(state: GameState): void {
   game.registry.set('state', state);
   window.diceBanditsMapWhole = false;
   game.registry.set('onBoardOutdated', (): void => {
-    game?.destroy(true);
-    game = null;
+    destroyGame();
     showOnlineErrorScreen('error.boardOutdated');
   });
   bindMapToggle(app, game, () => controller.state);
   app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {
-    game?.destroy(true);
-    game = null;
+    destroyGame();
     showTitle(startSetup);
   });
   if (import.meta.env.VITE_TEST_HOOKS === '1') {
