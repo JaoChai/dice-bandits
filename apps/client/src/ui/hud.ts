@@ -98,7 +98,7 @@ export function renderHud(
   // Menu (re)mount is idempotent; every render re-arms it so the panel exists
   // whether the shell was just created or is being updated in place.
   const menuSlot = root.querySelector<HTMLElement>('.menu-slot');
-  if (menuSlot) renderMenu(menuSlot, { onExit: menuExit(shell, root) });
+  if (menuSlot) renderMenu(menuSlot, { onExit: menuExit(shell) });
   if (!hudLanguageListeners.has(shell)) {
     hudLanguageListeners.add(shell);
     shell.addEventListener('keydown', (event) => {
@@ -123,19 +123,9 @@ export function renderHud(
       setLang(langButton.dataset.lang as 'th' | 'en');
       renderHud(root, context.state, context.dispatch, context.options);
     });
-    // Sound-settings request bubbles out of the menu panel; the main flow
-    // (main.ts) owns the dialog and listens on the mount.
-    shell.addEventListener('dice-bandits:sound-settings', () => {
-      root.dispatchEvent(
-        new CustomEvent('dice-bandits:sound-settings', { bubbles: true, composed: true }),
-      );
-    });
-    // Board menu exit: same event the header's old exit button dispatched via main.ts.
-    shell.addEventListener('dice-bandits:menu-exit', () => {
-      root.dispatchEvent(
-        new CustomEvent('dice-bandits:menu-exit', { bubbles: true, composed: true }),
-      );
-    });
+    // (The menu's sound-settings and exit events bubble straight out of the
+    // shell to document; main.ts listens there. No re-dispatch here — a shell
+    // listener that forwards to root duplicates the event: exit ran 3x/click.)
     // World-rule chip: tap-to-explain popup (spec §9); Escape closes it.
     shell.addEventListener('click', (event) => {
       const target = event.target;
@@ -183,7 +173,9 @@ export function renderHud(
     turnRibbon.setAttribute('role', 'status');
     root.querySelector('.game-shell')!.append(turnRibbon);
   }
-  turnRibbon.textContent = t('board.round', { round: state.round, total: state.config.rounds });
+  turnRibbon.textContent = t('turn.ribbon', {
+    name: state.players[state.turnSeat]?.name ?? '',
+  });
   turnRibbon.classList.toggle('visible', true);
   const mapToggle = root.querySelector<HTMLButtonElement>('[data-testid="map-toggle"]');
   if (mapToggle) {
@@ -244,9 +236,9 @@ function playerCard(state: GameState, player: Player, seats?: PublicSeat[]): str
   const towns = state.towns.filter((town) => town.owner === player.seat).length;
   const name = player.prank?.alias ?? player.name;
   const cards = player.banditCards.map((card) => t(`card.${card}`)).join(' · ');
-  const compactCards = player.banditCards.length
-    ? `<small class="seat-status" title="${escapeHtml(cards)}" aria-label="${escapeHtml(cards)}">${player.banditCards.length} 🃏</small>`
-    : '';
+  // Card count renders for every seat, including 0 — spec §9 wants the same
+  // field set on all four corner cards.
+  const compactCards = `<small class="seat-status" data-testid="seat-cards-${player.seat}" title="${escapeHtml(cards)}" aria-label="${escapeHtml(cards)}">${player.banditCards.length} 🃏</small>`;
   const takeoverBadge =
     seats?.find((seat) => seat.seat === player.seat)?.controller === 'botTakeover'
       ? `<small class="seat-status" data-testid="seat-takeover-${player.seat}">${t('online.takeover')}</small>`
@@ -318,13 +310,15 @@ function escapeHtml(value: string): string {
   );
 }
 
-/** Menu exit → bubbling event; main.ts owns the actual leave-the-game flow. */
-function menuExit(shell: HTMLElement, root: HTMLElement): () => void {
+/**
+ * Menu exit → bubbling event; main.ts owns the actual leave-the-game flow.
+ * Dispatch ONLY on the shell: it already bubbles to root (#app), so an extra
+ * root dispatch (and the shell-level re-dispatch listener) delivered the same
+ * event three times per click — three history entries per exit.
+ */
+function menuExit(shell: HTMLElement): () => void {
   return () => {
     shell.dispatchEvent(
-      new CustomEvent('dice-bandits:menu-exit', { bubbles: true, composed: true }),
-    );
-    root.dispatchEvent(
       new CustomEvent('dice-bandits:menu-exit', { bubbles: true, composed: true }),
     );
   };

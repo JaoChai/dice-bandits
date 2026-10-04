@@ -214,4 +214,56 @@ describe('cartoon re-skin', () => {
     showSetup(vi.fn());
     expect(document.querySelector('.screen.setup-screen.card')).not.toBeNull();
   });
+
+  it('styles.css defines the .card cartoon surface from the theme tokens', () => {
+    const css = readFileSync('src/ui/styles.css', 'utf8');
+    expect(new RegExp('\\.card\\s*\\{[^}]*var\\(--t-panel', 's').test(css)).toBe(true);
+    expect(new RegExp('\\.card\\s*\\{[^}]*var\\(--t-outline', 's').test(css)).toBe(true);
+  });
+
+  it('styles.css uses the cream/cocoa surfaces instead of the old dark palette', () => {
+    const css = readFileSync('src/ui/styles.css', 'utf8');
+    // The old pixel-era navy/purple surfaces must be gone from the shared
+    // chrome (screens, dialogs, buttons); token vars or palette hex only.
+    for (const oldSurface of ['#302039', '#171324', '#201a30', '#1b2140', '#292238']) {
+      expect(css, `old dark surface ${oldSurface} must not remain in styles.css`).not.toContain(
+        oldSurface,
+      );
+    }
+  });
+
+  it('body is cream (theme.css wins, no dark radial gradient in styles.css)', () => {
+    const stylesCss = readFileSync('src/ui/styles.css', 'utf8');
+    expect(stylesCss).not.toContain('radial-gradient');
+    const themeCss = readFileSync('src/ui/theme.css', 'utf8');
+    expect(themeCss).toContain('body');
+  });
+
+  it('title art fills the screen: background-size cover + center position', () => {
+    const css = readFileSync('src/ui/styles.css', 'utf8');
+    const block = /\.title-screen\s*\{[^}]*\}/.exec(css);
+    expect(block).not.toBeNull();
+    expect(block![0]).toContain('background-size: cover');
+    expect(block![0]).toContain('background-position: center');
+  });
+
+  it('buttons have normal/pressed/disabled cartoon states from the tokens', () => {
+    const css = readFileSync('src/ui/styles.css', 'utf8');
+    // Chunky rounded buttons: base state + :hover/:active (pressed) + :disabled.
+    const primary = /\.primary\s*,\s*\.secondary\s*\{[^}]*\}/.exec(css);
+    expect(primary).not.toBeNull();
+    expect(primary![0]).toContain('var(--c-orange)');
+    expect(css).toMatch(/\.primary:active\s*,\s*\.secondary:active\s*\{/);
+    expect(css).toMatch(/\.primary:disabled\s*,\s*\.secondary:disabled\s*\{/);
+  });
+
+  it('seat HP bar is a heart track and gold uses the coin pill tokens', () => {
+    const css = readFileSync('src/ui/styles.css', 'utf8');
+    const hp = /(\.hp-track\s*\{[^}]*\})[\s\S]*?(\.hp-track span\s*\{[^}]*\})/.exec(css);
+    expect(hp).not.toBeNull();
+    expect(hp![2]).toContain('var(--c-green)');
+    const pill = /\.gold-pill\s*\{[^}]*\}/.exec(css);
+    expect(pill, 'coin pill style exists').not.toBeNull();
+    expect(pill![0]).toContain('var(--c-gold)');
+  });
 });

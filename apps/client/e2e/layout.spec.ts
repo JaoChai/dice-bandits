@@ -220,3 +220,25 @@ test('four-player hot-seat HUD controls fit without overlap at readable sizes', 
     });
   }
 });
+
+test('world-rule chip opens the tap-to-explain popup and Escape closes it', async ({
+  page,
+}) => {
+  await page.goto('/?seed=e2e-layout&speed=0');
+  await page.locator('[data-action="new"]').click();
+  for (let seat = 1; seat < 4; seat += 1) {
+    await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('human');
+  }
+  await page.locator('#setup-form button[type="submit"]').click();
+  await expect(page.locator('[data-testid="screen-board"]')).toBeVisible();
+  const chip = page.locator('[data-testid="world-chip"]');
+  await expect(chip).toBeVisible();
+  // Popup is not mounted until the chip is tapped (spec §9 tap-to-explain).
+  await expect(page.locator('[data-testid="world-info"]')).toHaveCount(0);
+  await chip.click();
+  const popup = page.locator('[data-testid="world-info"]');
+  await expect(popup).toBeVisible();
+  await expect(popup.locator('button[data-testid="world-info-close"]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-testid="world-info"]')).toHaveCount(0);
+});

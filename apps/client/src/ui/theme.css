@@ -15,27 +15,33 @@
   --c-cream: #f5eedc;
   --c-cocoa: #5c3317;
 
-  /* Mapped surfaces for the existing style rules (dark-on-cream cartoon). */
+  /* Mapped surfaces for the existing style rules (light cartoon, cocoa ink). */
   --t-bg: var(--c-cream);
   --t-panel: #fffdf5;
+  --t-panel-dim: #f8f1de;
   --t-ink: var(--c-cocoa);
   --t-muted: var(--c-grey);
   --t-outline: var(--c-cocoa);
+  --t-outline-soft: rgb(92 51 23 / 35%);
   --t-accent: var(--c-blue);
   --t-accent-ink: #ffffff;
   --t-gold: var(--c-gold);
   --t-danger: var(--c-red);
-  --t-shadow: 0 3px 0 rgb(92 51 23 / 35%);
+  --t-shadow: 0 3px 0 var(--t-outline-soft);
   --t-radius: 14px;
 }
 
-/* Light base under the re-skinned screens; individual rules may override. */
+/* Cream page behind every screen; styles.css adds no dark backdrop on top. */
 body {
   background: var(--t-bg);
   color: var(--t-ink);
 }
 
-/* Board menu (spec §9): one button, language + sound + exit inside one panel. */
+/*
+ * Board menu (spec §9): one button, language + sound + exit inside one panel.
+ * (Token-only chrome stays here; component rules live in styles.css, which
+ * imports after this sheet and is the file the stylesheet tests audit.)
+ */
 .menu-button {
   display: inline-flex;
   align-items: center;

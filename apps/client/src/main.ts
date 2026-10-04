@@ -16,6 +16,7 @@ import { t } from './i18n';
 import { initAudio, onGameEvents, setMusic } from './audio';
 import { musicForState } from './audio/events';
 import { showOnlineScreens, type OnlineSocket } from './online/screens';
+import { openSoundDialog } from './ui/screens';
 import { type RoomSession } from './online/session';
 import type { ServerMsg } from '@dice-bandits/room';
 import BoardScene from './scenes/BoardScene';
@@ -257,6 +258,15 @@ app.addEventListener('dice-bandits:menu-exit', () => {
   destroyGame();
   history.pushState(null, '', '/');
   showTitle(startSetup);
+});
+// Board menu sound-settings: the menu entry bubbles the request out of the
+// game shell; the main flow owns the dialog (same one the title screen uses).
+app.addEventListener('dice-bandits:sound-settings', (event) => {
+  const button =
+    event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>('[data-testid="audio-settings"]')
+      : null;
+  if (button) openSoundDialog(button);
 });
 app.addEventListener('dice-bandits:home', () => {
   history.pushState(null, '', '/');

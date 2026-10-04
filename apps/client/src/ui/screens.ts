@@ -168,8 +168,12 @@ function escapeHtml(value: string): string {
   );
 }
 
-/** Sound-settings dialog: mute + music/sfx volume, applied and persisted immediately. */
-function openSoundDialog(openButton: HTMLButtonElement): void {
+/**
+ * Sound-settings dialog: mute + music/sfx volume, applied and persisted
+ * immediately. Exported for the board menu: its settings entry bubbles
+ * `dice-bandits:sound-settings` and main.ts opens this dialog in response.
+ */
+export function openSoundDialog(openButton: HTMLButtonElement): void {
   if (document.querySelector('[data-testid="audio-dialog"]')) return;
   const current = getAudioSettings();
   const shade = document.createElement('div');

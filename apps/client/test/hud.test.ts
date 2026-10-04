@@ -5,6 +5,8 @@ import {
   type GameConfig,
   type GameState,
 } from '@dice-bandits/engine';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { getLang, setLang, t } from '../src/i18n';
 import { renderHud } from '../src/ui/hud';
@@ -298,6 +300,19 @@ describe('renderHud', () => {
     root.remove();
   });
 
+  it('shows the card count on every seat even when a player holds no cards (spec §9)', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    renderHud(root, state, () => undefined);
+    const counts = [...root.querySelectorAll<HTMLElement>('.seat-card .seat-status')].filter(
+      (element) => element.textContent?.includes('🃏'),
+    );
+    expect(counts).toHaveLength(state.players.length);
+    expect(counts.map((element) => element.textContent)).toContain('0 🃏');
+    root.remove();
+  });
+
   it('includes target id in targeted item action test ids', () => {
     const root = document.createElement('div');
     document.body.append(root);
@@ -359,6 +374,31 @@ describe('cartoon HUD (Task 9)', () => {
     root.remove();
   });
 
+  it('styles the .is-active glow (spec §7 active-turn indicator)', () => {
+    // CSS never applies in the vitest DOM (styleSheets stays empty), so this
+    // is a stylesheet assertion like spaceInfoShade.test.ts.
+    const css = readFileSync(join(import.meta.dirname, '../src/ui/styles.css'), 'utf8');
+    const active = css.match(/\.seat-card\.is-active\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(active, '.seat-card.is-active must have a glow rule').not.toBe('');
+    const hasGlow =
+      /outline[^:]*:\s*(?!none)/.test(active.replace(/outline-offset[^;]+;/g, '')) ||
+      /box-shadow:\s*(?!none)/.test(active);
+    expect(hasGlow, `is-active rule must glow, got: ${active}`).toBe(true);
+  });
+
+  it('delivers menu-exit to the app mount exactly once per exit click', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    renderHud(root, state, () => undefined);
+    const exits: number[] = [];
+    root.addEventListener('dice-bandits:menu-exit', () => exits.push(1));
+    root.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
+    root.querySelector<HTMLButtonElement>('.menu-panel [data-action="exit"]')!.click();
+    expect(exits, 'one exit click must fire dice-bandits:menu-exit exactly once').toHaveLength(1);
+    root.remove();
+  });
+
   it('renders the round ribbon text "Round 3/12" in English and "รอบ 3/12" in Thai', () => {
     const root = document.createElement('div');
     document.body.append(root);
@@ -366,15 +406,45 @@ describe('cartoon HUD (Task 9)', () => {
     state.round = 3;
     setLang('en');
     renderHud(root, state, () => undefined);
-    const ribbon = root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]')!;
+    const ribbon = root.querySelector<HTMLElement>('[data-testid="round-ribbon"]')!;
     expect(ribbon.textContent).toBe('Round 3/12');
     setLang('th');
     renderHud(root, state, () => undefined);
-    expect(root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]')!.textContent).toBe(
+    expect(root.querySelector<HTMLElement>('[data-testid="round-ribbon"]')!.textContent).toBe(
       'รอบ 3/12',
     );
     root.remove();
     setLang('en');
+  });
+
+  it('renders the turn ribbon as "<name>\'s turn" (spec §7)', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    setLang('en');
+    renderHud(root, state, () => undefined);
+    const turnName = state.players[state.turnSeat]!.name;
+    const ribbon = root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]')!;
+    expect(ribbon.textContent).toBe(t('turn.ribbon', { name: turnName }));
+    setLang('th');
+    renderHud(root, state, () => undefined);
+    expect(root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]')!.textContent).toBe(
+      t('turn.ribbon', { name: turnName }),
+    );
+    root.remove();
+    setLang('en');
+  });
+
+  it('shows the round and world-rule chip visibly on the board (spec §9)', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    renderHud(root, state, () => undefined);
+    const ribbon = root.querySelector<HTMLElement>('[data-testid="round-ribbon"]')!;
+    expect(ribbon.textContent).toContain(t('board.round', { round: state.round, total: 12 }));
+    const chip = root.querySelector<HTMLButtonElement>('[data-testid="world-chip"]')!;
+    expect(chip.textContent).toBe(t(`worldRule.${state.worldRule}`));
+    root.remove();
   });
 
   it('opens the world-rule info popup from the chip and closes it on Escape', () => {

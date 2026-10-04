@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getLang, setLang } from '../src/i18n';
 import { renderMenu } from '../src/ui/menu';
+import { openSoundDialog } from '../src/ui/screens';
 
 function mount(): HTMLElement {
   const root = document.createElement('div');
@@ -64,6 +65,47 @@ describe('renderMenu', () => {
     root.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
     root.querySelector<HTMLButtonElement>('.menu-panel [data-action="exit"]')!.click();
     expect(onExit).toHaveBeenCalledOnce();
+  });
+
+  it('re-dispatches menu-exit at most once per exit click at an outer mount', () => {
+    // Mirrors the board wiring: the menu sits inside a game shell that
+    // re-dispatches the event outward. One click must yield exactly one event
+    // at the outer mount (main.ts adds one history entry per event).
+    const outer = mount();
+    const shell = document.createElement('div');
+    outer.append(shell);
+    const events: string[] = [];
+    outer.addEventListener('dice-bandits:menu-exit', () => events.push('exit'));
+    renderMenu(shell, {
+      onExit: () => {
+        shell.dispatchEvent(
+          new CustomEvent('dice-bandits:menu-exit', { bubbles: true, composed: true }),
+        );
+      },
+    });
+    shell.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
+    shell.querySelector<HTMLButtonElement>('.menu-panel [data-action="exit"]')!.click();
+    expect(events).toHaveLength(1);
+  });
+
+  it('opens the sound-settings dialog through the bubbling request when the flow listens', () => {
+    // Mirrors the app wiring: the menu bubbles `dice-bandits:sound-settings`;
+    // main.ts listens on #app and opens openSoundDialog (exported from
+    // screens.ts). The dialog appends itself to #app, so mount one first.
+    document.body.innerHTML = '<div id="app"></div>';
+    const root = mount();
+    root.addEventListener('dice-bandits:sound-settings', (event) => {
+      const button = (event.target as Element).closest<HTMLButtonElement>(
+        '[data-testid="audio-settings"]',
+      );
+      if (button) openSoundDialog(button);
+    });
+    renderMenu(root, { onExit: vi.fn() });
+    root.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
+    root.querySelector<HTMLButtonElement>('.menu-panel [data-testid="audio-settings"]')!.click();
+    expect(document.querySelectorAll('[data-testid="audio-dialog"]')).toHaveLength(1);
+    document.querySelector<HTMLButtonElement>('[data-testid="audio-close"]')!.click();
+    expect(document.querySelectorAll('[data-testid="audio-dialog"]')).toHaveLength(0);
   });
 
   it('closes on Escape and returns focus to the menu button', () => {
