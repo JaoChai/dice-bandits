@@ -6,7 +6,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [map-single, global-single]
+        mode: [opaque-copy]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
