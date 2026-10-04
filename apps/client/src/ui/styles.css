@@ -361,8 +361,9 @@ h1 {
   border: 2px solid var(--t-outline);
   border-radius: 999px;
   padding: 3px 10px;
-  background: var(--c-green);
-  color: #ffffff;
+  background: var(--c-cream);
+  color: var(--c-cocoa);
+  border-color: var(--c-green);
   font-weight: 600;
 }
 .world-chip:hover {
@@ -484,7 +485,7 @@ h1 {
   border: 1px solid var(--c-cocoa);
   border-radius: 6px;
   padding: 5px 9px;
-  background: var(--c-orange);
+  background: var(--c-gold);
   color: var(--t-ink);
   font-weight: 700;
 }
@@ -524,7 +525,7 @@ h1 {
   min-height: 40px;
   border-radius: 6px;
   background: var(--c-purple);
-  color: var(--t-ink);
+  color: var(--c-cream);
 }
 .game-toast,
 .error-panel {
@@ -898,7 +899,7 @@ h1 {
 .game-topline {
   position: absolute;
   z-index: 7;
-  top: 92px;
+  top: 128px;
   left: 8px;
   right: 8px;
   display: flex;
@@ -973,9 +974,9 @@ h1 {
 .event-banner {
   position: absolute;
   z-index: 4;
-  top: 140px;
+  top: 56px;
   left: 50%;
-  width: min(48vw, 620px);
+  width: min(48vw, 620px, calc(100vw - 2 * clamp(180px, 24vw, 280px) - 32px));
   min-height: 48px;
   padding: 5px 12px;
   transform: translateX(-50%);
@@ -1089,7 +1090,7 @@ h1 {
   min-width: 0;
   flex: 1;
   display: grid;
-  grid-template-rows: auto auto 8px auto;
+  grid-template-rows: auto auto 14px auto;
   align-content: center;
   gap: 3px;
   overflow: visible;
@@ -1116,6 +1117,23 @@ h1 {
 .seat-details .seat-status {
   font-size: 12px;
   line-height: 1.2;
+}
+.seat-health {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.hp-heart {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  fill: var(--c-red);
+  stroke: var(--c-cocoa);
+  stroke-width: 1.5px;
+}
+.seat-health .hp-track {
+  flex: 1;
+  min-width: 0;
 }
 .hp-track {
   height: 8px;
@@ -1400,7 +1418,12 @@ h1 {
 /* M5a Task 6: turn ribbon + tap-a-space popup (DOM overlays on the board). */
 .turn-ribbon {
   position: absolute;
-  top: 108px;
+  /* Dedicated top-centre lane between the two upper seat cards. */
+  top: 8px;
+  width: max-content;
+  max-width: calc(100vw - 2 * clamp(180px, 24vw, 280px) - 32px);
+  text-align: center;
+  overflow-wrap: anywhere;
   left: 50%;
   z-index: 4;
   transform: translateX(-50%);

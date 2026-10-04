@@ -111,8 +111,8 @@ body {
 }
 
 .menu-panel .language-toggle button.selected {
-  background: var(--c-blue, #2e7fe0);
-  color: var(--t-accent-ink, #ffffff);
+  background: var(--c-gold, #f5c51c);
+  color: var(--c-cocoa, #5c3317);
 }
 
 .menu-panel .text-button {

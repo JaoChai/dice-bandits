@@ -8,6 +8,7 @@ import type { RoomSocketOptions } from '../src/online/socket';
 import { showOnlineScreens, type OnlineSocket } from '../src/online/screens';
 import { passDeviceMarkup } from '../src/ui/passDevice';
 import { renderResults } from '../src/ui/results';
+import { renderHud } from '../src/ui/hud';
 import { showSetup, showTitle } from '../src/ui/screens';
 import { showActionDialog, showPhaseDialog } from '../src/ui/dialogs';
 
@@ -257,13 +258,28 @@ describe('cartoon re-skin', () => {
     expect(css).toMatch(/\.primary:disabled\s*,\s*\.secondary:disabled\s*\{/);
   });
 
-  it('seat HP bar is a heart track and gold uses the coin pill tokens', () => {
-    const css = readFileSync('src/ui/styles.css', 'utf8');
-    const hp = /(\.hp-track\s*\{[^}]*\})[\s\S]*?(\.hp-track span\s*\{[^}]*\})/.exec(css);
-    expect(hp).not.toBeNull();
-    expect(hp![2]).toContain('var(--c-green)');
-    const pill = /\.gold-pill\s*\{[^}]*\}/.exec(css);
-    expect(pill, 'coin pill style exists').not.toBeNull();
-    expect(pill![0]).toContain('var(--c-gold)');
+  it('mounts a coin pill and heart HP meter on every rendered seat card', () => {
+    const root = document.createElement('div');
+    const state = createGame(gameConfig);
+    state.players[0]!.hp = state.players[0]!.stats.maxHp / 2;
+    renderHud(root, state, () => undefined);
+    const cards = [...root.querySelectorAll('.seat-card')];
+    expect(cards).toHaveLength(state.players.length);
+    cards.forEach((card, seat) => {
+      const player = state.players[seat]!;
+      const gold = card.querySelector('.gold-pill');
+      expect(gold, `seat ${seat} mounts its coin pill`).not.toBeNull();
+      expect(gold?.textContent).toContain(String(player.gold));
+      expect(gold?.getAttribute('aria-label')).toContain(String(player.gold));
+      const health = card.querySelector('.seat-health');
+      expect(health?.getAttribute('role')).toBe('meter');
+      expect(health?.getAttribute('aria-valuenow')).toBe(String(player.hp));
+      expect(health?.getAttribute('aria-valuemax')).toBe(String(player.stats.maxHp));
+      expect(health?.querySelector('svg.hp-heart path')?.getAttribute('d')).toBeTruthy();
+      expect(health?.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+      expect(health?.querySelector<HTMLElement>('.hp-track span')?.style.width).toBe(
+        seat === 0 ? '50%' : '100%',
+      );
+    });
   });
 });
