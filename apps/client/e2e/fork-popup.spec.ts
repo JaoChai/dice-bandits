@@ -96,7 +96,10 @@ test('exiting a fork removes popup and branch controls before returning to title
   await continueSave(page, savedFork());
   await tapCurrentSpace(page);
   await expect(page.locator('[data-testid^="fork-arrow-"]')).toHaveCount(2);
-  await page.locator('[data-action="exit"]').click();
+  await page.keyboard.press('Escape'); // close the space-info popup first
+  await expect(page.locator('[data-testid="space-info"]')).toHaveCount(0);
+  await page.locator('[data-testid="menu-button"]').click();
+  await page.locator('.menu-panel [data-action="exit"]').click();
   await expect(page.locator('[data-testid="screen-title"]')).toBeVisible();
   await expect(page.locator('[data-testid="space-info"]')).toHaveCount(0);
   await expect(page.locator('[data-testid^="fork-arrow-"]')).toHaveCount(0);

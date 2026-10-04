@@ -18,8 +18,13 @@ test('reward dialog frame stays inside the viewport with all choices scrollable'
   await playUntil(page, (state) => state.phase.kind === 'pvpReward');
   const dialog = page.locator('.dialog-shade .game-dialog');
   for (const lang of ['en', 'th']) {
+    // The reward shade covers the board, so drive the menu with DOM clicks
+    // exactly like the pre-menu spec drove the old header toggle.
     await page
-      .locator(`.game-topline [data-lang="${lang}"]`)
+      .locator('[data-testid="menu-button"]')
+      .evaluate((button: HTMLElement) => button.click());
+    await page
+      .locator(`.menu-panel [data-lang="${lang}"]`)
       .evaluate((button: HTMLElement) => button.click());
     const box = await dialog.boundingBox();
     const viewport = page.viewportSize()!;
@@ -29,6 +34,10 @@ test('reward dialog frame stays inside the viewport with all choices scrollable'
     const buttons = dialog.locator('button');
     await buttons.last().evaluate((button) => button.scrollIntoView());
     await expect(buttons.last()).toBeInViewport();
+    // The panel stays open across a switch; close it before the next iteration.
+    await page
+      .locator('[data-testid="menu-button"]')
+      .evaluate((button: HTMLElement) => button.click());
   }
 });
 // M5a (review round 1): seeds re-derived for the fixed map via engine replay with the

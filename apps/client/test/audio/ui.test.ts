@@ -80,7 +80,11 @@ describe('HUD audio toggle', () => {
     const toggle = root.querySelector<HTMLButtonElement>('[data-testid="audio-toggle"]')!;
     expect(toggle.getAttribute('aria-label')).toBe(t('audio.mute'));
 
-    root.querySelector<HTMLButtonElement>('[data-lang="th"]')!.click();
+    // The language toggle lives inside the board menu (spec §9): open it first.
+    root.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
+    root.querySelector<HTMLButtonElement>('.menu-panel [data-lang="th"]')!.click();
+    // The header toggle keeps its identity; the label follows the new language.
+    expect(root.querySelector('.game-topline > [data-testid="audio-toggle"]')).toBe(toggle);
     expect(toggle.getAttribute('aria-label')).toBe(t('audio.mute'));
     expect(toggle.getAttribute('aria-label')).toBe('ปิดเสียง');
     setLang('en');

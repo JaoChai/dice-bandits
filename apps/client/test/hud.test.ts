@@ -5,6 +5,8 @@ import {
   type GameConfig,
   type GameState,
 } from '@dice-bandits/engine';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { getLang, setLang, t } from '../src/i18n';
 import { renderHud } from '../src/ui/hud';
@@ -151,9 +153,20 @@ describe('renderHud', () => {
     renderHud(root, state, () => undefined);
 
     expect(root.querySelector('[data-testid="action-roll"]')?.textContent).toBe('Roll');
-    root.querySelector<HTMLButtonElement>('[data-lang="th"]')?.click();
+    // Language buttons live inside the board menu (spec §9): open it first.
+    root.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
+    root.querySelector<HTMLButtonElement>('.menu-panel [data-lang="th"]')!.click();
     expect(root.querySelector('[data-testid="action-roll"]')?.textContent).toBe('ทอยเต๋า');
-    expect(root.querySelector('[data-lang="en"]')?.getAttribute('aria-pressed')).toBe('false');
+    // The panel stays open across a language switch (in-place refresh); the
+    // microtask-free refresh means the re-render's attributes are already final.
+    root.querySelector<HTMLButtonElement>('.menu-panel [data-lang="en"]')?.click();
+    // After switching to English the panel reflects it: en selected, th not.
+    expect(root.querySelector('.menu-panel [data-lang="en"]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(root.querySelector('.menu-panel [data-lang="th"]')?.getAttribute('aria-pressed')).toBe(
+      'false',
+    );
     root.remove();
     setLang('en');
   });
@@ -165,13 +178,14 @@ describe('renderHud', () => {
     const dispatch = vi.fn();
     setLang('th');
     for (let render = 0; render < 5; render += 1) renderHud(root, state, dispatch);
-    const nav = root.querySelector('.game-topline nav')!;
-    const setAttribute = vi.spyOn(nav, 'setAttribute');
-
-    root.querySelector<HTMLButtonElement>('[data-lang="en"]')!.click();
-
+    root.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
+    // Five renders re-armed the menu five times; one click must apply exactly
+    // one switch and refresh the open panel in place (same element, new labels).
+    const panelBefore = root.querySelector('.menu-panel')!;
+    root.querySelector<HTMLButtonElement>('.menu-panel [data-lang="en"]')!.click();
     expect(getLang()).toBe('en');
-    expect(setAttribute).toHaveBeenCalledTimes(1);
+    expect(root.querySelector('.menu-panel')).toBe(panelBefore);
+    expect(root.querySelectorAll('[data-testid="menu-button"]')).toHaveLength(1);
     root.remove();
   });
 
@@ -184,14 +198,12 @@ describe('renderHud', () => {
     setLang('th');
     renderHud(root, initialState, () => undefined);
     renderHud(root, latestState, () => undefined);
-    const nav = root.querySelector('.game-topline nav')!;
-    const setAttribute = vi.spyOn(nav, 'setAttribute');
-    root.querySelector<HTMLButtonElement>('[data-lang="en"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
+    root.querySelector<HTMLButtonElement>('.menu-panel [data-lang="en"]')!.click();
 
-    expect(root.querySelector('.round-label')?.textContent).toBe(
+    expect(root.querySelector('[data-testid="round-ribbon"]')?.textContent).toBe(
       t('board.round', { round: latestState.round, total: latestState.config.rounds }),
     );
-    expect(setAttribute).toHaveBeenCalledTimes(1);
     root.remove();
   });
 
@@ -200,6 +212,8 @@ describe('renderHud', () => {
     document.body.append(root);
     const state = createGame(config);
     renderHud(root, state, () => undefined);
+    // The toggle lives inside the board menu (spec §9): open it first.
+    root.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
 
     expect(root.querySelector('[data-lang="th"]')?.textContent).toBe(t('lang.th'));
     expect(root.querySelector('[data-lang="en"]')?.textContent).toBe(t('lang.en'));
@@ -286,6 +300,19 @@ describe('renderHud', () => {
     root.remove();
   });
 
+  it('shows the card count on every seat even when a player holds no cards (spec §9)', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    renderHud(root, state, () => undefined);
+    const counts = [...root.querySelectorAll<HTMLElement>('.seat-card .seat-status')].filter(
+      (element) => element.textContent?.includes('🃏'),
+    );
+    expect(counts).toHaveLength(state.players.length);
+    expect(counts.map((element) => element.textContent)).toContain('0 🃏');
+    root.remove();
+  });
+
   it('includes target id in targeted item action test ids', () => {
     const root = document.createElement('div');
     document.body.append(root);
@@ -296,6 +323,144 @@ describe('renderHud', () => {
       (button) => button.dataset.testid,
     );
     expect(ids).toContain('action-useItem-mapScroll-1');
+    root.remove();
+  });
+});
+
+describe('cartoon HUD (Task 9)', () => {
+  const fourSeats = {
+    ...config,
+    seats: [0, 1, 2, 3].map((seat) => ({
+      name: `Player ${seat}`,
+      classId: ['knight', 'thief', 'mage', 'cleric'][seat]! as
+        'knight' | 'thief' | 'mage' | 'cleric',
+      control: 'human' as const,
+      personality: null,
+    })),
+  };
+
+  it('shows the same field set on every corner card (portrait, gold, HP, level, towns, card count)', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(fourSeats);
+    state.players.forEach((player) => {
+      player.banditCards = ['cursedLegs'];
+    });
+    renderHud(root, state, () => undefined);
+
+    const cards = [...root.querySelectorAll<HTMLElement>('.seat-card')];
+    expect(cards).toHaveLength(4);
+    for (const card of cards) {
+      expect(card.querySelector('.seat-portrait'), 'portrait').not.toBeNull();
+      expect(card.querySelectorAll('.seat-stats span')).toHaveLength(3);
+      expect(card.textContent).toContain(t('board.gold'));
+      expect(card.textContent).toContain(t('board.levelShort'));
+      expect(card.textContent).toContain(t('board.towns'));
+      expect(card.querySelector('.hp-track'), 'HP track').not.toBeNull();
+      expect(card.querySelector('.seat-status')?.textContent).toContain('1 🃏');
+    }
+    root.remove();
+  });
+
+  it('marks the active seat card with is-active', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    renderHud(root, state, () => undefined);
+    const activeCards = root.querySelectorAll<HTMLElement>('.seat-card.is-active');
+    expect(activeCards).toHaveLength(1);
+    expect(activeCards[0]!.classList.contains('corner-tl')).toBe(true);
+    expect(root.querySelectorAll('.seat-card.active')).toHaveLength(0);
+    root.remove();
+  });
+
+  it('styles the .is-active glow (spec §7 active-turn indicator)', () => {
+    // CSS never applies in the vitest DOM (styleSheets stays empty), so this
+    // is a stylesheet assertion like spaceInfoShade.test.ts.
+    const css = readFileSync(join(import.meta.dirname, '../src/ui/styles.css'), 'utf8');
+    const active = css.match(/\.seat-card\.is-active\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(active, '.seat-card.is-active must have a glow rule').not.toBe('');
+    const hasGlow =
+      /outline[^:]*:\s*(?!none)/.test(active.replace(/outline-offset[^;]+;/g, '')) ||
+      /box-shadow:\s*(?!none)/.test(active);
+    expect(hasGlow, `is-active rule must glow, got: ${active}`).toBe(true);
+  });
+
+  it('delivers menu-exit to the app mount exactly once per exit click', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    renderHud(root, state, () => undefined);
+    const exits: number[] = [];
+    root.addEventListener('dice-bandits:menu-exit', () => exits.push(1));
+    root.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
+    root.querySelector<HTMLButtonElement>('.menu-panel [data-action="exit"]')!.click();
+    expect(exits, 'one exit click must fire dice-bandits:menu-exit exactly once').toHaveLength(1);
+    root.remove();
+  });
+
+  it('renders the round ribbon text "Round 3/12" in English and "รอบ 3/12" in Thai', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    state.round = 3;
+    setLang('en');
+    renderHud(root, state, () => undefined);
+    const ribbon = root.querySelector<HTMLElement>('[data-testid="round-ribbon"]')!;
+    expect(ribbon.textContent).toBe('Round 3/12');
+    setLang('th');
+    renderHud(root, state, () => undefined);
+    expect(root.querySelector<HTMLElement>('[data-testid="round-ribbon"]')!.textContent).toBe(
+      'รอบ 3/12',
+    );
+    root.remove();
+    setLang('en');
+  });
+
+  it('renders the turn ribbon as "<name>\'s turn" (spec §7)', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    setLang('en');
+    renderHud(root, state, () => undefined);
+    const turnName = state.players[state.turnSeat]!.name;
+    const ribbon = root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]')!;
+    expect(ribbon.textContent).toBe(t('turn.ribbon', { name: turnName }));
+    setLang('th');
+    renderHud(root, state, () => undefined);
+    expect(root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]')!.textContent).toBe(
+      t('turn.ribbon', { name: turnName }),
+    );
+    root.remove();
+    setLang('en');
+  });
+
+  it('shows the round and world-rule chip visibly on the board (spec §9)', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    renderHud(root, state, () => undefined);
+    const ribbon = root.querySelector<HTMLElement>('[data-testid="round-ribbon"]')!;
+    expect(ribbon.textContent).toContain(t('board.round', { round: state.round, total: 12 }));
+    const chip = root.querySelector<HTMLButtonElement>('[data-testid="world-chip"]')!;
+    expect(chip.textContent).toBe(t(`worldRule.${state.worldRule}`));
+    root.remove();
+  });
+
+  it('opens the world-rule info popup from the chip and closes it on Escape', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const state = createGame(config);
+    renderHud(root, state, () => undefined);
+    const chip = root.querySelector<HTMLElement>('[data-testid="world-chip"]')!;
+    expect(document.querySelector('[data-testid="world-info"]')).toBeNull();
+    chip.click();
+    const popup = document.querySelector<HTMLElement>('[data-testid="world-info"]');
+    expect(popup).not.toBeNull();
+    expect(popup!.textContent).toContain(t(`worldRule.${state.worldRule}`));
+    expect(popup!.textContent).toContain(t(`worldRule.${state.worldRule}.info`));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.querySelector('[data-testid="world-info"]')).toBeNull();
     root.remove();
   });
 });

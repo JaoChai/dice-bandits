@@ -1,12 +1,14 @@
 import { createGame, type GameConfig, type GameState } from '@dice-bandits/engine';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ServerMsg } from '@dice-bandits/room';
-import { setLang, t } from '../src/i18n';
+import { setLang } from '../src/i18n';
 import { saveSession } from '../src/online/session';
 import type { RoomSocketOptions } from '../src/online/socket';
 import { showOnlineScreens, type OnlineSocket } from '../src/online/screens';
 import { passDeviceMarkup } from '../src/ui/passDevice';
 import { renderResults } from '../src/ui/results';
+import { renderHud } from '../src/ui/hud';
 import { showSetup, showTitle } from '../src/ui/screens';
 import { showActionDialog, showPhaseDialog } from '../src/ui/dialogs';
 
@@ -68,13 +70,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('pixel frame re-skin', () => {
-  it('title shows the pixel logo', () => {
+describe('cartoon re-skin', () => {
+  it('title uses the title atlas key art as its background', () => {
     mount();
     showTitle();
-    const logo = document.querySelector<HTMLElement>('.logo-pixel');
-    expect(logo).not.toBeNull();
-    expect(logo?.textContent).toBe(t('title.gameName'));
+    const screen = document.querySelector<HTMLElement>('.title-screen');
+    expect(screen).not.toBeNull();
+    expect(screen?.style.backgroundImage).toContain('/art/title.webp');
+    expect(document.querySelector('.logo-pixel')).toBeNull();
+  });
+
+  it('drops the pixel fonts: Mitr is wired in, Press Start 2P and Chakra Petch are gone', () => {
+    const main = readFileSync('src/main.ts', 'utf8');
+    expect(main).toContain('@fontsource/mitr/400.css');
+    expect(main).toContain('@fontsource/mitr/600.css');
+    expect(main).not.toContain('press-start-2p');
+    expect(main).not.toContain('chakra-petch');
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      dependencies: Record<string, string>;
+    };
+    expect(pkg.dependencies['@fontsource/mitr']).toBe('5.3.0');
+    expect(pkg.dependencies).not.toHaveProperty('@fontsource/press-start-2p');
+    expect(pkg.dependencies).not.toHaveProperty('@fontsource/chakra-petch');
+    const cssPath = new URL('./src/ui/frame.css', import.meta.url).pathname;
+    expect(() => readFileSync(cssPath, 'utf8')).toThrow();
   });
 
   it('setup shows a class portrait for every seat', () => {
@@ -94,7 +113,7 @@ describe('pixel frame re-skin', () => {
     });
   });
 
-  it('perk dialog uses the pixel frame and keeps its perk test ids', () => {
+  it('perk dialog uses the cartoon card and keeps its perk test ids', () => {
     const root = mount();
     const dispatch = vi.fn();
     showPhaseDialog(
@@ -106,14 +125,14 @@ describe('pixel frame re-skin', () => {
       ],
       dispatch,
     );
-    expect(document.querySelector('.game-dialog.frame')).not.toBeNull();
+    expect(document.querySelector('.game-dialog.card')).not.toBeNull();
     expect(document.querySelector('[data-testid="perk-hpUp"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="perk-atkUp"]')).not.toBeNull();
     document.querySelector<HTMLButtonElement>('[data-testid="perk-atkUp"]')!.click();
     expect(dispatch).toHaveBeenCalledWith({ type: 'pickPerk', perk: 'atkUp' });
   });
 
-  it('shop dialog uses the pixel frame and keeps its shop test ids', () => {
+  it('shop dialog uses the cartoon card and keeps its shop test ids', () => {
     const root = mount();
     showPhaseDialog(
       root,
@@ -121,22 +140,22 @@ describe('pixel frame re-skin', () => {
       [{ type: 'shopBuy', item: 'potion' }, { type: 'leave' }],
       vi.fn(),
     );
-    expect(document.querySelector('.game-dialog.frame')).not.toBeNull();
+    expect(document.querySelector('.game-dialog.card')).not.toBeNull();
     expect(document.querySelector('[data-testid="shop-shopBuy-potion"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="shop-leave-leave"]')).not.toBeNull();
   });
 
-  it('reward dialog uses the pixel frame', () => {
+  it('reward dialog uses the cartoon card', () => {
     const root = mount();
     showActionDialog(
       root,
       [{ type: 'pvpReward', reward: 'rob', item: null, townId: null, alias: null }],
       vi.fn(),
     );
-    expect(document.querySelector('.game-dialog.frame')).not.toBeNull();
+    expect(document.querySelector('.game-dialog.card')).not.toBeNull();
   });
 
-  it('results screen uses the pixel frame', () => {
+  it('results screen uses the cartoon card', () => {
     const root = mount();
     const state = withPhase({
       kind: 'gameOver',
@@ -150,18 +169,18 @@ describe('pixel frame re-skin', () => {
       () => {},
       () => {},
     );
-    expect(document.querySelector('.results-screen.frame')).not.toBeNull();
+    expect(document.querySelector('.results-screen.card')).not.toBeNull();
     expect(document.querySelector('[data-testid="results"]')).not.toBeNull();
   });
 
-  it('pass-device dialog uses the pixel frame', () => {
+  it('pass-device dialog uses the cartoon card', () => {
     mount().innerHTML = passDeviceMarkup('Ada');
-    expect(document.querySelector('.game-dialog.frame')).not.toBeNull();
+    expect(document.querySelector('.game-dialog.card')).not.toBeNull();
     expect(document.querySelector('[data-testid="pass-screen"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="pass-ready"]')).not.toBeNull();
   });
 
-  it('lobby uses the pixel frame and keeps its seat row ids', async () => {
+  it('lobby uses the cartoon card and keeps its seat row ids', async () => {
     mount();
     saveSession({ code: 'ABCDE', seat: 0, token: 'token', name: 'Ada' });
     showOnlineScreens({
@@ -185,15 +204,82 @@ describe('pixel frame re-skin', () => {
         },
       ],
     });
-    expect(document.querySelector('.screen.online-screen.frame')).not.toBeNull();
+    expect(document.querySelector('.screen.online-screen.card')).not.toBeNull();
     expect(document.querySelector('[data-testid="lobby-seat-0"]')).not.toBeNull();
   });
 
-  it('title and setup screens use the pixel frame', () => {
+  it('title and setup screens use the cartoon card', () => {
     mount();
     showTitle();
-    expect(document.querySelector('.screen.title-screen.frame')).not.toBeNull();
+    expect(document.querySelector('.screen.title-screen.card')).not.toBeNull();
     showSetup(vi.fn());
-    expect(document.querySelector('.screen.setup-screen.frame')).not.toBeNull();
+    expect(document.querySelector('.screen.setup-screen.card')).not.toBeNull();
+  });
+
+  it('styles.css defines the .card cartoon surface from the theme tokens', () => {
+    const css = readFileSync('src/ui/styles.css', 'utf8');
+    expect(new RegExp('\\.card\\s*\\{[^}]*var\\(--t-panel', 's').test(css)).toBe(true);
+    expect(new RegExp('\\.card\\s*\\{[^}]*var\\(--t-outline', 's').test(css)).toBe(true);
+  });
+
+  it('styles.css uses the cream/cocoa surfaces instead of the old dark palette', () => {
+    const css = readFileSync('src/ui/styles.css', 'utf8');
+    // The old pixel-era navy/purple surfaces must be gone from the shared
+    // chrome (screens, dialogs, buttons); token vars or palette hex only.
+    for (const oldSurface of ['#302039', '#171324', '#201a30', '#1b2140', '#292238']) {
+      expect(css, `old dark surface ${oldSurface} must not remain in styles.css`).not.toContain(
+        oldSurface,
+      );
+    }
+  });
+
+  it('body is cream (theme.css wins, no dark radial gradient in styles.css)', () => {
+    const stylesCss = readFileSync('src/ui/styles.css', 'utf8');
+    expect(stylesCss).not.toContain('radial-gradient');
+    const themeCss = readFileSync('src/ui/theme.css', 'utf8');
+    expect(themeCss).toContain('body');
+  });
+
+  it('title art fills the screen: background-size cover + center position', () => {
+    const css = readFileSync('src/ui/styles.css', 'utf8');
+    const block = /\.title-screen\s*\{[^}]*\}/.exec(css);
+    expect(block).not.toBeNull();
+    expect(block![0]).toContain('background-size: cover');
+    expect(block![0]).toContain('background-position: center');
+  });
+
+  it('buttons have normal/pressed/disabled cartoon states from the tokens', () => {
+    const css = readFileSync('src/ui/styles.css', 'utf8');
+    // Chunky rounded buttons: base state + :hover/:active (pressed) + :disabled.
+    const primary = /\.primary\s*,\s*\.secondary\s*\{[^}]*\}/.exec(css);
+    expect(primary).not.toBeNull();
+    expect(primary![0]).toContain('var(--c-orange)');
+    expect(css).toMatch(/\.primary:active\s*,\s*\.secondary:active\s*\{/);
+    expect(css).toMatch(/\.primary:disabled\s*,\s*\.secondary:disabled\s*\{/);
+  });
+
+  it('mounts a coin pill and heart HP meter on every rendered seat card', () => {
+    const root = document.createElement('div');
+    const state = createGame(gameConfig);
+    state.players[0]!.hp = state.players[0]!.stats.maxHp / 2;
+    renderHud(root, state, () => undefined);
+    const cards = [...root.querySelectorAll('.seat-card')];
+    expect(cards).toHaveLength(state.players.length);
+    cards.forEach((card, seat) => {
+      const player = state.players[seat]!;
+      const gold = card.querySelector('.gold-pill');
+      expect(gold, `seat ${seat} mounts its coin pill`).not.toBeNull();
+      expect(gold?.textContent).toContain(String(player.gold));
+      expect(gold?.getAttribute('aria-label')).toContain(String(player.gold));
+      const health = card.querySelector('.seat-health');
+      expect(health?.getAttribute('role')).toBe('meter');
+      expect(health?.getAttribute('aria-valuenow')).toBe(String(player.hp));
+      expect(health?.getAttribute('aria-valuemax')).toBe(String(player.stats.maxHp));
+      expect(health?.querySelector('svg.hp-heart path')?.getAttribute('d')).toBeTruthy();
+      expect(health?.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+      expect(health?.querySelector<HTMLElement>('.hp-track span')?.style.width).toBe(
+        seat === 0 ? '50%' : '100%',
+      );
+    });
   });
 });

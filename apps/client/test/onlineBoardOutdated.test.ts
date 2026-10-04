@@ -203,7 +203,9 @@ describe('startOnlineGame boardOutdated flow', () => {
       marker.dataset.testid = 'fork-arrow-37';
       document.body.append(marker);
       if (path === 'exit') {
-        document.querySelector<HTMLButtonElement>('[data-action="exit"]')!.click();
+        // The board menu (spec §9) owns the exit control now: open, click.
+        document.querySelector<HTMLButtonElement>('[data-testid="menu-button"]')!.click();
+        document.querySelector<HTMLButtonElement>('.menu-panel [data-action="exit"]')!.click();
       } else if (path === 'gameOver') {
         const state = structuredClone(game);
         state.phase = { kind: 'gameOver', ranking: [0, 1], winners: [0], highlights: [] };

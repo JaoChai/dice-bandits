@@ -6,6 +6,7 @@ import { getLang, setLang, t } from '../i18n';
 import { getAudioSettings, setAudioSettings } from '../audio';
 import { renderBattleUi } from './battleUi';
 import { showActionDialog, showPhaseDialog } from './dialogs';
+import { renderMenu } from './menu';
 
 type HudOnlineState = {
   you: number;
@@ -64,30 +65,40 @@ export function renderHud(
         )
         .join('')
     : '';
-  const header = `<header class="game-topline"><strong class="pixel">${t('title.gameName')}</strong><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span><nav class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></nav>${audioToggleHtml()}<button class="text-button" data-testid="map-toggle" aria-pressed="false">${t('map.whole')}</button><button class="text-button" data-action="exit">${t('setup.back')}</button></header>`;
+  const header = `<header class="game-topline"><span class="round-label" data-testid="round-ribbon">${t('board.round', { round: state.round, total: state.config.rounds })}</span><button type="button" class="world-chip" data-testid="world-chip" aria-haspopup="dialog" aria-label="${escapeHtml(t(`worldRule.${state.worldRule}`))}">${t(`worldRule.${state.worldRule}`)}</button><div class="menu-slot"></div>${audioToggleHtml()}<button class="text-button" data-testid="map-toggle" aria-pressed="false">${t('map.whole')}</button></header>`;
   if (!root.querySelector('.game-shell')) {
-    root.innerHTML = `<section class="game-shell" data-testid="screen-board"><div class="board-stage" id="phaser-board"></div>${header}<div class="event-banner frame" data-testid="event-banner" role="status" tabindex="0"><span class="event-meta"><span class="round-label">${t('board.round', { round: state.round, total: state.config.rounds })}</span><span class="world-chip">${t(`worldRule.${state.worldRule}`)}</span></span><span class="event-text">${state.round >= 10 ? t('event.FrenzyStarted') : ''}</span></div><div class="online-status" aria-live="polite"></div><section class="seat-hud">${seats}</section><nav class="action-tray action-bar frame" data-testid="action-tray" aria-label="${t('board.actions')}"></nav><div class="rotate-hint" data-testid="rotate-hint">${t('board.rotateHint')}</div></section>`;
+    root.innerHTML = `<section class="game-shell" data-testid="screen-board"><div class="board-stage" id="phaser-board"></div>${header}<div class="event-banner card" data-testid="event-banner" role="status" tabindex="0"><span class="event-text">${state.round >= 10 ? t('event.FrenzyStarted') : ''}</span></div><div class="online-status" aria-live="polite"></div><section class="seat-hud">${seats}</section><nav class="action-tray action-bar card" data-testid="action-tray" aria-label="${t('board.actions')}"></nav><div class="rotate-hint" data-testid="rotate-hint">${t('board.rotateHint')}</div></section>`;
     bindAudioToggle(root.querySelector('.game-topline [data-testid="audio-toggle"]'));
   } else {
     const existingHeader = root.querySelector('.game-topline');
     if (existingHeader) {
-      existingHeader.querySelector('strong')!.textContent = t('title.gameName');
       existingHeader.querySelector('.round-label')!.textContent = t('board.round', {
         round: state.round,
         total: state.config.rounds,
       });
-      existingHeader.querySelector('.world-chip')!.textContent = t(`worldRule.${state.worldRule}`);
-      existingHeader.querySelector('nav')?.setAttribute('aria-label', t('title.language'));
+      const chip = existingHeader.querySelector<HTMLElement>('.world-chip')!;
+      chip.textContent = t(`worldRule.${state.worldRule}`);
+      chip.setAttribute('aria-label', t(`worldRule.${state.worldRule}`));
+      existingHeader.querySelector('nav')?.setAttribute('aria-label', t('menu.language'));
       existingHeader.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach((button) => {
         button.setAttribute('aria-pressed', String(button.dataset.lang === getLang()));
       });
+      existingHeader
+        .querySelectorAll<HTMLButtonElement>('.menu-button')
+        .forEach((button) => button.setAttribute('aria-label', t('menu.open')));
       syncAudioToggle(
-        existingHeader.querySelector<HTMLButtonElement>('[data-testid="audio-toggle"]'),
+        existingHeader.querySelector<HTMLButtonElement>(
+          '.game-topline > [data-testid="audio-toggle"]',
+        ),
       );
     }
   }
   const shell = root.querySelector<HTMLElement>('.game-shell')!;
   hudContexts.set(shell, { state, dispatch, options });
+  // Menu (re)mount is idempotent; every render re-arms it so the panel exists
+  // whether the shell was just created or is being updated in place.
+  const menuSlot = root.querySelector<HTMLElement>('.menu-slot');
+  if (menuSlot) renderMenu(menuSlot, { onExit: menuExit(shell) });
   if (!hudLanguageListeners.has(shell)) {
     hudLanguageListeners.add(shell);
     shell.addEventListener('keydown', (event) => {
@@ -97,34 +108,75 @@ export function renderHud(
       event.preventDefault();
       banner.classList.toggle('expanded');
     });
+    // Delegated: a language click anywhere inside the shell (menu panel included)
+    // re-renders the whole HUD with the new language — one binding per shell.
+    // The menu refreshes its open panel via a microtask, after this re-render.
     shell.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
       const banner = target.closest<HTMLElement>('[data-testid="event-banner"]');
       if (banner) banner.classList.toggle('expanded');
-      const button = target.closest<HTMLButtonElement>('[data-lang]');
-      if (!button || !shell.contains(button)) return;
+      const langButton = target.closest<HTMLButtonElement>('[data-lang]');
+      if (!langButton || !shell.contains(langButton)) return;
       const context = hudContexts.get(shell);
       if (!context) return;
-      setLang(button.dataset.lang as 'th' | 'en');
+      setLang(langButton.dataset.lang as 'th' | 'en');
       renderHud(root, context.state, context.dispatch, context.options);
+    });
+    // (The menu's sound-settings and exit events bubble straight out of the
+    // shell to document; main.ts listens there. No re-dispatch here — a shell
+    // listener that forwards to root duplicates the event: exit ran 3x/click.)
+    // World-rule chip: tap-to-explain popup (spec §9); Escape closes it.
+    shell.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const chip = target.closest<HTMLButtonElement>('[data-testid="world-chip"]');
+      if (!chip) return;
+      document.querySelector('[data-testid="world-info"]')?.remove();
+      const rule = hudContexts.get(shell)?.state.worldRule;
+      if (!rule) return;
+      const popup = document.createElement('div');
+      popup.className = 'world-info-shade';
+      popup.dataset.testid = 'world-info';
+      popup.setAttribute('role', 'dialog');
+      popup.setAttribute('aria-modal', 'true');
+      popup.setAttribute('aria-label', t(`worldRule.${rule}`));
+      popup.innerHTML = `<section class="game-dialog card world-info-card"><h2>${t(`worldRule.${rule}`)}</h2><p>${t(`worldRule.${rule}.info`)}</p><button type="button" class="primary" data-testid="world-info-close">${t('common.close')}</button></section>`;
+      const close = (): void => {
+        popup.remove();
+        document.removeEventListener('keydown', onKeydown, true);
+      };
+      const onKeydown = (e: KeyboardEvent): void => {
+        if (e.key !== 'Escape') return;
+        e.stopPropagation();
+        close();
+      };
+      popup.addEventListener('click', (e) => {
+        if (e.target === popup || (e.target as Element).closest('[data-testid="world-info-close"]'))
+          close();
+      });
+      document.addEventListener('keydown', onKeydown, true);
+      document.body.append(popup);
     });
   }
   root.querySelector('.seat-hud')!.innerHTML = seats;
+  // Round ribbon (brief): reads "Round 3/12" / "รอบ 3/12" and doubles as the
+  // turn marker ("<name>'s turn" (spec §7) stays in `.turn-ribbon`).
+  const ribbon = root.querySelector<HTMLElement>('[data-testid="round-ribbon"]')!;
+  ribbon.textContent = t('board.round', { round: state.round, total: state.config.rounds });
   // "<name>'s turn" ribbon (spec §7): re-created per render, cheapest correct.
-  const ribbonText = t('turn.ribbon', {
+  let turnRibbon = root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]');
+  if (!turnRibbon) {
+    turnRibbon = document.createElement('div');
+    turnRibbon.className = 'turn-ribbon';
+    turnRibbon.dataset.testid = 'turn-ribbon';
+    turnRibbon.setAttribute('role', 'status');
+    root.querySelector('.game-shell')!.append(turnRibbon);
+  }
+  turnRibbon.textContent = t('turn.ribbon', {
     name: state.players[state.turnSeat]?.name ?? '',
   });
-  let ribbon = root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]');
-  if (!ribbon) {
-    ribbon = document.createElement('div');
-    ribbon.className = 'turn-ribbon';
-    ribbon.dataset.testid = 'turn-ribbon';
-    ribbon.setAttribute('role', 'status');
-    root.querySelector('.game-shell')!.append(ribbon);
-  }
-  ribbon.textContent = ribbonText;
-  ribbon.classList.toggle('visible', true);
+  turnRibbon.classList.toggle('visible', true);
   const mapToggle = root.querySelector<HTMLButtonElement>('[data-testid="map-toggle"]');
   if (mapToggle) {
     const whole = window.diceBanditsMapWhole === true;
@@ -132,11 +184,6 @@ export function renderHud(
     mapToggle.textContent = whole ? t('map.back') : t('map.whole');
   }
   const banner = root.querySelector<HTMLElement>('[data-testid="event-banner"]')!;
-  banner.querySelector('.round-label')!.textContent = t('board.round', {
-    round: state.round,
-    total: state.config.rounds,
-  });
-  banner.querySelector('.world-chip')!.textContent = t(`worldRule.${state.worldRule}`);
   if (state.round >= 10 && !banner.querySelector('.event-text')!.textContent)
     banner.querySelector('.event-text')!.textContent = t('event.FrenzyStarted');
   const onlineStatus = root.querySelector<HTMLElement>('.online-status')!;
@@ -189,16 +236,16 @@ function playerCard(state: GameState, player: Player, seats?: PublicSeat[]): str
   const towns = state.towns.filter((town) => town.owner === player.seat).length;
   const name = player.prank?.alias ?? player.name;
   const cards = player.banditCards.map((card) => t(`card.${card}`)).join(' · ');
-  const compactCards = player.banditCards.length
-    ? `<small class="seat-status" title="${escapeHtml(cards)}" aria-label="${escapeHtml(cards)}">${player.banditCards.length} 🃏</small>`
-    : '';
+  // Card count renders for every seat, including 0 — spec §9 wants the same
+  // field set on all four corner cards.
+  const compactCards = `<small class="seat-status" data-testid="seat-cards-${player.seat}" title="${escapeHtml(cards)}" aria-label="${escapeHtml(cards)}">${player.banditCards.length} 🃏</small>`;
   const takeoverBadge =
     seats?.find((seat) => seat.seat === player.seat)?.controller === 'botTakeover'
       ? `<small class="seat-status" data-testid="seat-takeover-${player.seat}">${t('online.takeover')}</small>`
       : '';
   const classes = ['corner-tl', 'corner-tr', 'corner-bl', 'corner-br'];
   const accent = ['#f15b4a', '#52c2ed', '#a5d65b', '#cd76d7'][player.seat % 4]!;
-  return `<article class="seat-card ${classes[player.seat % 4]} ${player.seat === state.turnSeat ? 'active' : ''}" style="--seat-color:${accent}"><div class="seat-portrait portrait-${player.classId}" role="img" aria-label="${t(`class.${player.classId}`)}"></div><div class="seat-details"><strong>${escapeHtml(name)}</strong><div class="seat-stats"><span aria-label="${player.gold} ${escapeHtml(t('board.gold'))}">${player.gold} ${t('board.gold')}</span><span aria-label="${escapeHtml(t('board.level'))} ${player.level}">${t('board.levelShort')} ${player.level}</span><span aria-label="${towns} ${escapeHtml(t('board.towns'))}">${towns} ${t('board.towns')}</span></div><div class="hp-track" aria-label="${t('board.hp')}"><span style="width:${hp}%"></span></div>${compactCards}${takeoverBadge}</div></article>`;
+  return `<article class="seat-card ${classes[player.seat % 4]} ${player.seat === state.turnSeat ? 'is-active' : ''}" style="--seat-color:${accent}"><div class="seat-portrait portrait-${player.classId}" role="img" aria-label="${t(`class.${player.classId}`)}"></div><div class="seat-details"><strong>${escapeHtml(name)}</strong><div class="seat-stats"><span class="gold-pill" aria-label="${player.gold} ${escapeHtml(t('board.gold'))}">${player.gold} ${t('board.gold')}</span><span aria-label="${escapeHtml(t('board.level'))} ${player.level}">${t('board.levelShort')} ${player.level}</span><span aria-label="${towns} ${escapeHtml(t('board.towns'))}">${towns} ${t('board.towns')}</span></div><div class="seat-health" role="meter" aria-label="${escapeHtml(t('board.hp'))}" aria-valuemin="0" aria-valuemax="${player.stats.maxHp}" aria-valuenow="${player.hp}"><svg class="hp-heart" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21 3 12C-3 6 5-2 12 5c7-7 15 1 9 7Z"/></svg><div class="hp-track"><span style="width:${hp}%"></span></div></div>${compactCards}${takeoverBadge}</div></article>`;
 }
 
 function actionName(action: Action): string {
@@ -263,7 +310,21 @@ function escapeHtml(value: string): string {
   );
 }
 
-/** Pixel-style speaker SVG: waves show when sound is on, a red slash when muted. */
+/**
+ * Menu exit → bubbling event; main.ts owns the actual leave-the-game flow.
+ * Dispatch ONLY on the shell: it already bubbles to root (#app), so an extra
+ * root dispatch (and the shell-level re-dispatch listener) delivered the same
+ * event three times per click — three history entries per exit.
+ */
+function menuExit(shell: HTMLElement): () => void {
+  return () => {
+    shell.dispatchEvent(
+      new CustomEvent('dice-bandits:menu-exit', { bubbles: true, composed: true }),
+    );
+  };
+}
+
+/** Persistent mute button in the header (kept outside the menu for e2e stability). */
 function audioToggleHtml(): string {
   const muted = getAudioSettings().muted;
   const label = muted ? t('audio.unmute') : t('audio.mute');
