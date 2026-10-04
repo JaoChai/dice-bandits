@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import type { GameState, GameEvent } from '@dice-bandits/engine';
 import { coinBurst, dice, dustPuff, shake } from '../fx';
 import { reducedMotion, motionScale } from '../art/motion';
-import { hasAnim } from '../art/atlas';
 import { seatColors, seatTint } from '../art/colors';
 import { createHeroToken, tokenLayout } from './board/tokens';
 import { drawRoad } from './board/road';
@@ -23,7 +22,7 @@ import { t } from '../i18n';
  * a different map (pre-deploy online room) is rejected before anything draws.
  */
 export default class BoardScene extends Phaser.Scene {
-  private tokenObjects = new Map<number, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>();
+  private tokenObjects = new Map<number, Phaser.GameObjects.Image>();
   private spacePositions = new Map<number, { x: number; y: number }>();
   private renderSignature = '';
   private wholeMap = false;
@@ -76,11 +75,6 @@ export default class BoardScene extends Phaser.Scene {
           const movingLeft = destination.x < token.x;
           token.setFlipX(movingLeft);
           if (speed > 0) {
-            const sprite =
-              token instanceof Phaser.GameObjects.Sprite && hasAnim(this, token.texture.key, 'hop')
-                ? token
-                : undefined;
-            sprite?.play(`${sprite.texture.key}:hop`);
             await new Promise<void>((resolve) => {
               this.tweens.add({
                 targets: token,
@@ -89,14 +83,6 @@ export default class BoardScene extends Phaser.Scene {
                 duration: 200 * speed,
                 ease: 'Sine.easeInOut',
                 onComplete: () => {
-                  if (sprite) {
-                    if (!reducedMotion() && hasAnim(this, sprite.texture.key, 'idle')) {
-                      sprite.play(`${sprite.texture.key}:idle`);
-                    } else {
-                      sprite.anims.stop();
-                      sprite.setFrame(0);
-                    }
-                  }
                   dustPuff(this, destination.x, destination.y, speed);
                   resolve();
                 },

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { playUntil, waitForBattleArt } from './helpers';
+import { observeBoardGame, playUntil, waitForBattleArt } from './helpers';
 
 test('reward dialog frame stays inside the viewport with all choices scrollable', async ({
   page,
@@ -72,32 +72,40 @@ for (const [region, seed] of [
   });
 }
 
-test('snow battle survives atlas loading and renders without a page error', async ({ page }) => {
+/** Legacy interim pixel-pipeline texture keys that must no longer exist. */
+const LEGACY_KEY_PATTERN =
+  /^(hero|token|portrait|monster|ground|props|ambient|backdrop)-|^tile-(meadow|desert|snow|volcano)$|^(tiles|fx|cards|icons)$|-atlas-image$/;
+
+// M5a Task 11c (replaces the gated legacy-atlas test): the interim
+// `/sprites` pipeline is deleted, so a full boot-to-battle journey must
+// fetch nothing from `/sprites`, register no legacy texture key, and never
+// surface the asset-error panel.
+test('ships no pixel-art /sprites requests or legacy texture keys', async ({ page }) => {
+  test.setTimeout(150_000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  let releaseAtlas!: () => void;
-  const atlasGate = new Promise<void>((resolve) => {
-    releaseAtlas = resolve;
+  const spritesRequests: string[] = [];
+  page.on('request', (request) => {
+    const { pathname } = new URL(request.url());
+    if (pathname.startsWith('/sprites/')) spritesRequests.push(pathname);
   });
-  await page.route('**/sprites/hero-knight.json', async (route) => {
-    await atlasGate;
-    await route.continue();
-  });
-  await page.goto('/?seed=snow-7&speed=0', { waitUntil: 'domcontentloaded' });
+  observeBoardGame(page);
+
+  await page.goto('/?seed=m5a-2&speed=0');
   await page.locator('[data-action="new"]').click();
   for (let seat = 1; seat < 4; seat++)
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
   await page.locator('#setup-form button[type="submit"]').click();
-  await playUntil(
-    page,
-    (state) =>
-      state.phase.kind === 'battle' &&
-      state.board.spaces.find((space) => space.id === state.phase.battle.spaceId)?.region ===
-        'snow',
-  );
-  await expect(page.locator('.battle-panel')).toBeVisible();
-  releaseAtlas();
+  await playUntil(page, (state) => state.phase.kind === 'battle');
   await waitForBattleArt(page);
-  expect(await page.evaluate(() => window.__db!.art.backdropKey)).toBe('art:backdrop-snow');
-  expect(errors, 'Phaser must not render a destroyed legacy frame').toEqual([]);
+
+  expect(spritesRequests, 'no /sprites request in a full boot-to-battle journey').toEqual([]);
+  const legacyKeys = await page.evaluate((pattern: string) => {
+    const game = (window as unknown as { __m5aGame?: { textures: { getTextureKeys(): string[] } } })
+      .__m5aGame!;
+    return game.textures.getTextureKeys().filter((key) => new RegExp(pattern).test(key));
+  }, LEGACY_KEY_PATTERN.source);
+  expect(legacyKeys, 'no legacy pixel-pipeline texture key registered').toEqual([]);
+  await expect(page.locator('[data-testid="asset-error"]')).toHaveCount(0);
+  expect(errors, 'no uncaught page errors').toEqual([]);
 });
