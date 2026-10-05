@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { observeBoardGame, renderedBoardGeometry, startJourney } from './helpers';
 
 /**
  * Lead-review guard: every authored cartoon asset must load in the built
@@ -29,4 +30,29 @@ test('authored cartoon assets load without any art fallback warning', async ({ p
 
   expect(fallbacks, 'authored /art assets are missing in the built preview').toEqual([]);
   expect(pageErrors, 'no uncaught page errors').toEqual([]);
+});
+
+test('missing painted terrain degrades safely in follow and whole-map views', async ({
+  page,
+}, info) => {
+  const errors: string[] = [];
+  const fallbacks: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'warning' && message.text().includes('[art] fallback'))
+      fallbacks.push(message.text());
+  });
+  await page.route('**/art/map/*.webp', (route) => route.abort());
+  await observeBoardGame(page);
+  await startJourney(page);
+  await page.waitForFunction(() => window.__db?.art.boardReady);
+  const before = await renderedBoardGeometry(page);
+  expect(before.tokens).toHaveLength(4);
+  expect(fallbacks.length).toBeGreaterThan(0);
+  await page.locator('[data-testid="map-toggle"]').click();
+  const whole = await renderedBoardGeometry(page);
+  expect(whole.zoom).toBeLessThan(before.zoom);
+  expect(whole.tokens.every((token) => token.visible)).toBe(true);
+  await page.screenshot({ path: info.outputPath('missing-map-fallback.png') });
+  expect(errors, 'missing terrain must not crash map/gutter rendering').toEqual([]);
 });

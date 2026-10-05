@@ -7,7 +7,7 @@ import { createHeroToken, tokenLayout } from './board/tokens';
 import { drawRoad } from './board/road';
 import { drawTiles } from './board/tiles';
 import { drawBuildings } from './board/buildings';
-import { cameraTarget, gameplayZoom, WORLD } from './board/camera';
+import { cameraBounds, cameraTarget, gameplayZoom, WORLD } from './board/camera';
 import { drawMapLayer, roadSegments, validate } from './board/mapLayer';
 import { clearForkArrows, drawForkArrows } from './board/forkArrows';
 import { drawAmbients } from './board/ambient';
@@ -23,6 +23,7 @@ import { t } from '../i18n';
  */
 export default class BoardScene extends Phaser.Scene {
   private tokenObjects = new Map<number, Phaser.GameObjects.Image>();
+  private mapImages: Phaser.GameObjects.Image[] = [];
   private spacePositions = new Map<number, { x: number; y: number }>();
   private renderSignature = '';
   private wholeMap = false;
@@ -42,6 +43,8 @@ export default class BoardScene extends Phaser.Scene {
     const onState = (state: GameState): void => this.renderBoard(state);
     const onResize = (): void => {
       if (!this.latestState) return;
+      for (const image of this.mapImages) image.destroy();
+      this.mapImages = drawMapLayer(this, cameraBounds(this.cameras.main, true));
       const target = cameraTarget(this.latestState, this.wholeMap, this.cameras.main);
       this.applyCamera({ ...target, duration: 0 });
     };
@@ -124,6 +127,8 @@ export default class BoardScene extends Phaser.Scene {
   private applyCamera(target: ReturnType<typeof cameraTarget>): void {
     const camera = this.cameras.main;
     this.tweens.killTweensOf(camera);
+    const bounds = cameraBounds(camera, this.wholeMap);
+    camera.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
     // Review 7a: honour the target's duration — the camera eases to the
     // active seat at turn start (spec §7); duration 0 snaps (?speed=0 or
     // reduced motion).
@@ -195,7 +200,7 @@ export default class BoardScene extends Phaser.Scene {
     }
 
     // Layer 1: painted map background (5×3 WebP tiles, flat fallbacks).
-    drawMapLayer(this);
+    this.mapImages = drawMapLayer(this, cameraBounds(this.cameras.main, true));
 
     // Layer 2: cream road along every `next` edge (map pixels).
     drawRoad(this, roadSegments(state.board));

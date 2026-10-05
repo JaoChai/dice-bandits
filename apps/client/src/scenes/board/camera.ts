@@ -79,9 +79,9 @@ export function cameraTarget(
     return {
       x: WORLD.width / 2,
       y: WORLD.height / 2,
-      // Cover the expanded viewport; crop only painted map margins, never
-      // letterbox with the renderer background on a wide phone.
-      zoom: Math.max(view.width / WORLD.width, view.height / WORLD.height),
+      // Fit the entire authored world, including heroes above north tiles.
+      // Painted gutters fill the extra viewport; gameplay is never cropped.
+      zoom: wholeMapZoom(view),
       duration: moveDuration(),
     };
   }
@@ -95,6 +95,19 @@ export function cameraTarget(
     zoom: gameplayZoom(),
     duration: moveDuration(),
   };
+}
+
+function wholeMapZoom(view: { width: number; height: number }): number {
+  return Math.min(view.width / WORLD.width, view.height / WORLD.height);
+}
+
+/** Whole-map fit needs painted gutters outside the authored world on wide
+ * screens. Normal follow stays clamped to the original map. */
+export function cameraBounds(view: { width: number; height: number }, wholeMap = false) {
+  const zoom = wholeMapZoom(view);
+  const width = wholeMap ? Math.max(WORLD.width, view.width / zoom) : WORLD.width;
+  const height = wholeMap ? Math.max(WORLD.height, view.height / zoom) : WORLD.height;
+  return { x: (WORLD.width - width) / 2, y: (WORLD.height - height) / 2, width, height };
 }
 
 function moveDuration(): number {

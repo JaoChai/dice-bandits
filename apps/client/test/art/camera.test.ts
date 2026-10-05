@@ -75,11 +75,14 @@ describe('cameraTarget', () => {
     expect(target.zoom).toBeLessThan(cameraTarget(gameFor('camera-whole')).zoom);
   });
 
-  it('uses a cover zoom for an expanded phone view without exposing map edges', () => {
-    const view = { width: 1729.4845360824743, height: 720 };
+  it.each([
+    { width: 1599, height: 720 }, // EXPAND at 915x412
+    { width: 1729, height: 720 }, // EXPAND at 932x388
+    { width: 1280, height: 720 },
+  ])('fits the complete world without cropping gameplay at $width logical px', (view) => {
     const target = cameraTarget(gameFor('camera-wide'), true, view);
-    expect(view.width / target.zoom).toBeLessThanOrEqual(WORLD.width + 1e-8);
-    expect(view.height / target.zoom).toBeLessThanOrEqual(WORLD.height + 1e-8);
+    expect(view.width / target.zoom).toBeGreaterThanOrEqual(WORLD.width - 1e-8);
+    expect(view.height / target.zoom).toBeGreaterThanOrEqual(WORLD.height - 1e-8);
     expect(target.zoom).toBeLessThan(cameraTarget(gameFor('camera-wide'), false, view).zoom);
   });
 

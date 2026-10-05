@@ -32,6 +32,7 @@ test('battle art waits for the renderer, not the already visible DOM', async ({ 
       () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
     );
     expect(resolved, 'visible HUD is not proof that the canvas scenes have rendered').toBe(false);
+    await page.screenshot({ path: test.info().outputPath('asset-loading.png') });
     release();
     await ready;
     expect(

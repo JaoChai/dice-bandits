@@ -75,7 +75,7 @@ for (const lang of ['th', 'en'] as const) {
             return camera.width / camera.zoom;
           }),
         )
-        .toBeLessThanOrEqual(3200.5);
+        .toBeGreaterThanOrEqual(3199.5);
       await page.locator('[data-testid="map-toggle"]').click();
       await playOneStep(page);
       await waitForBattleArt(page);

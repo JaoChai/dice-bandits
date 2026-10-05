@@ -11,6 +11,7 @@ import {
   observeBoardGame,
   playUntil,
   renderedBoardGeometry,
+  renderedOwnedFlags,
 } from './helpers';
 
 type Lang = 'th' | 'en';
@@ -87,9 +88,13 @@ function separatedSave(): GameState {
       personality: null,
     })),
   });
-  // Four distant nodes across meadow/desert/snow, not four coincident tokens.
-  [0, 12, 20, 28].forEach((pos, seat) => {
+  // Legal extremes: north 21/20, south 12 and west/start 0 (review round 1).
+  [21, 20, 12, 0].forEach((pos, seat) => {
     state.players[seat]!.pos = pos;
+  });
+  // Every generated town owns a real flag, not a fabricated graphics fixture.
+  state.towns.forEach((town, index) => {
+    town.owner = index % 4;
   });
   return state;
 }
@@ -109,7 +114,10 @@ async function continueSave(page: Page, lang: Lang): Promise<void> {
 }
 
 type Geometry = Awaited<ReturnType<typeof renderedBoardGeometry>>;
-function fitsCanvas(token: Geometry['tokens'][number], canvas: Geometry['canvas']): boolean {
+function fitsCanvas(
+  token: Pick<Geometry['tokens'][number], 'visible' | 'left' | 'right' | 'top' | 'bottom'>,
+  canvas: Geometry['canvas'],
+): boolean {
   return (
     token.visible &&
     token.left >= canvas.left &&
@@ -231,36 +239,77 @@ for (const lang of ['th', 'en'] as const) {
     await expect(popup).toHaveCount(0);
   });
 
-  test(`map toggle changes actual camera out and back with all separated tokens visible (${lang})`, async ({
-    page,
-  }) => {
-    await continueSave(page, lang);
-    const beforeState = await getState(page);
-    expect(new Set(beforeState.players.map((player) => player.pos)).size).toBe(4);
-    const before = await renderedBoardGeometry(page);
-    expect(before.tokens).toHaveLength(4);
-    expect(before.tokens.some((token) => !fitsCanvas(token, before.canvas))).toBe(true);
-    await mutateBoardForCoverage(page, process.env.M5A_MUTATION);
-    const toggle = page.locator('[data-testid="map-toggle"]');
-    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    const whole = await renderedBoardGeometry(page);
-    expect(whole.zoom, 'live camera zoomed out').toBeLessThan(before.zoom);
-    expect([whole.scrollX, whole.scrollY]).not.toEqual([before.scrollX, before.scrollY]);
-    expect(whole.tokens).toHaveLength(4);
-    for (const token of whole.tokens) expect(fitsCanvas(token, whole.canvas)).toBe(true);
-    expect(whole.tokens[0]!.width).toBeLessThan(before.tokens[0]!.width);
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    const after = await renderedBoardGeometry(page);
-    expect(after.zoom).toBeCloseTo(before.zoom, 6);
-    expect(after.scrollX).toBeCloseTo(before.scrollX, 6);
-    expect(after.scrollY).toBeCloseTo(before.scrollY, 6);
-    expect(after.tokens[0]!.width).toBeCloseTo(before.tokens[0]!.width, 6);
-    expect(after.tokens.some((token) => !fitsCanvas(token, after.canvas))).toBe(true);
-    expect(await getState(page)).toEqual(beforeState);
-  });
+  for (const viewport of [undefined, { width: 915, height: 412 }, { width: 932, height: 388 }]) {
+    test(`map toggle changes actual camera out and back with all separated tokens visible (${lang}, ${viewport?.width ?? 'project'})`, async ({
+      page,
+    }, info) => {
+      if (viewport) await page.setViewportSize(viewport);
+      await continueSave(page, lang);
+      const beforeState = await getState(page);
+      expect(new Set(beforeState.players.map((player) => player.pos)).size).toBe(4);
+      const before = await renderedBoardGeometry(page);
+      expect(before.tokens).toHaveLength(4);
+      expect(before.tokens.some((token) => !fitsCanvas(token, before.canvas))).toBe(true);
+      await mutateBoardForCoverage(page, process.env.M5A_MUTATION);
+      const toggle = page.locator('[data-testid="map-toggle"]');
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+      const whole = await renderedBoardGeometry(page);
+      expect(whole.zoom, 'live camera zoomed out').toBeLessThan(before.zoom);
+      expect([whole.scrollX, whole.scrollY]).not.toEqual([before.scrollX, before.scrollY]);
+      expect(whole.tokens).toHaveLength(4);
+      const flags = await renderedOwnedFlags(page);
+      console.log(
+        `Whole-map ${info.project.name} ${lang} ${viewport?.width ?? 'project'}: ${JSON.stringify({ tokens: whole.tokens, flags })}`,
+      );
+      await info.attach('whole-map-extremes', {
+        body: JSON.stringify({ whole, flags }),
+        contentType: 'application/json',
+      });
+      await page.screenshot({ path: info.outputPath('whole-map-extremes.png') });
+      for (const token of whole.tokens)
+        expect
+          .soft(fitsCanvas(token, whole.canvas), `hero at ${JSON.stringify(token.world)}`)
+          .toBe(true);
+      expect(whole.tiles).toHaveLength(beforeState.board.spaces.length);
+      for (const tile of whole.tiles)
+        expect
+          .soft(fitsCanvas(tile, whole.canvas), `tile at ${JSON.stringify(tile.world)}`)
+          .toBe(true);
+      expect(flags).toHaveLength(beforeState.towns.length);
+      for (const flag of flags)
+        expect
+          .soft(fitsCanvas(flag, whole.canvas), `owned flag ${JSON.stringify(flag)}`)
+          .toBe(true);
+      expect(whole.tokens[0]!.width).toBeLessThan(before.tokens[0]!.width);
+      if (viewport) {
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await renderedBoardGeometry(page);
+        await page.setViewportSize(viewport);
+        const resized = await renderedBoardGeometry(page);
+        for (const object of [
+          ...resized.tokens,
+          ...resized.tiles,
+          ...(await renderedOwnedFlags(page)),
+        ]) {
+          expect(
+            fitsCanvas(object, resized.canvas),
+            'gameplay remains contained after live resize',
+          ).toBe(true);
+        }
+      }
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+      const after = await renderedBoardGeometry(page);
+      expect(after.zoom).toBeCloseTo(before.zoom, 6);
+      expect(after.scrollX).toBeCloseTo(before.scrollX, 6);
+      expect(after.scrollY).toBeCloseTo(before.scrollY, 6);
+      expect(after.tokens[0]!.width).toBeCloseTo(before.tokens[0]!.width, 6);
+      expect(after.tokens.some((token) => !fitsCanvas(token, after.canvas))).toBe(true);
+      expect(await getState(page)).toEqual(beforeState);
+    });
+  }
 
   test(`seeded fork arrows dispatch the selected branch (${lang})`, async ({ page }) => {
     // Two rolls reach fork 19 with options 20/37 and two steps remaining.

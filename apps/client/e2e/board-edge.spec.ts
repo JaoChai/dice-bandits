@@ -44,7 +44,12 @@ for (const viewport of [undefined, { width: 932, height: 388 }]) {
               right: Math.max(...boxes.map((box) => box.right)),
               top: Math.min(...boxes.map((box) => box.top)),
               bottom: Math.max(...boxes.map((box) => box.bottom)),
-              tiles: images.length,
+              tiles: images.filter(
+                (image) => image.x >= 0 && image.x <= 3200 && image.y >= 0 && image.y <= 1800,
+              ).length,
+              gutters: images.filter(
+                (image) => image.x < 0 || image.x > 3200 || image.y < 0 || image.y > 1800,
+              ).length,
             },
           };
         });

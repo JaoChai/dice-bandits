@@ -76,6 +76,59 @@ export async function renderedBoardGeometry(page: Page) {
   });
 }
 
+/** Rasterise the real owner-flag Graphics commands; Graphics has no getBounds.
+ * No duplicated flag offsets/sizes or production test hooks. */
+export async function renderedOwnedFlags(page: Page) {
+  return page.evaluate(() => {
+    const game = (window as BoardProbeWindow).__m5aGame!;
+    const scene = game.scene.getScene('BoardScene');
+    const camera = scene.cameras.main;
+    const canvas = game.canvas.getBoundingClientRect();
+    const surface = document.createElement('canvas');
+    surface.width = 3200;
+    surface.height = 1800;
+    const ctx = surface.getContext('2d', { willReadFrequently: true })!;
+    return scene.children
+      .getChildren()
+      .filter((child) => 'depth' in child && child.depth === 1 && 'commandBuffer' in child)
+      .map((child) => {
+        const flag = child as Phaser.GameObjects.Graphics;
+        ctx.clearRect(0, 0, surface.width, surface.height);
+        flag.generateTexture(surface, surface.width, surface.height);
+        const pixels = ctx.getImageData(0, 0, surface.width, surface.height).data;
+        let left = Infinity,
+          top = Infinity,
+          right = -Infinity,
+          bottom = -Infinity;
+        for (let y = 0; y < surface.height; y++) {
+          for (let x = 0; x < surface.width; x++) {
+            if (!pixels[(y * surface.width + x) * 4 + 3]) continue;
+            left = Math.min(left, x);
+            right = Math.max(right, x + 1);
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y + 1);
+          }
+        }
+        const project = (x: number, y: number) => {
+          const point = camera.getViewMatrix().transformPoint(x + flag.x, y + flag.y);
+          return {
+            x: canvas.left + (point.x * canvas.width) / game.canvas.width,
+            y: canvas.top + (point.y * canvas.height) / game.canvas.height,
+          };
+        };
+        const a = project(left, top),
+          b = project(right, bottom);
+        return {
+          left: a.x,
+          top: a.y,
+          right: b.x,
+          bottom: b.y,
+          visible: flag.visible && flag.alpha > 0 && camera.visible,
+        };
+      });
+  });
+}
+
 /** Opt-in mutation sanity checks alter REAL rendered objects/scene, never the
  * measured result. Normal runs leave gameplay unchanged. */
 export async function mutateBoardForCoverage(

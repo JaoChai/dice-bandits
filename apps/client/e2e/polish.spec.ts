@@ -47,6 +47,8 @@ for (const lang of ['th', 'en'] as const) {
     await expect(banner).toHaveCount(1);
     await expect(banner.locator('.event-text')).toHaveText('');
     await expect(banner).toBeHidden();
+    await page.waitForFunction(() => window.__db?.art.boardReady);
+    await page.screenshot({ path: test.info().outputPath(`empty-event-${lang}.png`) });
     // Real gameplay emits BattleEnded; no test-assigned text or state mutation.
     await page.locator('[data-testid="action-roll"]').click();
     await expect.poll(() => page.evaluate(() => window.__db!.getState().phase.kind)).toBe('battle');
