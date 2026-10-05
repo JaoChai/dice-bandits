@@ -15,8 +15,9 @@ describe('client screens', () => {
     showSetup(vi.fn());
 
     const root = document.querySelector<HTMLElement>('#app')!;
+    // Spec §4: the default seat name is the class hero name (was "Player {n}").
     expect(root.querySelector<HTMLInputElement>('[data-seat="0"] [data-field="name"]')!.value).toBe(
-      t('setup.defaultName', { n: 1 }),
+      t('hero.knight'),
     );
     expect(root.innerHTML).not.toContain('Player 1');
     root.querySelector<HTMLInputElement>('[data-seat="0"] [data-field="name"]')!.value = 'Mali';

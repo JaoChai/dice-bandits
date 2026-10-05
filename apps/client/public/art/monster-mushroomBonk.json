@@ -1,0 +1,29 @@
+{
+  "frames": {
+    "idle": {
+      "x": 55,
+      "y": 26,
+      "w": 330,
+      "h": 274,
+      "anchorX": 165,
+      "anchorY": 274
+    },
+    "attack": {
+      "x": 473,
+      "y": 25,
+      "w": 374,
+      "h": 275,
+      "anchorX": 187,
+      "anchorY": 275
+    },
+    "hurt": {
+      "x": 933,
+      "y": 20,
+      "w": 333,
+      "h": 280,
+      "anchorX": 166,
+      "anchorY": 280
+    }
+  },
+  "image": "monster-mushroomBonk.webp"
+}

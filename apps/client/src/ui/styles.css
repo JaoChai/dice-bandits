@@ -1,11 +1,10 @@
-@import './frame.css';
 * {
   box-sizing: border-box;
 }
 :root {
-  color: #fff4dc;
-  background: #171324;
-  font-family: 'Chakra Petch', sans-serif;
+  color: var(--t-ink, #5c3317);
+  background: var(--t-bg, #f5eedc);
+  font-family: 'Mitr', sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -15,7 +14,7 @@ body {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background: radial-gradient(ellipse at 50% 0%, #453052 0, #171324 65%);
+  background: var(--t-bg);
 }
 button,
 input,
@@ -33,17 +32,24 @@ button {
   place-items: center;
   padding: 14px;
 }
+/* One cartoon surface (spec §9): screens, dialogs, trays and banners are
+   parchment cards with a gold border, cocoa outline and chunky shadow. */
+.screen,
+.card {
+  border: 3px solid var(--c-gold);
+  outline: 2px solid var(--t-outline-soft);
+  border-radius: 14px;
+  padding: 18px 24px;
+  background: var(--t-panel);
+  color: var(--t-ink);
+  box-shadow:
+    0 0 0 4px var(--t-outline-soft),
+    0 10px 24px rgb(92 51 23 / 25%);
+}
 .screen {
   position: relative;
   width: 100%;
   min-height: 330px;
-  border: 3px solid #e7aa57;
-  border-radius: 14px;
-  padding: 18px 24px;
-  background: linear-gradient(145deg, #302039, #201a30 78%);
-  box-shadow:
-    0 0 0 4px #171324,
-    0 10px 35px #08060dbb;
 }
 .screen header {
   display: flex;
@@ -56,13 +62,13 @@ p {
   margin-top: 12px;
 }
 h1 {
-  color: #ffd477;
+  color: var(--c-cocoa);
   text-align: center;
   font-size: clamp(1.35rem, 5vw, 2.15rem);
   line-height: 1.35;
 }
 .pixel {
-  font-family: 'Press Start 2P', monospace;
+  font-family: 'Mitr', sans-serif;
   font-size: 0.72rem;
   line-height: 1.8;
 }
@@ -73,6 +79,8 @@ h1 {
   justify-content: center;
   text-align: center;
   overflow: hidden;
+  background-size: cover;
+  background-position: center;
 }
 .title-screen header {
   position: absolute;
@@ -81,15 +89,15 @@ h1 {
 }
 .title-art {
   font-size: 2.25rem;
-  filter: drop-shadow(0 4px 0 #9b582f);
+  filter: drop-shadow(0 4px 0 var(--t-outline-soft));
   margin-top: 8px;
 }
 .title-screen h1 {
   margin: 8px 0 4px;
-  text-shadow: 3px 3px #7d3a40;
+  text-shadow: 2px 2px var(--t-outline-soft);
 }
 .title-screen p {
-  color: #e8c9a5;
+  color: var(--t-muted);
   margin: 8px 0 16px;
 }
 .title-actions {
@@ -101,19 +109,43 @@ h1 {
 .primary,
 .secondary {
   min-height: 42px;
-  border: 2px solid #ffe1a0;
-  border-radius: 8px;
+  border: 2px solid var(--c-cocoa);
+  border-radius: 12px;
   padding: 8px 14px;
-  background: #b55648;
-  box-shadow: 0 3px 0 #6c343b;
+  background: var(--c-orange);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: var(--t-shadow);
+}
+/* Setup's primary action uses the approved cream/cocoa pair at normal-text
+   contrast; other screens retain their existing action styling. */
+.setup-screen .primary {
+  background: var(--c-cream);
+  color: var(--c-cocoa);
 }
 .primary:hover,
 .secondary:hover {
-  filter: brightness(1.16);
+  filter: brightness(1.06);
   transform: translateY(-1px);
 }
+/* Pressed: chunky cartoon button sinks into its shadow. */
+.primary:active,
+.secondary:active {
+  transform: translateY(3px);
+  box-shadow: none;
+  filter: brightness(0.94);
+}
+/* Disabled: greyed out, no lift, no pointer target. */
+.primary:disabled,
+.secondary:disabled {
+  background: var(--c-grey);
+  color: var(--t-panel);
+  border-color: var(--t-outline-soft);
+  box-shadow: none;
+  cursor: not-allowed;
+}
 .secondary {
-  background: #4c4168;
+  background: var(--c-blue);
 }
 .language-toggle {
   display: inline-flex;
@@ -121,16 +153,16 @@ h1 {
 }
 .language-toggle button,
 .text-button {
-  border: 1px solid #8c7593;
+  border: 1px solid var(--t-outline-soft);
   border-radius: 6px;
   padding: 5px 8px;
-  background: #292238;
+  background: var(--t-panel-dim);
   font-weight: 700;
 }
 .language-toggle button.selected {
-  background: #e1a54f;
-  color: #241a2d;
-  border-color: #ffe1a0;
+  background: var(--c-gold);
+  color: var(--c-cocoa);
+  border-color: var(--c-cocoa);
 }
 .setup-screen {
   min-height: 0;
@@ -171,13 +203,13 @@ h1 {
   align-items: end;
   margin: 0;
   padding: 6px 8px;
-  border: 1px solid #735e7d;
+  border: 1px solid var(--t-outline-soft);
   border-radius: 8px;
-  background: #282136;
+  background: var(--t-panel-dim);
 }
 .seat-row legend {
   padding: 0 4px;
-  color: #ffd477;
+  color: var(--c-cocoa);
   font-weight: 700;
   font-size: 0.8rem;
 }
@@ -186,7 +218,7 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  color: #e8d5bc;
+  color: var(--t-ink);
   font-size: 0.69rem;
 }
 .seat-row label:first-of-type {
@@ -197,24 +229,16 @@ h1 {
   min-width: 0;
   width: 100%;
   height: 27px;
-  border: 1px solid #8a7793;
+  border: 1px solid var(--t-outline-soft);
   border-radius: 4px;
   padding: 2px 5px;
-  background: #181522;
-  color: #fff4dc;
-}
-.seat-row .portrait {
-  grid-column: 3;
-  grid-row: 2 / span 2;
-  width: 42px;
-  height: 42px;
-  object-fit: contain;
-  image-rendering: pixelated;
+  background: #fffdf5;
+  color: var(--t-ink);
 }
 .error {
   min-height: 1em;
   margin: 0;
-  color: #ff9a83;
+  color: var(--c-red);
   font-weight: 700;
 }
 .toast {
@@ -223,9 +247,9 @@ h1 {
   z-index: 5;
   border-radius: 8px;
   padding: 9px 14px;
-  background: #562f47;
-  border: 1px solid #e7aa57;
-  box-shadow: 0 4px 16px #0009;
+  background: var(--c-pink);
+  border: 1px solid var(--c-gold);
+  box-shadow: var(--t-shadow);
 }
 @media (max-width: 500px) {
   #app {
@@ -281,18 +305,18 @@ h1 {
   max-width: 640px;
   min-height: min(100vh, 560px);
   overflow: hidden;
-  border: 3px solid #e7aa57;
+  border: 3px solid var(--c-gold);
   border-radius: 12px;
-  background: #202b3c;
+  background: #f0e4c8;
   box-shadow:
-    0 0 0 4px #171324,
-    0 10px 35px #08060dbb;
+    0 0 0 4px var(--t-outline-soft),
+    0 10px 24px rgb(92 51 23 / 25%);
 }
 .board-stage {
   width: 100%;
   height: min(300px, 46.875vw);
   min-height: 220px;
-  background: #273449;
+  background: #e4d5ae;
 }
 .board-stage canvas {
   display: block;
@@ -309,21 +333,64 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: #fff4dc;
+  color: var(--t-ink);
   font-weight: 700;
-  text-shadow: 1px 2px #171324;
+  text-shadow: none;
 }
 .game-topline .pixel {
   font-size: 0.48rem;
+}
+/* Round ribbon + world-rule chip, visible top-centre pills (spec §9). */
+.round-label {
+  border: 2px solid var(--t-outline);
+  border-radius: 999px;
+  padding: 4px 14px;
+  background: var(--c-gold);
+  color: var(--c-cocoa);
+  font-weight: 600;
+  white-space: nowrap;
 }
 .world-chip {
   max-width: 28%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border-radius: 6px;
-  padding: 3px 7px;
-  background: #171324cc;
+  cursor: pointer;
+  border: 2px solid var(--t-outline);
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: var(--c-cream);
+  color: var(--c-cocoa);
+  border-color: var(--c-green);
+  font-weight: 600;
+}
+.world-chip:hover {
+  filter: brightness(1.06);
+}
+.world-chip:focus-visible {
+  outline: 3px solid var(--c-blue);
+}
+/* Tap-to-explain popup for the world-rule chip (spec §9). */
+.world-info-shade {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  background: rgb(92 51 23 / 40%);
+}
+.world-info-card {
+  width: min(92%, 420px);
+}
+/* Coin pill: the gold counter style used on seat cards (spec §9). */
+.gold-pill {
+  display: inline-block;
+  border: 2px solid var(--c-cocoa);
+  border-radius: 999px;
+  padding: 1px 10px;
+  background: var(--c-gold);
+  color: var(--c-cocoa);
+  font-weight: 600;
 }
 .seat-hud {
   display: grid;
@@ -331,7 +398,7 @@ h1 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
   padding: 5px;
-  background: #302039;
+  background: var(--t-panel);
 }
 .seat-card {
   min-width: 0;
@@ -339,15 +406,15 @@ h1 {
   display: flex;
   align-items: center;
   gap: 3px;
-  border: 1px solid #735e7d;
+  border: 1px solid var(--t-outline-soft);
   border-left: 3px solid var(--seat-color);
   border-radius: 6px;
   padding: 2px;
-  background: #211c30;
+  background: var(--t-panel-dim);
   font-size: 0.62rem;
 }
-.seat-card.active {
-  outline: 2px solid #ffd477;
+.seat-card.is-active {
+  outline: 3px solid var(--c-gold);
 }
 .seat-card img {
   display: flex;
@@ -394,12 +461,12 @@ h1 {
   height: 5px;
   overflow: hidden;
   border-radius: 4px;
-  background: #633e4a;
+  background: #f3d9c4;
 }
 .hp-track span {
   display: block;
   height: 100%;
-  background: #6acb72;
+  background: var(--c-green);
 }
 .action-bar {
   display: flex;
@@ -408,16 +475,16 @@ h1 {
   min-height: 52px;
   overflow-x: auto;
   padding: 5px;
-  background: #171324;
+  background: var(--c-cocoa);
 }
 .action-button {
   flex: 0 0 auto;
   min-height: 36px;
-  border: 1px solid #ffe1a0;
+  border: 1px solid var(--c-cocoa);
   border-radius: 6px;
   padding: 5px 9px;
-  background: #784448;
-  color: #fff4dc;
+  background: var(--c-gold);
+  color: var(--t-ink);
   font-weight: 700;
 }
 .action-button:disabled {
@@ -429,16 +496,16 @@ h1 {
   inset: 0;
   display: grid;
   place-items: center;
-  background: #100d19cc;
+  background: rgb(92 51 23 / 55%);
 }
 .game-dialog {
   display: grid;
   gap: 8px;
   min-width: min(320px, 90%);
-  border: 2px solid #e7aa57;
+  border: 2px solid var(--c-gold);
   border-radius: 10px;
   padding: 14px;
-  background: #302039;
+  background: var(--t-panel);
 }
 .reward-dialog {
   box-sizing: border-box;
@@ -450,13 +517,13 @@ h1 {
 }
 .game-dialog h2 {
   margin: 0;
-  color: #ffd477;
+  color: var(--c-cocoa);
 }
 .game-dialog button {
   min-height: 40px;
   border-radius: 6px;
-  background: #4c4168;
-  color: #fff4dc;
+  background: var(--c-purple);
+  color: var(--c-cream);
 }
 .game-toast,
 .error-panel {
@@ -464,11 +531,11 @@ h1 {
   z-index: 9;
   inset: auto auto 70px 50%;
   transform: translateX(-50%);
-  border: 1px solid #e7aa57;
+  border: 1px solid var(--c-gold);
   border-radius: 8px;
   padding: 8px 12px;
-  background: #562f47;
-  box-shadow: 0 4px 16px #0009;
+  background: var(--c-pink);
+  box-shadow: var(--t-shadow);
 }
 .error-panel {
   top: 35%;
@@ -517,11 +584,11 @@ h1 {
   width: min(100%, 640px);
   max-height: min(92vh, 560px);
   overflow-y: auto;
-  border: 3px solid #e7aa57;
+  border: 3px solid var(--c-gold);
   border-radius: 12px;
   padding: clamp(12px, 3vw, 22px);
-  background: linear-gradient(145deg, #302039, #201a30 78%);
-  box-shadow: 0 10px 35px #08060dbb;
+  background: var(--t-panel);
+  box-shadow: var(--t-shadow);
 }
 .results-header {
   display: flex;
@@ -540,18 +607,18 @@ h1 {
 .results-header button {
   min-width: 38px;
   min-height: 30px;
-  border: 1px solid #ffe1a0;
+  border: 1px solid var(--c-cocoa);
   border-radius: 6px;
   padding: 4px 8px;
-  background: #e1a54f;
-  color: #241a2d;
+  background: var(--c-gold);
+  color: var(--c-cocoa);
   font-weight: 700;
   line-height: 1;
 }
 .results-header button[aria-pressed='true'] {
-  background: #fff0c2;
-  border-color: #fff4dc;
-  color: #171324;
+  background: #ffe9a8;
+  border-color: var(--t-ink);
+  color: var(--c-cocoa);
 }
 .results-ranking {
   display: grid;
@@ -564,21 +631,21 @@ h1 {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  border: 1px solid #735e7d;
+  border: 1px solid var(--t-outline-soft);
   border-radius: 6px;
   padding: 6px 9px;
-  background: #211c30;
+  background: var(--t-panel-dim);
 }
 .results-ranking li.winner {
-  border-color: #ffd477;
-  background: #473548;
+  border-color: var(--c-cocoa);
+  background: var(--t-panel-dim);
 }
 .results-highlights {
   margin: 12px 0;
 }
 .results-highlights h2 {
   margin: 0 0 5px;
-  color: #ffd477;
+  color: var(--c-cocoa);
   font-size: 1rem;
 }
 .results-highlights p {
@@ -601,8 +668,9 @@ h1 {
 .pass-portrait {
   width: 72px;
   height: 72px;
-  object-fit: contain;
-  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
   margin: 0 auto;
 }
 .pass-device h2 {
@@ -633,10 +701,10 @@ h1 {
     z-index: 30;
     inset: auto 8px 8px;
     display: block;
-    border: 1px solid #ffe1a0;
+    border: 1px solid var(--c-cocoa);
     border-radius: 8px;
     padding: 8px;
-    background: #171324ee;
+    background: rgb(92 51 23 / 93%);
     text-align: center;
     font-weight: 700;
     pointer-events: none;
@@ -673,8 +741,8 @@ h1 {
 }
 .room-code strong {
   display: inline-block;
-  color: #ffd477;
-  font-family: 'Press Start 2P', monospace;
+  color: var(--c-cocoa);
+  font-family: 'Mitr', sans-serif;
   font-size: clamp(1.15rem, 5vw, 1.65rem);
   letter-spacing: 0.12em;
   line-height: 1.6;
@@ -698,27 +766,27 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px 9px;
-  border: 1px solid #735e7d;
+  border: 1px solid var(--t-outline-soft);
   border-radius: 8px;
   padding: 7px 9px;
-  background: #282136;
+  background: var(--t-panel-dim);
 }
 .online-list li > strong,
 .online-list li > span {
   min-width: 0;
-  border: 1px solid #735e7d;
+  border: 1px solid var(--t-outline-soft);
   border-radius: 6px;
   padding: 3px 7px;
-  background: #211c30;
+  background: var(--t-panel-dim);
   overflow-wrap: anywhere;
 }
 .online-list li > strong {
-  color: #ffd477;
+  color: var(--c-cocoa);
 }
 .online-list li > span.host-badge {
-  border-color: #e7aa57;
-  background: #5b3c3c;
-  color: #ffe1a0;
+  border-color: var(--c-gold);
+  background: var(--c-red);
+  color: var(--c-cocoa);
   font-size: 0.78rem;
   font-weight: 700;
 }
@@ -734,9 +802,9 @@ h1 {
   min-width: 0;
 }
 .class-picker .selected {
-  border-color: #ffd477;
-  background: #e1a54f;
-  color: #241a2d;
+  border-color: var(--c-cocoa);
+  background: var(--c-gold);
+  color: var(--c-cocoa);
 }
 .online-screen > .primary {
   align-self: center;
@@ -807,7 +875,7 @@ h1 {
   overflow: hidden;
   border: 0;
   border-radius: 0;
-  background: #202b3c;
+  background: #f0e4c8;
   box-shadow: none;
 }
 .board-stage {
@@ -824,20 +892,22 @@ h1 {
   margin: auto;
   image-rendering: pixelated;
 }
+/* Header sits on top of the painted map: round ribbon + world chip left/centre,
+   menu, mute and map toggle right. The row itself never intercepts clicks —
+   only its buttons do — and it stays below the corner seat cards' row. */
 .game-topline {
   position: absolute;
-  z-index: 5;
+  z-index: 7;
+  top: 128px;
+  left: 8px;
+  right: 8px;
   display: flex;
   align-items: center;
-  inset: 62px auto auto 50%;
-  transform: translateX(-50%);
-  justify-content: center;
+  justify-content: space-between;
   gap: 8px;
   pointer-events: none;
 }
-.game-topline > .pixel,
-.game-topline > .round-label,
-.game-topline > .world-chip {
+.game-topline > .pixel {
   display: none;
 }
 .game-topline > * {
@@ -854,11 +924,11 @@ h1 {
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
-  border: 1px solid #8c7593;
-  border-radius: 6px;
+  border: 2px solid var(--t-outline, #5c3317);
+  border-radius: 10px;
   padding: 4px;
-  background: #292238;
-  color: #fff4dc;
+  background: var(--c-gold, #f5c51c);
+  color: var(--c-cocoa, #5c3317);
 }
 .audio-toggle:hover {
   filter: brightness(1.16);
@@ -880,7 +950,7 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #fff4dc;
+  color: var(--t-ink);
 }
 .audio-mute-row {
   justify-content: flex-start;
@@ -898,14 +968,14 @@ h1 {
 }
 .audio-dialog input[type='range'] {
   width: min(38vw, 170px);
-  accent-color: #e1a54f;
+  accent-color: var(--c-orange);
 }
 .event-banner {
   position: absolute;
   z-index: 4;
-  top: 8px;
+  top: 56px;
   left: 50%;
-  width: min(48vw, 620px);
+  width: min(48vw, 620px, calc(100vw - 2 * clamp(180px, 24vw, 280px) - 32px));
   min-height: 48px;
   padding: 5px 12px;
   transform: translateX(-50%);
@@ -913,11 +983,16 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: #fff4dc;
+  color: var(--t-ink);
   font-size: 12px;
   line-height: 1.25;
   text-align: center;
   cursor: pointer;
+}
+/* Keep the live status node mounted, but no parchment/focus target until
+   either renderHud's frenzy text or renderEventToast supplies content. */
+.event-banner:has(.event-text:empty) {
+  display: none;
 }
 .event-meta {
   display: flex;
@@ -967,10 +1042,8 @@ h1 {
   padding: 8px;
   border: 2px solid var(--seat-color);
   border-radius: 0;
-  background: #1b2140ee;
-  box-shadow:
-    inset 0 0 0 2px #343657,
-    0 3px 0 #10162d;
+  background: rgb(255 253 245 / 92%);
+  box-shadow: var(--t-shadow);
   font-size: 12px;
   pointer-events: auto;
 }
@@ -990,9 +1063,11 @@ h1 {
   bottom: 64px;
   right: 8px;
 }
-.seat-card.active {
-  outline: 2px solid #ffd477;
+/* Active-turn glow on the corner card (spec §7): gold halo. */
+.seat-card.is-active {
+  outline: 3px solid var(--c-gold);
   outline-offset: 2px;
+  box-shadow: 0 0 12px var(--c-gold);
 }
 .seat-portrait {
   flex: 0 0 40px;
@@ -1001,25 +1076,12 @@ h1 {
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
-  image-rendering: pixelated;
-}
-.portrait-knight {
-  background-image: url('/sprites/hero-knight-portrait.png');
-}
-.portrait-thief {
-  background-image: url('/sprites/hero-thief-portrait.png');
-}
-.portrait-mage {
-  background-image: url('/sprites/hero-mage-portrait.png');
-}
-.portrait-cleric {
-  background-image: url('/sprites/hero-cleric-portrait.png');
 }
 .seat-details {
   min-width: 0;
   flex: 1;
   display: grid;
-  grid-template-rows: auto auto 8px auto;
+  grid-template-rows: auto auto 14px auto;
   align-content: center;
   gap: 3px;
   overflow: visible;
@@ -1047,13 +1109,30 @@ h1 {
   font-size: 12px;
   line-height: 1.2;
 }
+.seat-health {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.hp-heart {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  fill: var(--c-red);
+  stroke: var(--c-cocoa);
+  stroke-width: 1.5px;
+}
+.seat-health .hp-track {
+  flex: 1;
+  min-width: 0;
+}
 .hp-track {
   height: 8px;
-  background: #10121f;
-  border: 1px solid #080a14;
+  background: #f3e2c6;
+  border: 1px solid var(--c-cocoa);
 }
 .hp-track span {
-  background: #65c96b;
+  background: var(--c-green);
 }
 .action-tray {
   position: absolute;
@@ -1078,15 +1157,15 @@ h1 {
 .online-status {
   position: absolute;
   z-index: 7;
-  top: 62px;
+  top: 192px;
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
 }
 .online-status > * {
-  border: 2px solid #e8a53c;
+  border: 2px solid var(--c-gold);
   padding: 6px 10px;
-  background: #1b2140;
+  background: var(--t-panel);
 }
 .online-status [data-testid='online-opponent-picked'] {
   padding-left: 14px;
@@ -1167,6 +1246,14 @@ h1 {
 .battle-mode .seat-card.corner-br {
   bottom: 100px;
 }
+/* Battle: pills hide, topline returns to the top strip beside the HP HUD. */
+.battle-mode .round-label,
+.battle-mode .world-chip {
+  display: none;
+}
+.battle-mode .game-topline {
+  top: 6px;
+}
 .battle-mode .battle-hud {
   position: absolute;
   z-index: 7;
@@ -1183,13 +1270,13 @@ h1 {
   width: min(31vw, 250px);
   min-width: 150px;
   padding: 5px 9px;
-  background: #1b2140ee;
-  border: 2px solid #e8a53c;
-  color: #fff4dc;
+  background: rgb(255 253 245 / 92%);
+  border: 2px solid var(--c-gold);
+  color: var(--t-ink);
   font:
-    700 14px/1.2 'Chakra Petch',
+    700 14px/1.2 'Mitr',
     sans-serif;
-  text-shadow: 1px 1px #080a14;
+  text-shadow: none;
 }
 .battle-hp-card strong {
   grid-column: 1 / -1;
@@ -1198,13 +1285,13 @@ h1 {
 }
 .battle-hp-track {
   height: 12px;
-  border: 2px solid #0c1020;
-  background: #472e43;
+  border: 2px solid var(--c-cocoa);
+  background: #ecd9c8;
 }
 .battle-hp-track span {
   display: block;
   height: 100%;
-  background: #71cb77;
+  background: var(--c-green);
 }
 .battle-hp-value {
   font-variant-numeric: tabular-nums;
@@ -1219,7 +1306,7 @@ h1 {
   overflow: visible;
   gap: 6px;
   padding: 5px;
-  background: #1b2140ee;
+  background: rgb(255 253 245 / 92%);
 }
 .battle-mode .command-card,
 .battle-mode .item-card {
@@ -1233,35 +1320,35 @@ h1 {
   width: clamp(82px, 9vw, 112px);
   min-height: 80px;
   padding: 3px 6px;
-  border: 2px solid #e8a53c;
+  border: 2px solid var(--c-gold);
   border-radius: 0;
-  background: #302c4b;
+  background: var(--c-blue);
   white-space: normal;
   overflow-wrap: anywhere;
   text-align: center;
   line-height: 1.15;
-  box-shadow: inset 0 0 0 2px #171324;
+  box-shadow: inset 0 0 0 2px var(--t-outline-soft);
 }
 .battle-mode .item-card {
   width: clamp(75px, 8vw, 94px);
-  border-color: #a7b3d0;
+  border-color: var(--c-grey);
 }
 .battle-mode .command-card.selected,
 .battle-mode .command-card:focus-visible,
 .battle-mode .item-card:focus-visible {
-  outline: 3px solid #fff4dc;
-  box-shadow: 0 0 10px #e8a53c;
+  outline: 3px solid var(--c-cream);
+  box-shadow: 0 0 10px var(--c-gold);
 }
 .battle-mode .card-cursor {
   position: absolute;
   top: -16px;
   left: 50%;
   transform: translateX(-50%);
-  color: #fff4dc;
+  color: var(--t-ink);
   font:
-    700 13px/1 'Chakra Petch',
+    700 13px/1 'Mitr',
     sans-serif;
-  text-shadow: 0 1px #171324;
+  text-shadow: none;
   pointer-events: none;
 }
 .battle-mode .chosen-card {
@@ -1269,9 +1356,9 @@ h1 {
   flex: 0 0 44px;
   place-items: center;
   min-height: 80px;
-  border: 2px solid #e8a53c;
-  background: #38264a;
-  color: #ffd477;
+  border: 2px solid var(--c-gold);
+  background: var(--c-purple);
+  color: var(--c-cocoa);
   font-size: 22px;
 }
 .battle-mode .command-card:disabled,
@@ -1284,16 +1371,16 @@ h1 {
   display: block;
   flex: 0 0 32px;
   width: 32px;
-  background-image: url('/sprites/cards.png');
-  background-size: 600% 100%;
-  background-position: calc(var(--card-frame) * 20%) 0;
+  height: 32px;
   background-repeat: no-repeat;
-  image-rendering: pixelated;
 }
 .card-label {
   display: block;
   width: 100%;
   font-size: 12px;
+  color: var(--c-cocoa);
+  background: var(--c-cream);
+  border-radius: 4px;
 }
 @media (max-height: 480px) and (orientation: landscape) {
   .battle-hp-card {
@@ -1316,5 +1403,116 @@ h1 {
   .battle-mode .action-tray {
     gap: 4px;
     bottom: 4px;
+  }
+}
+
+/* M5a Task 6: turn ribbon + tap-a-space popup (DOM overlays on the board). */
+.turn-ribbon {
+  position: absolute;
+  /* Dedicated top-centre lane between the two upper seat cards. */
+  top: 8px;
+  width: max-content;
+  max-width: calc(100vw - 2 * clamp(180px, 24vw, 280px) - 32px);
+  text-align: center;
+  overflow-wrap: anywhere;
+  left: 50%;
+  z-index: 4;
+  transform: translateX(-50%);
+  border: 2px solid var(--c-gold, #f5c51c);
+  border-radius: 999px;
+  padding: 4px 18px;
+  background: var(--c-cocoa, #5c3317);
+  color: var(--c-cream, #f5eedc);
+  font-weight: 700;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+/* Battle HP and controls occupy the first 50px; the turn announcement gets
+   its own centred lane below them instead of sharing the mute button's lane. */
+.battle-mode .turn-ribbon {
+  top: 64px;
+}
+.turn-ribbon.visible {
+  opacity: 1;
+}
+
+.space-info-shade {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: rgb(92 51 23 / 40%);
+  /* Review 5b: the shade never intercepts clicks — canvas fork arrows stay
+     tappable while the popup is open; only the card itself takes pointers. */
+  pointer-events: none;
+}
+
+.fork-arrow-mirror {
+  position: fixed;
+  z-index: 31;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.fork-arrow-mirror:focus-visible {
+  outline: 3px solid var(--c-gold, #f5c51c);
+  border-radius: 8px;
+}
+
+.space-info {
+  position: relative;
+  width: min(320px, 86vw);
+  border: 3px solid var(--c-gold, #f5c51c);
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: #f5eedc;
+  color: #5c3317;
+  box-shadow: 0 8px 24px rgb(92 51 23 / 35%);
+  /* Review 5b: the card re-enables what the shade disabled. */
+  pointer-events: auto;
+}
+
+.space-info h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.space-info .space-info-text {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.space-info .space-info-owner {
+  display: block;
+  margin-top: 6px;
+  font-weight: 700;
+}
+
+.space-info-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: 0;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #5c3317;
+  color: #f5eedc;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-ribbon {
+    transition: none;
   }
 }

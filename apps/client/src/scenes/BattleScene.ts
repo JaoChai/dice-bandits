@@ -4,7 +4,13 @@ import { t, onLangChange } from '../i18n';
 import { drawBackdrop } from './battle/backdrop';
 import { drawDicePools, drawFighters, type BattleFighters } from './battle/fighters';
 import { playHit } from './battle/effects';
-import { BATTLE_EXCHANGE_Y, battleLayout } from './battle/layout';
+import {
+  BATTLE_EXCHANGE_Y,
+  BATTLE_FRAME,
+  BATTLE_FIGHTER_HEIGHT,
+  BATTLE_GROUND_Y,
+  battleLayout,
+} from './battle/layout';
 
 const layout = battleLayout();
 
@@ -40,7 +46,7 @@ export default class BattleScene extends Phaser.Scene {
         const side = event.params.side === 'b' ? 'b' : 'a';
         const pos = layout[side === 'a' ? 'left' : 'right'];
         const card = this.add
-          .text(pos.x, 180, '?', {
+          .text(pos.x, BATTLE_GROUND_Y - BATTLE_FIGHTER_HEIGHT - 24, '?', {
             fontFamily: 'Chakra Petch',
             fontSize: '24px',
             color: '#ffd477',
@@ -123,14 +129,19 @@ export default class BattleScene extends Phaser.Scene {
     ];
     drawDicePools(this, state, layout);
     this.exchangeLabel = this.add
-      .text(320, BATTLE_EXCHANGE_Y, t('battle.exchange', { exchange: battle.exchange }), {
-        fontFamily: 'Chakra Petch',
-        fontSize: '18px',
-        color: '#fff4dc',
-        fontStyle: 'bold',
-        stroke: '#1b2140',
-        strokeThickness: 4,
-      })
+      .text(
+        BATTLE_FRAME.width / 2,
+        BATTLE_EXCHANGE_Y,
+        t('battle.exchange', { exchange: battle.exchange }),
+        {
+          fontFamily: 'Chakra Petch',
+          fontSize: '18px',
+          color: '#fff4dc',
+          fontStyle: 'bold',
+          stroke: '#1b2140',
+          strokeThickness: 4,
+        },
+      )
       .setOrigin(0.5)
       .setDepth(8);
   }

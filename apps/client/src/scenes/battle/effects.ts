@@ -1,9 +1,14 @@
 import type Phaser from 'phaser';
 import type { BattleFighters } from './fighters';
 import type { BattleLayout } from './layout';
-import { hasAnim } from '../../art/atlas';
+import { BATTLE_FIGHTER_HEIGHT } from './layout';
+import { playMotion } from './fighters';
+import { ART } from '../../art/manifest';
 import { reducedMotion } from '../../art/motion';
 import { t } from '../../i18n';
+
+/** Chest height for hit fx, from the 720p puppet (upper half of the body). */
+export const HIT_TORSO_Y = BATTLE_FIGHTER_HEIGHT / 2;
 
 type Side = 'a' | 'b';
 type DamageEvent = {
@@ -38,12 +43,10 @@ function effect(
   name: 'slash' | 'spark' | 'coin',
   x: number,
   y: number,
-): Phaser.GameObjects.Sprite | undefined {
-  const frame = { slash: 0, spark: 3, coin: 6 }[name];
-  if (!scene.textures.exists('fx') || !scene.textures.get('fx').has(String(frame))) return;
-  const sprite = scene.add.sprite(x, y, 'fx', frame).setScale(2).setDepth(12);
-  if (hasAnim(scene, 'fx', name) && !reducedMotion()) sprite.play(`fx:${name}`);
-  return sprite;
+): Phaser.GameObjects.Image | undefined {
+  const frame = { slash: 'sword', spark: 'star', coin: 'coin' }[name];
+  if (!scene.textures.exists(ART.icons) || !scene.textures.get(ART.icons).has(frame)) return;
+  return scene.add.image(x, y, ART.icons, frame).setDisplaySize(48, 48).setDepth(12);
 }
 
 export async function playHit(
@@ -58,25 +61,23 @@ export async function playHit(
   if (speed <= 0) return;
   const attackerSide = String(event.attacker) === String(rightId) ? 'b' : 'a';
   const attacker = fighters[attackerSide];
-  const attackKey = attacker.texture.key;
-  if (hasAnim(scene, attackKey, 'attack')) attacker.play(`${attackKey}:attack`);
+  playMotion(scene, attacker, 'attack');
   await pause(scene, 125 * speed);
   for (const { side, amount } of damageTargets(event, leftId, rightId)) {
     const pos = layout[side === 'a' ? 'left' : 'right'];
     const target = fighters[side];
-    const slash = effect(scene, 'slash', pos.x, pos.y - 68);
+    const slash = effect(scene, 'slash', pos.x, pos.y - HIT_TORSO_Y);
     await pause(scene, 90 * speed);
     slash?.destroy();
-    const spark = effect(scene, 'spark', pos.x, pos.y - 66);
-    const hurtKey = target.texture.key;
-    if (hasAnim(scene, hurtKey, 'hurt')) target.play(`${hurtKey}:hurt`);
+    const spark = effect(scene, 'spark', pos.x, pos.y - HIT_TORSO_Y + 2);
+    playMotion(scene, target, 'hurt');
     if (!reducedMotion()) {
       target.setTint(0xffffff);
       scene.cameras.main.flash(90 * speed, 255, 235, 225);
       scene.cameras.main.shake(110 * speed, 0.003);
     }
     const number = scene.add
-      .text(pos.x, pos.y - 112, t('battle.damage', { value: amount }), {
+      .text(pos.x, pos.y - BATTLE_FIGHTER_HEIGHT - 36, t('battle.damage', { value: amount }), {
         fontFamily: 'Chakra Petch',
         fontSize: '20px',
         color: '#fff4dc',
@@ -100,9 +101,9 @@ export async function playHit(
     );
     spark?.destroy();
     target.clearTint();
-    if (hasAnim(scene, hurtKey, 'idle') && !reducedMotion()) target.play(`${hurtKey}:idle`);
+    if (!reducedMotion()) playMotion(scene, target, 'idle');
   }
-  if (hasAnim(scene, attackKey, 'idle') && !reducedMotion()) attacker.play(`${attackKey}:idle`);
+  if (!reducedMotion()) playMotion(scene, attacker, 'idle');
 }
 
 export async function playCoinBurst(

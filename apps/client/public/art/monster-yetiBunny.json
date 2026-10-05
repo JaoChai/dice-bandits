@@ -1,0 +1,29 @@
+{
+  "frames": {
+    "idle": {
+      "x": 104,
+      "y": 20,
+      "w": 231,
+      "h": 280,
+      "anchorX": 115,
+      "anchorY": 280
+    },
+    "attack": {
+      "x": 520,
+      "y": 23,
+      "w": 279,
+      "h": 277,
+      "anchorX": 139,
+      "anchorY": 277
+    },
+    "hurt": {
+      "x": 975,
+      "y": 32,
+      "w": 249,
+      "h": 268,
+      "anchorX": 124,
+      "anchorY": 268
+    }
+  },
+  "image": "monster-yetiBunny.webp"
+}

@@ -90,7 +90,7 @@ beforeEach(async () => {
   fakeGame.mockImplementation(() => ({
     destroy: vi.fn(),
     registry: { set: vi.fn() },
-    events: { emit: vi.fn() },
+    events: { emit: vi.fn(), on: vi.fn() },
     scene: { getScene: vi.fn(), isActive: vi.fn(() => false) },
   }));
 });

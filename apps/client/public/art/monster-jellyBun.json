@@ -1,0 +1,29 @@
+{
+  "frames": {
+    "idle": {
+      "x": 102,
+      "y": 20,
+      "w": 236,
+      "h": 280,
+      "anchorX": 118,
+      "anchorY": 280
+    },
+    "attack": {
+      "x": 518,
+      "y": 37,
+      "w": 283,
+      "h": 263,
+      "anchorX": 141,
+      "anchorY": 263
+    },
+    "hurt": {
+      "x": 980,
+      "y": 36,
+      "w": 240,
+      "h": 264,
+      "anchorX": 120,
+      "anchorY": 264
+    }
+  },
+  "image": "monster-jellyBun.webp"
+}

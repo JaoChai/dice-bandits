@@ -1,0 +1,127 @@
+/*
+ * M5a cartoon theme tokens (spec §9, palette from 14_palette_ui).
+ * Values are exact per the plan's Global Constraints; reskinPalette.test.ts
+ * parses this file, so keep every declaration on a single line.
+ */
+:root {
+  --c-blue: #2e7fe0;
+  --c-green: #3ba84a;
+  --c-orange: #f07818;
+  --c-gold: #f5c51c;
+  --c-red: #d42b3a;
+  --c-purple: #6c2ebe;
+  --c-grey: #8e8e93;
+  --c-pink: #f06ea9;
+  --c-cream: #f5eedc;
+  --c-cocoa: #5c3317;
+
+  /* Mapped surfaces for the existing style rules (light cartoon, cocoa ink). */
+  --t-bg: var(--c-cream);
+  --t-panel: #fffdf5;
+  --t-panel-dim: #f8f1de;
+  --t-ink: var(--c-cocoa);
+  --t-muted: var(--c-grey);
+  --t-outline: var(--c-cocoa);
+  --t-outline-soft: rgb(92 51 23 / 35%);
+  --t-accent: var(--c-blue);
+  --t-accent-ink: #ffffff;
+  --t-gold: var(--c-gold);
+  --t-danger: var(--c-red);
+  --t-shadow: 0 3px 0 var(--t-outline-soft);
+  --t-radius: 14px;
+}
+
+/* Cream page behind every screen; styles.css adds no dark backdrop on top. */
+body {
+  background: var(--t-bg);
+  color: var(--t-ink);
+}
+
+/*
+ * Board menu (spec §9): one button, language + sound + exit inside one panel.
+ * (Token-only chrome stays here; component rules live in styles.css, which
+ * imports after this sheet and is the file the stylesheet tests audit.)
+ */
+.menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 2px solid var(--t-outline, #5c3317);
+  border-radius: 12px;
+  padding: 6px;
+  background: var(--c-gold, #f5c51c);
+  color: var(--c-cocoa, #5c3317);
+  cursor: pointer;
+}
+
+.menu-button:hover {
+  filter: brightness(1.06);
+}
+
+.menu-button:focus-visible {
+  outline: 3px solid var(--c-blue, #2e7fe0);
+}
+
+.menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 10px;
+  min-width: 210px;
+  border: 2px solid var(--t-outline, #5c3317);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--t-panel, #fffdf5);
+  box-shadow: var(--t-shadow, 0 3px 0 rgb(92 51 23 / 35%));
+  color: var(--t-ink, #5c3317);
+}
+
+.menu-slot {
+  position: relative;
+}
+
+.menu-section {
+  display: grid;
+  gap: 6px;
+}
+
+.menu-label {
+  font-weight: 600;
+}
+
+.menu-panel .language-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.menu-panel .language-toggle button {
+  flex: 1;
+  min-height: 36px;
+  border: 2px solid var(--t-outline, #5c3317);
+  border-radius: 10px;
+  padding: 4px 10px;
+  background: var(--t-panel, #fffdf5);
+  color: var(--t-ink, #5c3317);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.menu-panel .language-toggle button.selected {
+  background: var(--c-gold, #f5c51c);
+  color: var(--c-cocoa, #5c3317);
+}
+
+.menu-panel .text-button {
+  justify-content: center;
+  min-height: 36px;
+}
+
+.menu-panel [data-action='exit'] {
+  width: 100%;
+  background: var(--c-red, #d42b3a);
+  color: #ffffff;
+}

@@ -43,7 +43,7 @@ test('board sound toggle flips aria-pressed', async ({ page }) => {
 });
 
 test('full hot-seat game plays event sounds from clean audio responses', async ({ page }) => {
-  // A whole game at speed=0 is ~100 UI actions; slow runners took full-game.spec ~35 s.
+  // Keep the original journey budget: smooth 720p textures do not require MSAA.
   test.setTimeout(90_000);
   const { consoleErrors, pageErrors } = watchErrors(page);
   const audioResponses: { url: string; status: number; contentType: string }[] = [];

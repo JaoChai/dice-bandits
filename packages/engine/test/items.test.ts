@@ -52,7 +52,7 @@ describe('Task 6 items and shop', () => {
       opponent: {
         kind: 'monster',
         seat: null,
-        monsterId: 'goldSlime',
+        monsterId: 'jellyBun',
         level: 1,
         hp: 30,
         stats: { maxHp: 30, atk: 8, def: 6, spd: 4, mag: 2 },
@@ -87,7 +87,7 @@ describe('Task 6 items and shop', () => {
         opponent: {
           kind: 'monster',
           seat: null,
-          monsterId: 'goldSlime',
+          monsterId: 'jellyBun',
           level: 1,
           hp: 100,
           stats: { maxHp: 100, atk: 25, def: 0, spd: 100, mag: 2 },
@@ -113,7 +113,7 @@ describe('Task 6 items and shop', () => {
       opponent: {
         kind: 'monster',
         seat: null,
-        monsterId: 'goldSlime',
+        monsterId: 'jellyBun',
         level: 1,
         hp: 30,
         stats: { maxHp: 30, atk: 8, def: 6, spd: 4, mag: 2 },

@@ -1,43 +1,43 @@
 import type Phaser from 'phaser';
-import { REGION_VISUALS } from '../../art/tables';
 import { reducedMotion } from '../../art/motion';
 
-export const DEPTH_AMBIENT_MIN = 10;
+export const DEPTH_AMBIENTS = 15;
+
+/** One soft accent colour per region; the map art stays the hero. */
+const ACCENTS: Record<string, number> = {
+  meadow: 0x7fc8f8,
+  desert: 0xf8d47f,
+  snow: 0xd8f4ff,
+  volcano: 0xf8845f,
+};
 
 /**
- * Animated pond/oasis/frozen-pond/lava sprites in open ground, `loop` anim at
- * 32 px, y-sorted with the other decor. Falls back to a still M1 colour dot.
+ * M5a ambient life (spec §5): tween-only accents — at most one per region,
+ * no sprites or atlases, drawn above the tiles. Runs only at speed > 0 with
+ * motion allowed, and flags the E2E `ambientRunning` probe when it does.
  */
 export function drawAmbients(
   scene: Phaser.Scene,
-  placed: { x: number; y: number; region: string }[],
-  ambientScale: number,
-): Phaser.GameObjects.Sprite[] {
-  const sprites: Phaser.GameObjects.Sprite[] = [];
-  for (const ambient of [...placed].sort((a, b) => a.y - b.y)) {
-    const key = REGION_VISUALS[ambient.region as keyof typeof REGION_VISUALS]?.ambient;
-    const depth = DEPTH_AMBIENT_MIN + ambient.y / 1000;
-    if (!key || !scene.textures.exists(key) || !scene.textures.get(key).has('0')) {
-      const g = scene.add.graphics().setDepth(depth);
-      g.fillStyle(0x4aa5c8, 1);
-      g.fillCircle(ambient.x, ambient.y, 6);
-      sprites.push(g as unknown as Phaser.GameObjects.Sprite);
-      continue;
-    }
-    const sprite = scene.add
-      .sprite(ambient.x, ambient.y, key, 0)
-      .setScale(ambientScale)
-      .setDepth(depth);
-    if (hasLoop(scene, key) && !reducedMotion() && window.diceBanditsSpeed > 0) {
-      sprite.play(`${key}:loop`);
-      if (import.meta.env.VITE_TEST_HOOKS === '1' && window.__db)
-        window.__db.art.ambientRunning = true;
-    }
-    sprites.push(sprite);
+  nodes: readonly { id: number; x: number; y: number; region: string }[],
+): void {
+  if (reducedMotion() || window.diceBanditsSpeed <= 0) return;
+  const firstByRegion = new Map<string, { x: number; y: number }>();
+  for (const node of nodes)
+    if (!firstByRegion.has(node.region)) firstByRegion.set(node.region, node);
+  for (const [region, node] of firstByRegion) {
+    const glow = scene.add.graphics().setDepth(DEPTH_AMBIENTS);
+    glow.fillStyle(ACCENTS[region] ?? 0xffffff, 1);
+    glow.fillCircle(node.x, node.y, 10);
+    scene.tweens.add({
+      targets: glow,
+      alpha: 0.35,
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    // The E2E probe exists only when the app ran with test hooks; gate on it
+    // directly so the flag works in every build/runtime.
+    if (window.__db) window.__db.art.ambientRunning = true;
   }
-  return sprites;
-}
-
-function hasLoop(scene: Phaser.Scene, key: string): boolean {
-  return scene.anims.exists(`${key}:loop`);
 }

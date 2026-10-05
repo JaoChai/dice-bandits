@@ -1,0 +1,29 @@
+{
+  "frames": {
+    "idle": {
+      "x": 92,
+      "y": 22,
+      "w": 256,
+      "h": 278,
+      "anchorX": 128,
+      "anchorY": 278
+    },
+    "attack": {
+      "x": 488,
+      "y": 20,
+      "w": 344,
+      "h": 280,
+      "anchorX": 172,
+      "anchorY": 280
+    },
+    "hurt": {
+      "x": 961,
+      "y": 33,
+      "w": 277,
+      "h": 267,
+      "anchorX": 138,
+      "anchorY": 267
+    }
+  },
+  "image": "monster-coinScorpion.webp"
+}

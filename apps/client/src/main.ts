@@ -1,8 +1,9 @@
-import '@fontsource/chakra-petch/400.css';
-import '@fontsource/chakra-petch/700.css';
-import '@fontsource/press-start-2p/400.css';
+import '@fontsource/mitr/400.css';
+import '@fontsource/mitr/600.css';
+import './ui/theme.css';
 import './ui/styles.css';
 import Phaser from 'phaser';
+import { createGame as createPhaserGame } from './game';
 import { createGame, type Action, type GameState } from '@dice-bandits/engine';
 import { GameController } from './controller';
 import { showSetup, showTitle } from './ui/screens';
@@ -15,9 +16,9 @@ import { t } from './i18n';
 import { initAudio, onGameEvents, setMusic } from './audio';
 import { musicForState } from './audio/events';
 import { showOnlineScreens, type OnlineSocket } from './online/screens';
+import { openSoundDialog } from './ui/screens';
 import { type RoomSession } from './online/session';
 import type { ServerMsg } from '@dice-bandits/room';
-import BootScene from './scenes/BootScene';
 import BoardScene from './scenes/BoardScene';
 import BattleScene from './scenes/BattleScene';
 import { animateThenRender } from './eventOrder';
@@ -25,14 +26,30 @@ import { renderHud } from './ui/hud';
 import { renderEventToast } from './ui/dialogs';
 import { renderResults } from './ui/results';
 import { shake } from './fx';
+import { clearForkArrows } from './scenes/board/forkArrows';
+import { closeSpaceInfo } from './ui/spaceInfo';
 
 const app = getMount();
 initAudio();
 let game: Phaser.Game | null = null;
 
+/** Phaser destroy is deferred; remove body-owned board UI synchronously. */
+function destroyGame(): void {
+  closeSpaceInfo();
+  clearForkArrows();
+  game?.destroy(true);
+  game = null;
+}
+
 /** Test-only probe: exercise the real board shake at the configured speed. */
 function createArtProbe() {
   return {
+    get boardReady() {
+      return game?.scene.isActive('BoardScene') ?? false;
+    },
+    get battleReady() {
+      return game?.scene.isActive('BattleScene') ?? false;
+    },
     ambientRunning: false,
     shakeCount: 0,
     triggerShake: () => {
@@ -42,13 +59,39 @@ function createArtProbe() {
   };
 }
 
+/**
+ * Review Focus 2: a view whose board does not match the authored map (room
+ * created before a deploy) destroys the game, shows `error.boardOutdated`,
+ * and returns to the title — never renders a mismatched board.
+ */
+function showOnlineErrorScreen(key: string): void {
+  const app = getMount();
+  app.innerHTML = `<main class="screen online-screen" data-testid="screen-online-error"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button></header><p class="error" role="alert" data-testid="online-error">${escapeHtml(t(key))}</p></main>`;
+  app.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', () => {
+    history.pushState(null, '', '/');
+    showTitle(startSetup);
+  });
+}
+
+/** Wire the whole-map toggle button to the live BoardScene. */
+function bindMapToggle(app: HTMLElement, game: Phaser.Game, stateOf: () => GameState): void {
+  app.querySelector('[data-testid="map-toggle"]')?.addEventListener('click', () => {
+    const whole = !(window.diceBanditsMapWhole === true);
+    window.diceBanditsMapWhole = whole;
+    const scene = game.scene.getScene('BoardScene') as BoardScene | undefined;
+    scene?.toggleWholeMap(stateOf(), whole);
+    app
+      .querySelector<HTMLButtonElement>('[data-testid="map-toggle"]')
+      ?.setAttribute('aria-pressed', String(whole));
+  });
+}
+
 export function startOnlineGame(
   socket: OnlineSocket,
   session: RoomSession,
   firstView: Extract<ServerMsg, { type: 'view' }>,
 ): void {
-  game?.destroy(true);
-  game = null;
+  destroyGame();
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
 
@@ -59,8 +102,7 @@ export function startOnlineGame(
     });
   };
   const showOnlineError = (key: string): void => {
-    game?.destroy(true);
-    game = null;
+    destroyGame();
     app.innerHTML = `<main class="screen online-screen" data-testid="screen-online-error"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button></header><p class="error" role="alert" data-testid="online-error">${escapeHtml(t(key))}</p></main>`;
     app.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', () => {
       history.pushState(null, '', '/');
@@ -68,8 +110,7 @@ export function startOnlineGame(
     });
   };
   const showOnlineResults = (state: GameState): void => {
-    game?.destroy(true);
-    game = null;
+    destroyGame();
     setMusic('board');
     renderResults(
       app,
@@ -166,24 +207,18 @@ export function startOnlineGame(
     }
     setMusic(musicForState(controller.state));
     renderOnlineHud();
-    game = new Phaser.Game({
-      type: Phaser.AUTO,
-      parent: 'phaser-board',
-      width: 640,
-      height: 360,
-      backgroundColor: '#273449',
-      pixelArt: true,
-      roundPixels: true,
-      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-      scene: [BootScene, BoardScene, BattleScene],
+    game = createPhaserGame('phaser-board');
+    // Fork arrows (canvas) dispatch through the same controller as the DOM tray.
+    game.events.on('board-chooseBranch', (to: number) => {
+      void controller.dispatch({ type: 'chooseBranch', to });
     });
     game.registry.set('state', controller.state);
-    app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {
-      game?.destroy(true);
-      game = null;
-      history.pushState(null, '', '/');
-      showTitle(startSetup);
+    window.diceBanditsMapWhole = false;
+    game.registry.set('onBoardOutdated', (): void => {
+      clearSession(session.code);
+      showOnlineError('error.boardOutdated');
     });
+    bindMapToggle(app, game, () => controller.state);
     if (import.meta.env.VITE_TEST_HOOKS === '1') {
       window.__db = {
         getState: () => controller.state,
@@ -216,6 +251,23 @@ app.addEventListener('dice-bandits:online', (event) => {
   const detail = (event as CustomEvent<{ mode?: 'create' | 'join'; code?: string }>).detail;
   openOnline(detail);
 });
+// Board menu exit (bubbles out of the HUD's shell): tear down the game and go
+// home. One module-level listener covers hot-seat and online boards; the old
+// per-game `[data-action="exit"]` button no longer exists (spec §9 menu).
+app.addEventListener('dice-bandits:menu-exit', () => {
+  destroyGame();
+  history.pushState(null, '', '/');
+  showTitle(startSetup);
+});
+// Board menu sound-settings: the menu entry bubbles the request out of the
+// game shell; the main flow owns the dialog (same one the title screen uses).
+app.addEventListener('dice-bandits:sound-settings', (event) => {
+  const button =
+    event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>('[data-testid="audio-settings"]')
+      : null;
+  if (button) openSoundDialog(button);
+});
 app.addEventListener('dice-bandits:home', () => {
   history.pushState(null, '', '/');
   showTitle(startSetup);
@@ -242,13 +294,13 @@ function startSetup(): void {
 }
 
 function startGame(state: GameState): void {
+  destroyGame();
   if (state.phase.kind === 'gameOver') {
     setMusic('board');
     renderResults(app, state, startSetup, () => showTitle(startSetup));
     return;
   }
   setMusic(musicForState(state));
-  game?.destroy(true);
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
   const controller = new GameController({
@@ -283,8 +335,7 @@ function startGame(state: GameState): void {
         },
       );
       if (nextState.phase.kind === 'gameOver') {
-        game?.destroy(true);
-        game = null;
+        destroyGame();
         setMusic('board');
         renderResults(app, nextState, startSetup, () => {
           showTitle(startSetup);
@@ -293,30 +344,21 @@ function startGame(state: GameState): void {
     },
   });
   function dispatch(action: Action): void {
-    if (action.type === 'pvpReward') {
-      void controller.dispatch(action);
-      return;
-    }
     void controller.dispatch(action);
   }
+  // The HUD mounts `#phaser-board`; Phaser must be created after it exists.
   renderHud(app, controller.state, dispatch);
-  game = new Phaser.Game({
-    type: Phaser.AUTO,
-    parent: 'phaser-board',
-    width: 640,
-    height: 360,
-    backgroundColor: '#273449',
-    pixelArt: true,
-    roundPixels: true,
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    scene: [BootScene, BoardScene, BattleScene],
+  game = createPhaserGame('phaser-board');
+  game.events.on('board-chooseBranch', (to: number) => {
+    void controller.dispatch({ type: 'chooseBranch', to });
   });
   game.registry.set('state', state);
-  app.querySelector('[data-action="exit"]')?.addEventListener('click', () => {
-    game?.destroy(true);
-    game = null;
-    showTitle(startSetup);
+  window.diceBanditsMapWhole = false;
+  game.registry.set('onBoardOutdated', (): void => {
+    destroyGame();
+    showOnlineErrorScreen('error.boardOutdated');
   });
+  bindMapToggle(app, game, () => controller.state);
   if (import.meta.env.VITE_TEST_HOOKS === '1') {
     window.__db = {
       getState: () => controller.state,
@@ -337,6 +379,8 @@ declare global {
     __db?: {
       getState: () => GameState;
       art: {
+        readonly boardReady: boolean;
+        readonly battleReady: boolean;
         ambientRunning: boolean;
         shakeCount: number;
         backdropKey?: string;
@@ -345,6 +389,7 @@ declare global {
     };
     diceBanditsText: (key: string) => string;
     diceBanditsSpeed: number;
+    diceBanditsMapWhole?: boolean;
   }
 }
 

@@ -8,13 +8,12 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
     "cf:types": "wrangler types",
-    "test": "vitest run && node ../../scripts/check-audio-budget.mjs && node ../../scripts/check-sprite-budget.mjs",
+    "test": "vitest run && node ../../scripts/check-audio-budget.mjs && node ../../scripts/check-art-budget.mjs",
     "e2e": "VITE_TEST_HOOKS=1 npm run build && playwright test",
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@fontsource/chakra-petch": "5.3.0",
-    "@fontsource/press-start-2p": "5.3.0",
+    "@fontsource/mitr": "5.3.0",
     "@dice-bandits/engine": "*",
     "@dice-bandits/room": "*",
     "phaser": "4.2.1"
