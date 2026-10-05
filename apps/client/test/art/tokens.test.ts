@@ -6,23 +6,18 @@ describe('board hero tokens', () => {
     expect(tokenOffsets(1)).toEqual([{ x: 0, y: 0 }]);
   });
 
-  it('separates two tokens by twelve pixels', () => {
-    const offsets = tokenOffsets(2);
-    expect(offsets).toEqual([
-      { x: -6, y: 0 },
-      { x: 6, y: 0 },
-    ]);
-    expect(Math.abs(offsets[1]!.x - offsets[0]!.x)).toBeGreaterThanOrEqual(12);
-  });
-
-  it.each([3, 4])('places %i tokens in a 2x2 grid without overlap', (count) => {
+  // Restoring the pixel-art ±6 spread must fail: a conservative 72x72
+  // cartoon box may share at most 35% of its area with another token.
+  it.each([2, 3, 4])('keeps %i shared cartoon tokens distinguishable near their tile', (count) => {
     const offsets = tokenOffsets(count);
     expect(offsets).toHaveLength(count);
+    for (const offset of offsets) expect(Math.hypot(offset.x, offset.y)).toBeLessThanOrEqual(48);
     for (let left = 0; left < offsets.length; left++) {
       for (let right = left + 1; right < offsets.length; right++) {
-        const dx = offsets[left]!.x - offsets[right]!.x;
-        const dy = offsets[left]!.y - offsets[right]!.y;
-        expect(Math.hypot(dx, dy)).toBeGreaterThanOrEqual(12);
+        const dx = Math.abs(offsets[left]!.x - offsets[right]!.x);
+        const dy = Math.abs(offsets[left]!.y - offsets[right]!.y);
+        const overlap = (Math.max(0, 72 - dx) * Math.max(0, 72 - dy)) / (72 * 72);
+        expect(overlap, `pair ${left}/${right}`).toBeLessThanOrEqual(0.35);
       }
     }
   });
@@ -40,12 +35,13 @@ describe('board hero tokens', () => {
   });
 
   it('centres tokens that are alone on their space', () => {
-    expect(tokenLayout([1, 7, 1, 3])).toEqual([
-      { x: -6, y: 0 },
-      { x: 0, y: 0 },
-      { x: 6, y: 0 },
-      { x: 0, y: 0 },
-    ]);
+    const layout = tokenLayout([1, 7, 1, 3]);
+    expect(layout[1]).toEqual({ x: 0, y: 0 });
+    expect(layout[3]).toEqual({ x: 0, y: 0 });
+    expect(layout[0]!.x).toBeLessThan(0);
+    expect(layout[2]!.x).toBeGreaterThan(0);
+    expect(layout[0]!.y).toBe(0);
+    expect(layout[2]!.y).toBe(0);
   });
 
   it('creates a cartoon image token from the art atlas idle frame', () => {

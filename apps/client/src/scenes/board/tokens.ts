@@ -14,16 +14,19 @@ const FALLBACK_TINT = 0x8e8e93;
 export function tokenOffsets(countAtSpace: number): { x: number; y: number }[] {
   if (countAtSpace <= 0) return [];
   if (countAtSpace === 1) return [{ x: 0, y: 0 }];
+  /** Compact 72px cartoon footprint: 56px horizontal and 52px vertical
+   * separation leaves <=28% overlap even for a square token. Feet remain
+   * within one tile's 48px radius; single tokens still sit at its centre. */
   if (countAtSpace === 2)
     return [
-      { x: -6, y: 0 },
-      { x: 6, y: 0 },
+      { x: -28, y: 0 },
+      { x: 28, y: 0 },
     ];
   return [
-    { x: -6, y: -6 },
-    { x: 6, y: -6 },
-    { x: -6, y: 6 },
-    { x: 6, y: 6 },
+    { x: -28, y: -26 },
+    { x: 28, y: -26 },
+    { x: -28, y: 26 },
+    { x: 28, y: 26 },
   ].slice(0, countAtSpace);
 }
 
