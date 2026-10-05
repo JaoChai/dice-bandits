@@ -7,7 +7,7 @@ import { createHeroToken, tokenLayout } from './board/tokens';
 import { drawRoad } from './board/road';
 import { drawTiles } from './board/tiles';
 import { drawBuildings } from './board/buildings';
-import { cameraTarget, gameplayZoom } from './board/camera';
+import { cameraTarget, gameplayZoom, WORLD } from './board/camera';
 import { drawMapLayer, roadSegments, validate } from './board/mapLayer';
 import { clearForkArrows, drawForkArrows } from './board/forkArrows';
 import { drawAmbients } from './board/ambient';
@@ -34,6 +34,10 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Keep the zoomed viewport on the painted map, including during follow
+    // tweens and whole-map transitions. Otherwise a start near the left edge
+    // centres on negative world coordinates and reveals the renderer background.
+    this.cameras.main.setBounds(0, 0, WORLD.width, WORLD.height);
     this.cameras.main.setScroll(0, 0);
     const onState = (state: GameState): void => this.renderBoard(state);
     this.game.events.on('game-state', onState);

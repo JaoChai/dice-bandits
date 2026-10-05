@@ -72,7 +72,7 @@ describe('BootScene cartoon loader contract', () => {
     const board = Object.assign(Object.create(BoardScene.prototype), {
       game: { registry, events: new EventEmitter() },
       events: new EventEmitter(),
-      cameras: { main: { setScroll: vi.fn() } },
+      cameras: { main: { setBounds: vi.fn(), setScroll: vi.fn() } },
       scene: { isActive: vi.fn(() => false), launch },
       renderBoard,
     }) as InstanceType<typeof BoardScene>;
