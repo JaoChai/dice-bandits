@@ -11,18 +11,44 @@ import { ART } from '../../art/manifest';
  * textures are submitted even when most are offscreen. Missing tiles draw
  * a region-tinted flat fallback and warn once, per Global Constraints.
  */
-export function drawMapLayer(scene: Phaser.Scene): Phaser.GameObjects.Image[] {
+export function drawMapLayer(
+  scene: Phaser.Scene,
+  bounds = { x: 0, y: 0, width: MAP.width, height: MAP.height },
+): Phaser.GameObjects.Image[] {
   const images: Phaser.GameObjects.Image[] = [];
   const { cols, rows, tile } = ART.mapTiles;
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const key = `map-r${row}c${col}`;
+  // Reflect existing terrain at native resolution into the fit-view gutters.
+  // No extra textures, stretched art, or renderer-background letterboxing.
+  const reflected = (index: number, count: number) => {
+    const position = ((index % (count * 2)) + count * 2) % (count * 2);
+    return {
+      index: position < count ? position : count * 2 - position - 1,
+      flip: position >= count,
+    };
+  };
+  for (
+    let row = Math.floor(bounds.y / tile[1]);
+    row < Math.ceil((bounds.y + bounds.height) / tile[1]);
+    row++
+  ) {
+    for (
+      let col = Math.floor(bounds.x / tile[0]);
+      col < Math.ceil((bounds.x + bounds.width) / tile[0]);
+      col++
+    ) {
+      const sourceRow = reflected(row, rows);
+      const sourceCol = reflected(col, cols);
+      const key = `map-r${sourceRow.index}c${sourceCol.index}`;
       const x = col * tile[0] + tile[0] / 2;
       const y = row * tile[1] + tile[1] / 2;
       if (scene.textures.exists(key)) {
         images.push(scene.add.image(x, y, key).setDepth(DEPTH_MAP));
       } else if (scene.textures.exists('art:map')) {
-        images.push(scene.add.image(x, y, 'art:map', `r${row}c${col}`).setDepth(DEPTH_MAP));
+        images.push(
+          scene.add
+            .image(x, y, 'art:map', `r${sourceRow.index}c${sourceCol.index}`)
+            .setDepth(DEPTH_MAP),
+        );
       } else {
         warnMissingTile(key);
         images.push(
@@ -32,6 +58,8 @@ export function drawMapLayer(scene: Phaser.Scene): Phaser.GameObjects.Image[] {
         );
       }
       const image = images[images.length - 1]!;
+      if (sourceCol.flip && 'setFlipX' in image) image.setFlipX(true);
+      if (sourceRow.flip && 'setFlipY' in image) image.setFlipY(true);
       const nativeWillRender = image.willRender;
       image.willRender = (camera) => {
         // CameraManager preRender updates worldView before willRender checks,

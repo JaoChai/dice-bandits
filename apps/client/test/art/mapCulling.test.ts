@@ -45,6 +45,50 @@ describe('painted map camera culling', () => {
     ]);
   });
 
+  it('paints mirrored native-size gutters when whole-map fit extends beyond the authored world', () => {
+    const scene = {
+      textures: { exists: () => true },
+      add: {
+        image: vi.fn((x: number, y: number, key: string) => ({
+          x,
+          y,
+          key,
+          flipX: false,
+          flipY: false,
+          willRender: () => true,
+          setDepth() {
+            return this;
+          },
+          setFlipX(value: boolean) {
+            this.flipX = value;
+            return this;
+          },
+          setFlipY(value: boolean) {
+            this.flipY = value;
+            return this;
+          },
+        })),
+      },
+    };
+    const images = drawMapLayer(scene as never, { x: -562, y: 0, width: 4324, height: 1800 });
+    const left = images.filter((image) => image.x < 0);
+    const right = images.filter((image) => image.x > 3200);
+    expect(images).toHaveLength(21);
+    expect(left).toHaveLength(3);
+    expect(right).toHaveLength(3);
+    for (const image of [...left, ...right]) {
+      expect((image as unknown as { flipX: boolean }).flipX).toBe(true);
+    }
+    expect((left[0] as unknown as { key: string }).key).toBe('map-r0c0');
+    expect((right[0] as unknown as { key: string }).key).toBe('map-r0c4');
+    expect(
+      left[0]!.willRender({ worldView: { x: 0, y: 0, width: 3200, height: 1800 } } as never),
+    ).toBe(false);
+    expect(
+      left[0]!.willRender({ worldView: { x: -562, y: 0, width: 4324, height: 1800 } } as never),
+    ).toBe(true);
+  });
+
   it('preserves the native visibility and camera-exclusion check', () => {
     const { visible, nativeChecks } = makeMap(false);
     expect(visible({ x: 0, y: 0, width: 3200, height: 1800 })).toEqual([]);

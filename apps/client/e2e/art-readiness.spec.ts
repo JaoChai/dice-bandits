@@ -32,6 +32,7 @@ test('battle art waits for the renderer, not the already visible DOM', async ({ 
       () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
     );
     expect(resolved, 'visible HUD is not proof that the canvas scenes have rendered').toBe(false);
+    await page.screenshot({ path: test.info().outputPath('asset-loading.png') });
     release();
     await ready;
     expect(
@@ -55,8 +56,14 @@ test('battle art waits for the renderer, not the already visible DOM', async ({ 
       };
     });
     console.log(`Renderer (${test.info().project.name}): ${JSON.stringify(renderer)}`);
-    expect(renderer.width).toBe(1280);
-    expect(renderer.height).toBe(720);
+    // EXPAND grows the logical width, while retaining uniform 720p scaling.
+    const viewport = page.viewportSize()!;
+    expect(renderer.width).toBe(
+      Math.floor(Math.max(1280, (720 * viewport.width) / viewport.height)),
+    );
+    expect(renderer.height).toBe(
+      Math.floor(Math.max(720, (1280 * viewport.height) / viewport.width)),
+    );
     expect(renderer.antialiasGL).toBe(false);
   } finally {
     release();

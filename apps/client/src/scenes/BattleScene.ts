@@ -6,15 +6,14 @@ import { drawDicePools, drawFighters, type BattleFighters } from './battle/fight
 import { playHit } from './battle/effects';
 import {
   BATTLE_EXCHANGE_Y,
-  BATTLE_FRAME,
   BATTLE_FIGHTER_HEIGHT,
   BATTLE_GROUND_Y,
   battleLayout,
 } from './battle/layout';
 
-const layout = battleLayout();
-
 export default class BattleScene extends Phaser.Scene {
+  private layout = battleLayout();
+  private latestState: GameState | undefined;
   private fighters: BattleFighters | undefined;
   private combatantIds: [string | number, string | number] | undefined;
   private exchangeLabel: Phaser.GameObjects.Text | undefined;
@@ -25,11 +24,17 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.layout = battleLayout(this.cameras.main.width, this.cameras.main.height);
+    const onResize = (): void => {
+      if (this.latestState) this.renderBattle(this.latestState);
+    };
+    this.scale.on('resize', onResize);
     this.game.events.on('game-state', this.renderBattle, this);
     const offLang = onLangChange(() => {
       this.exchangeLabel?.setText(t('battle.exchange', { exchange: this.exchange }));
     });
     this.events.once('shutdown', () => {
+      this.scale.off('resize', onResize);
       this.game.events.off('game-state', this.renderBattle, this);
       offLang();
     });
@@ -44,7 +49,7 @@ export default class BattleScene extends Phaser.Scene {
     for (const event of events) {
       if (event.type === 'BattlePick' && event.params.pick === 'secret') {
         const side = event.params.side === 'b' ? 'b' : 'a';
-        const pos = layout[side === 'a' ? 'left' : 'right'];
+        const pos = this.layout[side === 'a' ? 'left' : 'right'];
         const card = this.add
           .text(pos.x, BATTLE_GROUND_Y - BATTLE_FIGHTER_HEIGHT - 24, '?', {
             fontFamily: 'Chakra Petch',
@@ -60,7 +65,7 @@ export default class BattleScene extends Phaser.Scene {
         await playHit(
           this,
           this.fighters,
-          layout,
+          this.layout,
           {
             attacker: event.params.attacker ?? -1,
             defender: event.params.defender ?? -1,
@@ -115,22 +120,25 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private renderBattle(state: GameState): void {
+    this.latestState = state;
+    const view = this.cameras.main;
+    this.layout = battleLayout(view.width, view.height);
     this.children.removeAll(true);
     this.fighters = undefined;
     this.exchangeLabel = undefined;
     if (state.phase.kind !== 'battle') return;
     const battle = state.phase.battle;
     this.exchange = battle.exchange;
-    drawBackdrop(this, state, battle.spaceId);
-    this.fighters = drawFighters(this, state, layout);
+    drawBackdrop(this, state, battle.spaceId, view);
+    this.fighters = drawFighters(this, state, this.layout);
     this.combatantIds = [
       battle.a.monsterId ?? battle.a.seat ?? -1,
       battle.b.monsterId ?? battle.b.seat ?? -1,
     ];
-    drawDicePools(this, state, layout);
+    drawDicePools(this, state, this.layout);
     this.exchangeLabel = this.add
       .text(
-        BATTLE_FRAME.width / 2,
+        view.width / 2,
         BATTLE_EXCHANGE_Y,
         t('battle.exchange', { exchange: battle.exchange }),
         {

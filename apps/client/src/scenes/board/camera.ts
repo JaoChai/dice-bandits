@@ -70,12 +70,18 @@ export interface CameraTarget {
  * Where the board camera should be: centred on the active seat's token at
  * gameplay zoom, or the whole 3200×1800 map for the whole-map view.
  */
-export function cameraTarget(state: GameState, wholeMap = false): CameraTarget {
+export function cameraTarget(
+  state: GameState,
+  wholeMap = false,
+  view: { width: number; height: number } = VIEW,
+): CameraTarget {
   if (wholeMap) {
     return {
       x: WORLD.width / 2,
       y: WORLD.height / 2,
-      zoom: zoomForSpan(WORLD.width, WORLD.height),
+      // Fit the entire authored world, including heroes above north tiles.
+      // Painted gutters fill the extra viewport; gameplay is never cropped.
+      zoom: wholeMapZoom(view),
       duration: moveDuration(),
     };
   }
@@ -89,6 +95,19 @@ export function cameraTarget(state: GameState, wholeMap = false): CameraTarget {
     zoom: gameplayZoom(),
     duration: moveDuration(),
   };
+}
+
+function wholeMapZoom(view: { width: number; height: number }): number {
+  return Math.min(view.width / WORLD.width, view.height / WORLD.height);
+}
+
+/** Whole-map fit needs painted gutters outside the authored world on wide
+ * screens. Normal follow stays clamped to the original map. */
+export function cameraBounds(view: { width: number; height: number }, wholeMap = false) {
+  const zoom = wholeMapZoom(view);
+  const width = wholeMap ? Math.max(WORLD.width, view.width / zoom) : WORLD.width;
+  const height = wholeMap ? Math.max(WORLD.height, view.height / zoom) : WORLD.height;
+  return { x: (WORLD.width - width) / 2, y: (WORLD.height - height) / 2, width, height };
 }
 
 function moveDuration(): number {

@@ -97,6 +97,7 @@ function makeScene() {
     wholeMap: false,
     ringTween: null,
     children: { removeAll: vi.fn() },
+    scale: { on: vi.fn(), off: vi.fn() },
     events: { once: vi.fn() },
     cameras: {
       main: {
@@ -128,6 +129,7 @@ function makeScene() {
     anims: { exists: vi.fn(() => true) },
     cache: { json: { get: vi.fn(() => undefined) } },
     tweens: {
+      killTweensOf: vi.fn(),
       add: vi.fn(),
       remove: vi.fn(),
     },
@@ -188,6 +190,26 @@ beforeEach(() => {
 });
 
 describe('BoardScene layering', () => {
+  it('ignores a queued fork click after the branch phase has already ended', () => {
+    const { scene } = makeScene();
+    const state = gameFor('queued-fork');
+    state.players[0]!.pos = 19;
+    scene.renderBoard({
+      ...state,
+      phase: { kind: 'chooseBranch', remaining: 1, options: [20, 37] },
+    });
+    const arrow = document.querySelector<HTMLButtonElement>('[data-testid="fork-arrow-20"]')!;
+    const emit = (scene as unknown as { game: { events: { emit: ReturnType<typeof vi.fn> } } }).game
+      .events.emit;
+    arrow.click();
+    expect(emit).toHaveBeenCalledWith('board-chooseBranch', 20);
+    emit.mockClear();
+    scene.renderBoard({ ...state, phase: { kind: 'awaitRoll' } });
+    // A pending Phaser/window pointer queue may retain a removed arrow callback.
+    arrow.click();
+    expect(emit).not.toHaveBeenCalled();
+  });
+
   it('draws arrows when rolling from a fork without moving the player', () => {
     const { scene } = makeScene();
     const state = gameFor('fork-start');

@@ -7,7 +7,7 @@ import { createHeroToken, tokenLayout } from './board/tokens';
 import { drawRoad } from './board/road';
 import { drawTiles } from './board/tiles';
 import { drawBuildings } from './board/buildings';
-import { cameraTarget, gameplayZoom, WORLD } from './board/camera';
+import { cameraBounds, cameraTarget, gameplayZoom, WORLD } from './board/camera';
 import { drawMapLayer, roadSegments, validate } from './board/mapLayer';
 import { clearForkArrows, drawForkArrows } from './board/forkArrows';
 import { drawAmbients } from './board/ambient';
@@ -23,6 +23,7 @@ import { t } from '../i18n';
  */
 export default class BoardScene extends Phaser.Scene {
   private tokenObjects = new Map<number, Phaser.GameObjects.Image>();
+  private mapImages: Phaser.GameObjects.Image[] = [];
   private spacePositions = new Map<number, { x: number; y: number }>();
   private renderSignature = '';
   private wholeMap = false;
@@ -40,8 +41,17 @@ export default class BoardScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD.width, WORLD.height);
     this.cameras.main.setScroll(0, 0);
     const onState = (state: GameState): void => this.renderBoard(state);
+    const onResize = (): void => {
+      if (!this.latestState) return;
+      for (const image of this.mapImages) image.destroy();
+      this.mapImages = drawMapLayer(this, cameraBounds(this.cameras.main, true));
+      const target = cameraTarget(this.latestState, this.wholeMap, this.cameras.main);
+      this.applyCamera({ ...target, duration: 0 });
+    };
+    this.scale.on('resize', onResize);
     this.game.events.on('game-state', onState);
     this.events.once('shutdown', () => {
+      this.scale.off('resize', onResize);
       this.game.events.off('game-state', onState);
       clearForkArrows(this);
       closeSpaceInfo();
@@ -111,11 +121,14 @@ export default class BoardScene extends Phaser.Scene {
   /** Whole-map button (DOM `map-toggle`) asks the scene to zoom out/in. */
   toggleWholeMap(state: GameState, whole: boolean): void {
     this.wholeMap = whole;
-    this.applyCamera(cameraTarget(state, whole));
+    this.applyCamera(cameraTarget(state, whole, this.cameras.main));
   }
 
   private applyCamera(target: ReturnType<typeof cameraTarget>): void {
     const camera = this.cameras.main;
+    this.tweens.killTweensOf(camera);
+    const bounds = cameraBounds(camera, this.wholeMap);
+    camera.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
     // Review 7a: honour the target's duration — the camera eases to the
     // active seat at turn start (spec §7); duration 0 snaps (?speed=0 or
     // reduced motion).
@@ -155,6 +168,7 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   private renderBoard(state: GameState): void {
+    this.latestState = state;
     // BattleScene covers the stage. Rendering the large map beneath it adds
     // an invisible software-GL pass to every battle frame and DOM interaction.
     // Do this before the signature guard: entering/leaving battle may change
@@ -186,7 +200,7 @@ export default class BoardScene extends Phaser.Scene {
     }
 
     // Layer 1: painted map background (5×3 WebP tiles, flat fallbacks).
-    drawMapLayer(this);
+    this.mapImages = drawMapLayer(this, cameraBounds(this.cameras.main, true));
 
     // Layer 2: cream road along every `next` edge (map pixels).
     drawRoad(this, roadSegments(state.board));
@@ -222,6 +236,16 @@ export default class BoardScene extends Phaser.Scene {
     // Layer 5: fork arrows while a branch choice is pending (Review Focus 3).
     if (state.phase.kind === 'chooseBranch')
       drawForkArrows(this, state, (to) => {
+        // DOM and Phaser pointer queues can retain an arrow after a redraw.
+        // Accept only the still-pending branch for the same turn and space.
+        const latest = this.latestState;
+        if (
+          latest?.phase.kind !== 'chooseBranch' ||
+          latest.turnSeat !== state.turnSeat ||
+          latest.players[latest.turnSeat]?.pos !== state.players[state.turnSeat]?.pos ||
+          !latest.phase.options.includes(to)
+        )
+          return;
         this.game.events.emit('board-chooseBranch', to);
       });
 
@@ -237,7 +261,7 @@ export default class BoardScene extends Phaser.Scene {
       () => this.toggleWholeMap(this.latestState as GameState, false),
     );
 
-    this.applyCamera(cameraTarget(state, this.wholeMap));
+    this.applyCamera(cameraTarget(state, this.wholeMap, this.cameras.main));
   }
 
   private startActiveRing(x: number, y: number): void {

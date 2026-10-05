@@ -1511,6 +1511,47 @@ h1 {
   font-weight: 700;
 }
 
+/* Phone landscape: compact corner information without hiding fields or
+   shrinking text; keep controls above the start-space hero lane. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .game-shell:not(.battle-mode) .seat-card {
+    width: 180px;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 4px;
+    padding: 4px 6px;
+  }
+  .game-shell:not(.battle-mode) .seat-portrait {
+    width: 24px;
+    height: 24px;
+    grid-row: 1;
+  }
+  .game-shell:not(.battle-mode) .seat-details {
+    display: contents;
+  }
+  .game-shell:not(.battle-mode) .seat-details strong {
+    align-self: center;
+    padding-right: 28px;
+  }
+  .game-shell:not(.battle-mode) .seat-stats,
+  .game-shell:not(.battle-mode) .seat-health {
+    grid-column: 1 / -1;
+    gap: 4px;
+  }
+  .game-shell:not(.battle-mode) [data-testid^='seat-cards-'] {
+    position: absolute;
+    right: 6px;
+    top: 8px;
+  }
+  .game-shell:not(.battle-mode) [data-testid^='seat-takeover-'] {
+    grid-column: 1 / -1;
+  }
+  .game-shell:not(.battle-mode) .game-topline {
+    top: 92px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .turn-ribbon {
     transition: none;

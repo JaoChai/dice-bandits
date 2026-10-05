@@ -70,6 +70,8 @@ it('updates the canvas exchange label when switching English to Thai mid-battle'
   const scene = Object.assign(Object.create(BattleScene.prototype), {
     game: { events: { on: vi.fn(), off: vi.fn() }, registry: { get: () => state } },
     events: { once: vi.fn((_name, listener) => shutdown.mockImplementation(listener)) },
+    scale: { on: vi.fn(), off: vi.fn() },
+    cameras: { main: { width: 1280, height: 720 } },
     children: { removeAll: vi.fn() },
     add: { text: vi.fn(() => text) },
   }) as InstanceType<typeof BattleScene>;
