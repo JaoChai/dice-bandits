@@ -100,6 +100,7 @@ function makeScene() {
     events: { once: vi.fn() },
     cameras: {
       main: {
+        setBounds: vi.fn(),
         setScroll: vi.fn(),
         setZoom: vi.fn(),
         setVisible: vi.fn(),

@@ -54,6 +54,38 @@ for (const lang of ['th', 'en']) {
   }
 }
 
+for (const lang of ['th', 'en'] as const) {
+  test(`setup primary button meets WCAG normal-text contrast (${lang})`, async ({
+    page,
+  }, testInfo) => {
+    await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
+    await page.goto('/?seed=e2e-layout&speed=0');
+    await page.locator('[data-action="new"]').click();
+    const button = page.locator('#setup-form .primary');
+    await expect(button).toBeVisible();
+    const contrast = await button.evaluate((element) => {
+      const luminance = (color: string) => {
+        const linear = color
+          .match(/[\d.]+/g)!
+          .slice(0, 3)
+          .map(Number)
+          .map((value) => {
+            const s = value / 255;
+            return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+          });
+        return linear[0]! * 0.2126 + linear[1]! * 0.7152 + linear[2]! * 0.0722;
+      };
+      const style = getComputedStyle(element);
+      const foreground = luminance(style.color);
+      const background = luminance(style.backgroundColor);
+      return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+    });
+    console.log(`Setup contrast ${testInfo.project.name} ${lang}: ${contrast}`);
+    await page.screenshot({ path: testInfo.outputPath(`setup-${lang}.png`) });
+    expect(contrast, 'setup .primary text contrast').toBeGreaterThanOrEqual(4.5);
+  });
+}
+
 test('board, menu and world-rule controls have readable text contrast', async ({ page }) => {
   await page.goto('/?seed=e2e-layout&speed=0');
   await page.locator('[data-action="new"]').click();

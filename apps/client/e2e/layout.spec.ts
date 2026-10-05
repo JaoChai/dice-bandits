@@ -127,6 +127,34 @@ test('mobile battle trace measures animation frame cadence', async ({ page }, te
   if (!process.env.CI) expect(result.fps).toBeGreaterThanOrEqual(30);
 });
 
+for (const lang of ['th', 'en'] as const) {
+  test(`battle audio toggle never overlaps the turn ribbon (${lang})`, async ({
+    page,
+  }, testInfo) => {
+    await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
+    await startBattleJourney(page);
+    await page.evaluate(() => document.fonts.ready);
+    const audio = page.locator('.game-topline > [data-testid="audio-toggle"]');
+    const ribbon = page.locator('[data-testid="turn-ribbon"]');
+    await expect(audio).toBeVisible();
+    await expect(ribbon).toBeVisible();
+    const a = (await audio.boundingBox())!;
+    const b = (await ribbon.boundingBox())!;
+    console.log(
+      `Battle controls ${testInfo.project.name} ${lang}: ${JSON.stringify({ audio: a, ribbon: b })}`,
+    );
+    await page.screenshot({ path: testInfo.outputPath(`battle-${lang}.png`) });
+    expect(
+      a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y,
+      'audio toggle intersects battle turn ribbon',
+    ).toBe(false);
+    await assertInside(
+      page,
+      '.game-topline > [data-testid="audio-toggle"], [data-testid="turn-ribbon"]',
+    );
+  });
+}
+
 const screenshotDir = join(process.env.TMPDIR ?? tmpdir(), 'm4a', 'layout');
 
 for (const name of ['Sir Bram', 'Sir Bram the Great']) {
@@ -167,16 +195,18 @@ for (const name of ['Sir Bram', 'Sir Bram the Great']) {
           ...Array.from(shell.querySelectorAll<HTMLElement>('.seat-card')),
           shell.querySelector<HTMLElement>('[data-testid="action-tray"]')!,
         ];
-        const boxes = elements.map((element) => {
-          const { x, y, width, height } = element.getBoundingClientRect();
-          return {
-            name: element.className || element.dataset.testid || element.tagName,
-            x,
-            y,
-            width,
-            height,
-          };
-        });
+        const boxes = elements
+          .filter((element) => getComputedStyle(element).display !== 'none')
+          .map((element) => {
+            const { x, y, width, height } = element.getBoundingClientRect();
+            return {
+              name: element.className || element.dataset.testid || element.tagName,
+              x,
+              y,
+              width,
+              height,
+            };
+          });
         const textNodes: Array<{ text: string; fontSize: number; element: string }> = [];
         const walker = document.createTreeWalker(shell, NodeFilter.SHOW_TEXT);
         while (walker.nextNode()) {

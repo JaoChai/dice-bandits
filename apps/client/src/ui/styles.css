@@ -117,6 +117,12 @@ h1 {
   font-weight: 600;
   box-shadow: var(--t-shadow);
 }
+/* Setup's primary action uses the approved cream/cocoa pair at normal-text
+   contrast; other screens retain their existing action styling. */
+.setup-screen .primary {
+  background: var(--c-cream);
+  color: var(--c-cocoa);
+}
 .primary:hover,
 .secondary:hover {
   filter: brightness(1.06);
@@ -983,6 +989,11 @@ h1 {
   text-align: center;
   cursor: pointer;
 }
+/* Keep the live status node mounted, but no parchment/focus target until
+   either renderHud's frenzy text or renderEventToast supplies content. */
+.event-banner:has(.event-text:empty) {
+  display: none;
+}
 .event-meta {
   display: flex;
   flex: 0 0 auto;
@@ -1418,6 +1429,11 @@ h1 {
   transition: opacity 0.4s ease;
 }
 
+/* Battle HP and controls occupy the first 50px; the turn announcement gets
+   its own centred lane below them instead of sharing the mute button's lane. */
+.battle-mode .turn-ribbon {
+  top: 64px;
+}
 .turn-ribbon.visible {
   opacity: 1;
 }
