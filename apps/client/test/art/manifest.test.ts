@@ -14,7 +14,7 @@ vi.mock('phaser', () => ({
     },
     AUTO: 0,
     CANVAS: 1,
-    Scale: { FIT: 0, CENTER_BOTH: 0 },
+    Scale: { FIT: 3, EXPAND: 6, CENTER_BOTH: 0 },
   },
 }));
 vi.mock('../../src/scenes/BootScene', () => ({ default: class BootScene {} }));
@@ -120,7 +120,7 @@ describe('createGame', () => {
     createGame('phaser-board');
   });
 
-  it('configures a 1280x720 smooth-rendered FIT canvas in the requested parent', () => {
+  it('configures a 1280x720 smooth-rendered EXPAND canvas in the requested parent', () => {
     const config = capturedConfig();
     expect(config.width).toBe(1280);
     expect(config.height).toBe(720);
@@ -129,7 +129,8 @@ describe('createGame', () => {
     // Smooth texture sampling is independent of expensive framebuffer MSAA.
     expect(config.render).toEqual({ antialias: true, antialiasGL: false });
     expect(config.parent).toBe('phaser-board');
-    expect(config.scale).toEqual({ mode: 0, autoCenter: 0 });
+    // Mobile full-bleed replaces the fixed-aspect FIT-only assumption.
+    expect(config.scale).toEqual({ mode: 6, autoCenter: 0 });
   });
 
   it('falls back to Canvas instead of software WebGL when hardware contexts are refused', () => {

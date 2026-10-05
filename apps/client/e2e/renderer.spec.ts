@@ -27,7 +27,11 @@ test('uses smooth Canvas for SwiftShader instead of the software WebGL readback 
     };
   });
   expect(renderer.canvasRenderer, renderer.driver).toBe(renderer.software);
-  expect(renderer.width).toBe(1280);
-  expect(renderer.height).toBe(720);
+  // EXPAND retains a 720p short axis and grows the logical width on phones.
+  const viewport = page.viewportSize()!;
+  expect(renderer.width).toBe(Math.floor(Math.max(1280, (720 * viewport.width) / viewport.height)));
+  expect(renderer.height).toBe(
+    Math.floor(Math.max(720, (1280 * viewport.height) / viewport.width)),
+  );
   if (renderer.software) expect(renderer.smooth).toBe(true);
 });

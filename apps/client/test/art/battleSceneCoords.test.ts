@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { createGame } from '@dice-bandits/engine';
 import { beforeEach, expect, it, vi } from 'vitest';
 import {
@@ -79,7 +80,9 @@ function battleScene() {
       },
       registry: { get: () => undefined },
     },
+    scale: new EventEmitter(),
     events: { once: vi.fn() },
+    cameras: { main: { width: 1280, height: 720 } },
     children: { removeAll: vi.fn() },
     add: {
       text: vi.fn((x: number, y: number, value: string) => {

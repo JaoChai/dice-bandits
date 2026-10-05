@@ -75,6 +75,14 @@ describe('cameraTarget', () => {
     expect(target.zoom).toBeLessThan(cameraTarget(gameFor('camera-whole')).zoom);
   });
 
+  it('uses a cover zoom for an expanded phone view without exposing map edges', () => {
+    const view = { width: 1729.4845360824743, height: 720 };
+    const target = cameraTarget(gameFor('camera-wide'), true, view);
+    expect(view.width / target.zoom).toBeLessThanOrEqual(WORLD.width + 1e-8);
+    expect(view.height / target.zoom).toBeLessThanOrEqual(WORLD.height + 1e-8);
+    expect(target.zoom).toBeLessThan(cameraTarget(gameFor('camera-wide'), false, view).zoom);
+  });
+
   it('returns duration 0 at speed 0', () => {
     window.diceBanditsSpeed = 0;
     expect(cameraTarget(gameFor('camera-speed')).duration).toBe(0);

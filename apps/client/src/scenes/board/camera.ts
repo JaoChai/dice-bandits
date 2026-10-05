@@ -70,12 +70,18 @@ export interface CameraTarget {
  * Where the board camera should be: centred on the active seat's token at
  * gameplay zoom, or the whole 3200×1800 map for the whole-map view.
  */
-export function cameraTarget(state: GameState, wholeMap = false): CameraTarget {
+export function cameraTarget(
+  state: GameState,
+  wholeMap = false,
+  view: { width: number; height: number } = VIEW,
+): CameraTarget {
   if (wholeMap) {
     return {
       x: WORLD.width / 2,
       y: WORLD.height / 2,
-      zoom: zoomForSpan(WORLD.width, WORLD.height),
+      // Cover the expanded viewport; crop only painted map margins, never
+      // letterbox with the renderer background on a wide phone.
+      zoom: Math.max(view.width / WORLD.width, view.height / WORLD.height),
       duration: moveDuration(),
     };
   }
