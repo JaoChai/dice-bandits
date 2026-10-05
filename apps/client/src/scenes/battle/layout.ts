@@ -38,7 +38,8 @@ export function battleLayout(
     right: { x: ((BATTLE_FRAME.width * 47) / 64) * x, y: groundY },
     hpLeft: rect(40, 36, 420, 96),
     hpRight: rect(820, 36, 420, 96),
-    dice: rect(300, 678, 680, 42),
+    // Leave room for the dice strip's centred 3px stroke at the canvas edge.
+    dice: rect(300, 674, 680, 42),
     cards: rect(540, 430, BATTLE_CARD.width, BATTLE_CARD.height),
   };
 }
