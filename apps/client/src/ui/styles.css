@@ -1246,7 +1246,8 @@ h1 {
 .battle-mode .seat-card.corner-br {
   bottom: 100px;
 }
-/* Battle: pills hide, topline returns to the top strip beside the HP HUD. */
+/* Battle: controls and the centred turn ribbon share the top strip;
+   the corner HP cards have a separate row below the 44px controls. */
 .battle-mode .round-label,
 .battle-mode .world-chip {
   display: none;
@@ -1254,10 +1255,15 @@ h1 {
 .battle-mode .game-topline {
   top: 6px;
 }
+/* Hidden round/world pills leave three flex children. Pack mute with map on
+   the right rather than letting space-between put mute under the ribbon. */
+.battle-mode .game-topline > .audio-toggle {
+  margin-left: auto;
+}
 .battle-mode .battle-hud {
   position: absolute;
   z-index: 7;
-  inset: 8px 10px auto;
+  inset: 56px 10px auto;
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -1429,10 +1435,10 @@ h1 {
   transition: opacity 0.4s ease;
 }
 
-/* Battle HP and controls occupy the first 50px; the turn announcement gets
-   its own centred lane below them instead of sharing the mute button's lane. */
+/* The centred gap between the corner controls is free in battle (round/world
+   pills are hidden). Keep the ribbon here, not over the scaled canvas label. */
 .battle-mode .turn-ribbon {
-  top: 64px;
+  top: 6px;
 }
 .turn-ribbon.visible {
   opacity: 1;
