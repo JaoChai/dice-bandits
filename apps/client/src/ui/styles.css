@@ -1232,19 +1232,44 @@ h1 {
 .battle-mode .seat-card {
   display: none;
 }
+/* Keep takeover information in compact corner lanes below HP. The full
+   board-card layout is too tall for two rows on short landscape screens. */
 .battle-mode .seat-card:has([data-testid^='seat-takeover-']) {
-  display: flex;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   width: 215px;
-  min-height: 52px;
+  min-height: 0;
+  gap: 2px;
   padding: 4px;
+}
+.battle-mode .seat-portrait {
+  width: 24px;
+  height: 24px;
+}
+.battle-mode .seat-details {
+  display: contents;
+}
+.battle-mode .seat-details strong {
+  min-width: 0;
+  align-self: center;
+}
+.battle-mode [data-testid^='seat-cards-'] {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+}
+.battle-mode .seat-stats,
+.battle-mode .seat-health,
+.battle-mode [data-testid^='seat-takeover-'] {
+  grid-column: 1 / -1;
 }
 .battle-mode .seat-card.corner-tl,
 .battle-mode .seat-card.corner-tr {
-  top: 72px;
+  top: 108px;
 }
 .battle-mode .seat-card.corner-bl,
 .battle-mode .seat-card.corner-br {
-  bottom: 100px;
+  bottom: 80px;
 }
 /* Battle: controls and the centred turn ribbon share the top strip;
    the corner HP cards have a separate row below the 44px controls. */

@@ -1,6 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 import type Phaser from 'phaser';
-import { assertInside, observeBoardGame, startBattleJourney } from './helpers';
+import en from '../src/i18n/en.json' with { type: 'json' };
+import th from '../src/i18n/th.json' with { type: 'json' };
+import {
+  assertInside,
+  assertMinFont,
+  assertNoEllipsis,
+  observeBoardGame,
+  startBattleJourney,
+} from './helpers';
 
 type Rect = { left: number; top: number; right: number; bottom: number };
 const viewports = [
@@ -168,6 +176,106 @@ for (const lang of ['th', 'en'] as const) {
             ['serious', 'critical'].includes(issue.impact),
           );
           console.log(`axe ${name}: ${severe.length} serious/critical`);
+          expect(severe).toEqual([]);
+        }
+      });
+
+      // Restoring the old 72px takeover row must fail on HP/card overlap;
+      // merely moving it down must fail on card/card overlap on short phones.
+      test('takeover seats clear HP, each other and the tray with a long-name ribbon', async ({
+        page,
+      }, info) => {
+        const messages = lang === 'th' ? th : en;
+        const longName = lang === 'th' ? 'ก'.repeat(18) : 'W'.repeat(18);
+        // Test-only DOM fixture: the same badge element/data attribute/text
+        // playerCard renders in hud.ts, on the real four battle seat cards.
+        // The local deterministic journey has no online disconnect controller.
+        await page.evaluate(
+          ({ takeover, ribbon, name }) => {
+            document.querySelectorAll('.seat-card').forEach((card, seat) => {
+              const badge = document.createElement('small');
+              badge.className = 'seat-status';
+              badge.dataset.testid = `seat-takeover-${seat}`;
+              badge.textContent = takeover;
+              card.querySelector('.seat-details')!.append(badge);
+              card.querySelector('strong')!.textContent = name;
+            });
+            document.querySelector('[data-testid="turn-ribbon"]')!.textContent = ribbon;
+          },
+          {
+            takeover: messages['online.takeover'],
+            ribbon: messages['turn.ribbon'].replace('{name}', longName),
+            name: longName,
+          },
+        );
+        const cards = page.locator('.battle-mode .seat-card:visible');
+        await expect(cards).toHaveCount(4);
+        const rects = await cards.evaluateAll((elements) =>
+          elements.map((element) => {
+            const { left, top, right, bottom } = element.getBoundingClientRect();
+            return { left, top, right, bottom };
+          }),
+        );
+        const tray = await domRect(page, '.action-tray');
+        const ribbon = await domRect(page, '[data-testid="turn-ribbon"]');
+        const measurements = [];
+        for (const side of ['left', 'right']) {
+          const hp = await domRect(page, `.battle-hp-card.${side}`);
+          for (const [seat, rect] of rects.entries()) {
+            measurements.push({ pair: `${side} HP / seat ${seat}`, overlap: overlap(hp, rect) });
+          }
+          measurements.push({ pair: `${side} HP / long ribbon`, overlap: overlap(hp, ribbon) });
+        }
+        for (const [seat, rect] of rects.entries()) {
+          measurements.push({ pair: `seat ${seat} / tray`, overlap: overlap(rect, tray) });
+          for (let other = seat + 1; other < rects.length; other++) {
+            measurements.push({
+              pair: `seat ${seat} / seat ${other}`,
+              overlap: overlap(rect, rects[other]!),
+            });
+          }
+        }
+        const label = await renderedExchange(page);
+        measurements.push({ pair: 'long ribbon / exchange', overlap: overlap(ribbon, label) });
+        console.log(`Takeover ${name}: ${JSON.stringify({ rects, ribbon, measurements })}`);
+        await info.attach('takeover-geometry', {
+          body: JSON.stringify({ rects, ribbon, measurements }, null, 2),
+          contentType: 'application/json',
+        });
+        await page.screenshot({ path: info.outputPath(`takeover-${lang}.png`) });
+        for (const result of measurements) {
+          expect.soft(result.overlap, result.pair).toBe(0);
+        }
+        await assertInside(page, '.seat-card:visible, [data-testid="turn-ribbon"]', '.game-shell');
+        await assertMinFont(page, '.seat-card:visible', 12);
+        for (let seat = 0; seat < 4; seat++) {
+          await assertInside(
+            page,
+            `.seat-card:nth-child(${seat + 1}) .seat-details > *`,
+            `.seat-card:nth-child(${seat + 1})`,
+          );
+          await assertNoEllipsis(page, `.seat-card:nth-child(${seat + 1})`);
+        }
+        if (process.env.AXE_SOURCE) {
+          await page.addScriptTag({ path: process.env.AXE_SOURCE });
+          const result = await page.evaluate(async () => {
+            const axe = (
+              window as unknown as {
+                axe: {
+                  run: (options: unknown) => Promise<{ violations: Array<{ impact: string }> }>;
+                };
+              }
+            ).axe;
+            return axe.run({ runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } });
+          });
+          await info.attach('takeover-axe', {
+            body: JSON.stringify(result, null, 2),
+            contentType: 'application/json',
+          });
+          const severe = result.violations.filter((issue) =>
+            ['serious', 'critical'].includes(issue.impact),
+          );
+          console.log(`takeover axe ${name}: ${severe.length} serious/critical`);
           expect(severe).toEqual([]);
         }
       });
