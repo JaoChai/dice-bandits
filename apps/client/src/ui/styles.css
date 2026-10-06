@@ -1776,8 +1776,42 @@ h1 {
   color: var(--c-cocoa);
   pointer-events: none;
 }
-.battle-mode .dicey-tip {
+.battle-mode ~ .dicey-tip {
   left: max(240px, env(safe-area-inset-left));
+}
+/* A dialog shade fills the viewport even outside its panel. Reserve the
+   existing tip lane in the dialog layout AND lift the tip above the shade;
+   z-index alone would obscure the shop choices on short landscape screens. */
+body:has(.dicey-tip) :is(.dialog-shade, .world-info-shade):has(.game-dialog) {
+  padding-left: calc(max(10px, env(safe-area-inset-left)) + 316px + 10px);
+}
+body:has(.battle-mode ~ .dicey-tip) :is(.dialog-shade, .world-info-shade):has(.game-dialog) {
+  padding-left: calc(max(240px, env(safe-area-inset-left)) + 316px + 10px);
+}
+body:has(.game-dialog) .dicey-tip {
+  z-index: 46;
+}
+
+/* Keep Exit in the first view, not merely reachable after focusing/scrolling.
+   Sound controls share a row; Dicey's labels must not wrap into taller rows. */
+.menu-panel {
+  min-width: 280px;
+  gap: 6px;
+  padding: 8px;
+}
+.menu-panel .menu-section {
+  gap: 4px;
+}
+.menu-panel [data-testid='menu-sound'] {
+  grid-template-columns: auto 1fr;
+}
+.menu-panel [data-testid='menu-sound'] .menu-label {
+  grid-column: 1 / -1;
+}
+.menu-panel [data-testid='menu-dicey'] button {
+  min-width: 44px;
+  min-height: 44px;
+  white-space: nowrap;
 }
 .dicey-portrait {
   flex-shrink: 0;

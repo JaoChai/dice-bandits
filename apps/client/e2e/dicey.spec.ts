@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { legalActions, step as engineStep } from '@dice-bandits/engine';
 import { assertInside, assertNoEllipsis, playOneStep, startJourney } from './helpers';
 
 const storageKey = 'dice-bandits:tips';
@@ -54,7 +55,7 @@ async function measureTip(page: Page, name: string, info: TestInfo) {
     const tip = document.querySelector('[data-testid="dicey-tip"]')!.getBoundingClientRect();
     return [
       ...document.querySelectorAll(
-        '.action-tray, .seat-card, .turn-ribbon, .game-topline > *, .menu-panel, .battle-hud, .battle-hp-card, .event-banner',
+        '.action-tray, .seat-card, .turn-ribbon, .game-topline > *, .menu-panel, .battle-hud, .battle-hp-card, .event-banner, .game-dialog, .game-dialog button',
       ),
     ].map((control) => {
       const rect = control.getBoundingClientRect();
@@ -78,6 +79,133 @@ async function measureTip(page: Page, name: string, info: TestInfo) {
 }
 
 for (const lang of ['en', 'th'] as const) {
+  for (const dismiss of ['acknowledgement', 'dialog choice'] as const) {
+    test(`QA F1 shop tip clears the dialog and remains clickable ${lang} ${dismiss}`, async ({
+      page,
+    }, info) => {
+      test.setTimeout(120_000);
+      await enableTips(page, lang);
+      await page.goto('/?seed=qa-shop-1&speed=0');
+      await page.locator('[data-action="new"]').click();
+      for (let seat = 1; seat < 4; seat += 1)
+        await page
+          .locator(`[data-seat="${seat}"] select[data-field="control"]`)
+          .selectOption('bot');
+      await page.locator('[data-seat="0"] select[data-field="classId"]').selectOption('knight');
+      await page.locator('#setup-form button[type="submit"]').click();
+      for (let step = 0; step < 100; step += 1) {
+        if (await page.locator('[data-testid="dicey-tip"][data-topic="shop"]').count()) break;
+        await playOneStep(page);
+      }
+      await expect(page.getByTestId('dicey-tip')).toHaveAttribute('data-topic', 'shop');
+      await expect(page.locator('.game-dialog')).toBeVisible();
+      await expect(page.locator('.dicey-portrait')).toBeVisible({ timeout: 15_000 });
+      await page.evaluate(() => document.fonts.ready);
+      const rects = await page.evaluate(() => {
+        const box = (selector: string) =>
+          document.querySelector(selector)!.getBoundingClientRect().toJSON();
+        const ok = document.querySelector('[data-testid="dicey-tip-ok"]')!;
+        const r = ok.getBoundingClientRect();
+        return {
+          tip: box('.dicey-tip'),
+          dialog: box('.game-dialog'),
+          okHit: document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === ok,
+        };
+      });
+      console.log(`QA F1 ${info.project.name} ${lang}: ${JSON.stringify(rects)}`);
+      await measureTip(page, `qa-shop-${lang}`, info);
+      await assertInside(page, '.game-dialog');
+      expect(rects.okHit).toBe(true);
+      const before = await state(page);
+      if (dismiss === 'dialog choice') {
+        const game = await page.evaluate(() => window.__db!.getState());
+        const buy = legalActions(game, game.turnSeat).find((action) => action.type === 'shopBuy')!;
+        expect(buy).toBeDefined();
+        const expected = engineStep(game, buy).state;
+        await page.getByTestId(`shop-shopBuy-${buy.item}`).click();
+        await expect(page.getByTestId('dicey-tip')).toHaveCount(0);
+        expect((await settings(page)).seen).toContain('shop');
+        await expect.poll(() => page.evaluate(() => window.__db!.getState())).toEqual(expected);
+        return;
+      }
+      await page.getByTestId('dicey-tip-ok').click();
+      expect(await state(page)).toBe(before);
+      expect((await settings(page)).seen).toContain('shop');
+      await expect(page.getByTestId('dicey-tip')).toHaveCount(0);
+      await page.locator('.game-dialog button[data-choice]').first().click();
+      await expect.poll(() => state(page)).not.toBe(before);
+    });
+  }
+
+  test(`QA F1 townManage phase fixture remains readable and actionable ${lang}`, async ({
+    page,
+  }, info) => {
+    await enableTips(page, lang);
+    await startJourney(page);
+    // The existing continue event enters a fixture through the real HUD/guide.
+    // townManage is a tray phase, not a modal in the current client.
+    await page.evaluate(() => {
+      const next = structuredClone(window.__db!.getState());
+      const town = next.towns[0]!;
+      town.owner = 0;
+      next.players[0]!.pos = town.spaceId;
+      next.phase = { kind: 'townManage', spaceId: town.spaceId };
+      document
+        .getElementById('app')!
+        .dispatchEvent(new CustomEvent('dice-bandits:continue', { detail: next }));
+    });
+    await expect(page.getByTestId('dicey-tip')).toHaveAttribute('data-topic', 'townManage');
+    await expect(page.locator('.game-dialog')).toHaveCount(0);
+    await expect(page.locator('.dicey-portrait')).toBeVisible({ timeout: 15_000 });
+    await measureTip(page, `qa-town-manage-${lang}`, info);
+    const before = await state(page);
+    await page.getByTestId('dicey-tip-ok').click();
+    expect(await state(page)).toBe(before);
+    await page.locator('button[data-action-index]').first().click();
+    await expect.poll(() => state(page)).not.toBe(before);
+  });
+
+  test(`QA F1 informational game dialog preserves tip access ${lang}`, async ({ page }, info) => {
+    await enableTips(page, lang);
+    await startJourney(page);
+    await page.getByTestId('world-chip').click();
+    await expect(page.getByTestId('world-info')).toBeVisible();
+    await measureTip(page, `qa-world-info-${lang}`, info);
+    await assertInside(page, '.game-dialog');
+    await page.getByTestId('dicey-tip-ok').click();
+    await page.getByTestId('world-info-close').click();
+    await expect(page.getByTestId('world-info')).toHaveCount(0);
+  });
+
+  test(`QA F2 Exit and Dicey controls fit without menu scrolling ${lang}`, async ({
+    page,
+  }, info) => {
+    await enableTips(page, lang);
+    await startJourney(page);
+    await page.getByTestId('menu-button').click();
+    await page.evaluate(() => document.fonts.ready);
+    const geometry = await page.evaluate(() => {
+      const panel = document.querySelector('.menu-panel')!;
+      return {
+        exitBottom: document.querySelector('[data-action="exit"]')!.getBoundingClientRect().bottom,
+        viewportHeight: innerHeight,
+        scrollTop: panel.scrollTop,
+        scrollHeight: panel.scrollHeight,
+        clientHeight: panel.clientHeight,
+      };
+    });
+    console.log(`QA F2 ${info.project.name} ${lang}: ${JSON.stringify(geometry)}`);
+    expect(geometry.scrollTop).toBe(0);
+    await assertInside(page, '[data-action="exit"]');
+    await assertInside(page, '.menu-panel button', '.menu-panel');
+    for (const id of ['menu-dicey-tips', 'menu-dicey-reset']) {
+      const rect = await page.getByTestId(id).boundingBox();
+      expect(rect!.width).toBeGreaterThanOrEqual(44);
+      expect(rect!.height).toBeGreaterThanOrEqual(44);
+    }
+    await measureTip(page, `qa-menu-${lang}`, info);
+  });
+
   // Missing menu handler, wrong enabled/seen persistence or language refresh
   // must fail this journey through the real menu and guide, not a mock.
   test(`menu switch hides immediately, persists, resets and refreshes language ${lang}`, async ({

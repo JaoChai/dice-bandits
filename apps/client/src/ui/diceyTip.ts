@@ -78,7 +78,9 @@ export function showDiceyTip(
     console.warn('Dicey artwork unavailable; showing text-only tip.');
     loader.onerror = null;
   };
-  (root.querySelector('.game-shell') ?? root).append(tip);
+  // Dialog shades are siblings of the z-index:1 game shell. A child cannot
+  // escape that stacking context, even with a higher local z-index.
+  root.append(tip);
   loader.src = '/art/tutor/dicey.webp';
   return cleanup;
 }
