@@ -186,6 +186,8 @@
   "board.retry": "Retry",
   "action.roll": "Roll",
   "action.item": "Use item",
+  "action.items": "Items ({count})",
+  "action.itemsTitle": "Items",
   "action.branch": "Path {to}",
   "action.skip": "Continue",
   "action.duel": "Duel {target}",

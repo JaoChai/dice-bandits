@@ -6,11 +6,12 @@ import { getLang, setLang, t } from '../i18n';
 import { getAudioSettings, setAudioSettings } from '../audio';
 import { renderBattleUi } from './battleUi';
 import { portraitStyle } from './artFrames';
-import { showActionDialog, showPhaseDialog } from './dialogs';
+import { showActionDialog, showItemDialog, showPhaseDialog } from './dialogs';
 import { renderMenu } from './menu';
 import { showSeatDetails } from './seatDetails';
 
 const seatDetailClosers = new WeakMap<HTMLElement, () => void>();
+const itemDialogClosers = new WeakMap<HTMLElement, () => void>();
 
 type HudOnlineState = {
   you: number;
@@ -35,6 +36,7 @@ export function renderHud(
   dispatch: (action: Action) => void,
   options?: HudOptions,
 ): void {
+  itemDialogClosers.get(root)?.();
   const online = options?.online;
   const busy = options?.presentationBusy === true || online?.awaitingView === true;
   const suppliedLegal = options?.legal;
@@ -62,13 +64,20 @@ export function renderHud(
     : (suppliedLegal ?? legalActions(state, activeSeat));
   const seats = state.players.map((seat) => playerCard(state, seat, online?.seats)).join('');
   const canAct = online ? online.you === activeSeat : player.control === 'human';
+  const itemActions =
+    state.phase.kind === 'awaitRoll' ? actions.filter((action) => action.type === 'useItem') : [];
   const buttons = canAct
     ? actions
+        .map((action, index) => ({ action, index }))
+        .filter(({ action }) => !(itemActions.length && action.type === 'useItem'))
         .map(
-          (action, index) =>
+          ({ action, index }) =>
             `<button class="action-button" data-testid="${testId(action)}" data-action-index="${index}"${busy ? ' disabled' : ''}>${escapeHtml(actionName(action))}</button>`,
         )
-        .join('')
+        .join('') +
+      (itemActions.length
+        ? `<button type="button" class="action-button" data-testid="action-items" aria-haspopup="dialog"${busy ? ' disabled' : ''}>${escapeHtml(t('action.items', { count: new Set(itemActions.map((action) => (action.type === 'useItem' ? action.item : ''))).size }))}</button>`
+        : '')
     : '';
   const header = `<header class="game-topline"><span class="round-label" data-testid="round-ribbon">${t('board.round', { round: state.round, total: state.config.rounds })}</span><div class="turn-ribbon visible" data-testid="turn-ribbon" role="status"></div><div class="event-banner" data-testid="event-banner" role="status" tabindex="0"><span class="event-text">${state.round >= 10 ? t('event.FrenzyStarted') : ''}</span></div><button type="button" class="world-chip" data-testid="world-chip" aria-haspopup="dialog" aria-label="${escapeHtml(t(`worldRule.${state.worldRule}`))}">${t(`worldRule.${state.worldRule}`)}</button><div class="menu-slot"></div>${audioToggleHtml()}<button class="text-button" data-testid="map-toggle" aria-pressed="false">${t('map.whole')}</button></header>`;
   if (!root.querySelector('.game-shell')) {
@@ -268,6 +277,17 @@ export function renderHud(
       const action = actions[Number(button.dataset.actionIndex)];
       if (action) button.onclick = () => dispatch(action);
     });
+    const itemsButton = actionBar.querySelector<HTMLButtonElement>('[data-testid="action-items"]');
+    if (itemsButton)
+      itemsButton.onclick = () => {
+        if (busy || !canAct) return;
+        itemDialogClosers.get(root)?.();
+        const close = showItemDialog(root, itemActions, actionName, testId, dispatch, () => {
+          itemDialogClosers.delete(root);
+          itemsButton.focus();
+        });
+        itemDialogClosers.set(root, close);
+      };
   }
   if (ownsModal && (!busy || hadModal)) {
     if (state.phase.kind === 'pvpReward') showActionDialog(root, modalActions, dispatch, busy);

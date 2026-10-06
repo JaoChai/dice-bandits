@@ -2213,6 +2213,9 @@ body:has(.game-dialog) .dicey-tip {
 /* U3: native hidden wins over the tray's flex display; token chrome also
    applies to bot/awaiting/presentation-busy text, never a plain white box. */
 .game-shell:not(.battle-mode) .action-tray {
+  min-height: 48px;
+  padding: 0 2px;
+  gap: 4px;
   border: 2px solid var(--t-outline);
   border-radius: var(--t-radius);
   background: var(--t-panel);
@@ -2233,7 +2236,7 @@ body:has(.game-dialog) .dicey-tip {
 }
 .dicey-anchored {
   top: auto;
-  width: 306px;
+  width: 270px;
   padding-right: 10px;
 }
 .game-shell:not(.battle-mode) ~ .dicey-tip .dicey-bubble {

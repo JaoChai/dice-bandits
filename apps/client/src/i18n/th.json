@@ -186,6 +186,8 @@
   "board.retry": "ลองใหม่",
   "action.roll": "ทอยเต๋า",
   "action.item": "ใช้ไอเท็ม",
+  "action.items": "ไอเทม ({count})",
+  "action.itemsTitle": "ไอเทม",
   "action.branch": "ทาง {to}",
   "action.skip": "ไปต่อ",
   "action.duel": "ดวลกับ {target}",

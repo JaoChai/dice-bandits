@@ -53,6 +53,54 @@ function pvpBattleWithSeatZeroPicking(): GameState {
   return state;
 }
 
+describe('bounded inventory chooser', () => {
+  // Breaks caught: mirrored target actions, lossy action mapping, stale modal/inert state.
+  it('collapses legal items, closes without dispatch, and dispatches each original choice once', () => {
+    const state = createGame(config);
+    state.players[0]!.items = ['dash', 'warp', 'trapCard', 'smokeBomb', 'luckyCoin', 'mapScroll'];
+    const actions = legalActions(state, 0);
+    const items = actions.filter((action) => action.type === 'useItem');
+    const root = document.createElement('div');
+    document.body.append(root);
+    const sent: unknown[] = [];
+    const render = (busy = false) =>
+      renderHud(root, state, (action) => sent.push(action), {
+        presentationBusy: busy,
+      });
+    render();
+    const tray = root.querySelector<HTMLElement>('.action-tray')!;
+    expect(tray.querySelectorAll('button')).toHaveLength(2);
+    expect(tray.querySelectorAll('[data-action-index]')).toHaveLength(1);
+    const open = () =>
+      root.querySelector<HTMLButtonElement>('[data-testid="action-items"]')!.click();
+    const snapshot = JSON.stringify(state);
+    open();
+    expect(tray.hasAttribute('inert')).toBe(true);
+    expect(root.querySelectorAll('.item-dialog [data-choice]')).toHaveLength(items.length);
+    expect(root.querySelector('.item-dialog')?.getAttribute('aria-label')).toBeTruthy();
+    root.querySelector<HTMLButtonElement>('[data-testid="item-close"]')!.click();
+    expect(sent).toEqual([]);
+    expect(tray.hasAttribute('inert')).toBe(false);
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('action-items');
+    for (let i = 0; i < items.length; i++) {
+      open();
+      root.querySelector<HTMLButtonElement>(`.item-dialog [data-choice="${i}"]`)!.click();
+      expect(sent).toEqual(items.slice(0, i + 1));
+      expect(root.querySelector('.item-dialog')).toBeNull();
+      expect(tray.hasAttribute('inert')).toBe(false);
+    }
+    open();
+    render(true);
+    expect(root.querySelector('.item-dialog')).toBeNull();
+    expect(tray.hasAttribute('inert')).toBe(false);
+    expect(root.querySelector<HTMLButtonElement>('[data-testid="action-items"]')!.disabled).toBe(
+      true,
+    );
+    expect(JSON.stringify(state)).toBe(snapshot);
+    root.remove();
+  });
+});
+
 describe('single modal choice surface', () => {
   // Breaks caught: mirrored choices, blank remote/bot modals, busy dispatch,
   // stale hidden tray after a modal and Leave scrolling out of reach.
@@ -559,7 +607,8 @@ describe('renderHud', () => {
     const state = createGame(config);
     state.players[0]!.items = ['mapScroll'];
     renderHud(root, state, () => undefined);
-    const ids = [...root.querySelectorAll<HTMLButtonElement>('.action-button')].map(
+    root.querySelector<HTMLButtonElement>('[data-testid="action-items"]')!.click();
+    const ids = [...root.querySelectorAll<HTMLButtonElement>('.item-dialog .action-button')].map(
       (button) => button.dataset.testid,
     );
     expect(ids).toContain('action-useItem-mapScroll-1');

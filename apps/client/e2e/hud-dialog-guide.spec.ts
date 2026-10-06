@@ -1,6 +1,12 @@
 import { createGame, data, legalActions, step, type GameState } from '@dice-bandits/engine';
 import { expect, test, type Page } from '@playwright/test';
-import { assertInside, assertMinFont, assertNoEllipsis } from './helpers';
+import type Phaser from 'phaser';
+import { assertInside, assertMinFont, assertNoEllipsis, observeBoardGame } from './helpers';
+
+type ProbeWindow = Window & {
+  __db?: { getState: () => GameState };
+  __m5aGame?: Phaser.Game;
+};
 
 function saved(): GameState {
   return createGame({
@@ -73,6 +79,7 @@ async function clearGeometry(page: Page) {
       ...document.querySelectorAll('.dicey-ok, .game-dialog button, .action-tray button'),
     ]
       .filter(visible)
+      .filter((element) => !element.closest('[inert]'))
       .filter((element) => {
         const clip = element.closest('.phase-choices, .reward-dialog');
         if (!clip) return true;
@@ -99,6 +106,24 @@ async function clearGeometry(page: Page) {
   }
   return result;
 }
+async function inventoryAxe(page: Page): Promise<void> {
+  const source = process.env.AXE_SOURCE;
+  if (!source) return;
+  await page.addScriptTag({ path: source });
+  const violations = await page.evaluate(async () => {
+    const axe = (
+      window as unknown as {
+        axe: { run: () => Promise<{ violations: Array<{ id: string; impact: string }> }> };
+      }
+    ).axe;
+    return (await axe.run()).violations.filter((entry) =>
+      ['serious', 'critical'].includes(entry.impact),
+    );
+  });
+  expect(violations).toEqual([]);
+  console.log('U3 inventory axe serious/critical: 0');
+}
+
 for (const viewport of [
   { width: 915, height: 412 },
   { width: 932, height: 388 },
@@ -134,12 +159,107 @@ for (const viewport of [
           .toBeLessThan(1);
         await clearGeometry(page);
       }
-      const before = await page.evaluate(() => window.__db!.getState());
+      const before = await page.evaluate(() => (window as ProbeWindow).__db!.getState());
       await page.getByTestId('dicey-tip-ok').click();
-      expect(await page.evaluate(() => window.__db!.getState())).toEqual(before);
+      expect(await page.evaluate(() => (window as ProbeWindow).__db!.getState())).toEqual(before);
       await page.getByTestId('action-roll').click();
       await expect(page.getByTestId('dicey-tip')).not.toHaveAttribute('data-topic', 'roll');
     });
+    if (viewport.width !== 1280) {
+      for (const items of [
+        ['dash'],
+        ['dash', 'warp', 'trapCard', 'smokeBomb', 'luckyCoin', 'mapScroll'],
+      ]) {
+        // Break caught: legal inventory expands the tray/guide into the board.
+        test(`bounded inventory lane ${viewport.width} ${lang} ${items.length} items`, async ({
+          page,
+        }, info) => {
+          const initial = saved();
+          initial.players[0]!.items = items;
+          const actions = legalActions(initial, 0);
+          expect(actions).toHaveLength(items.length === 1 ? 2 : 12);
+          await page.setViewportSize(viewport);
+          await observeBoardGame(page);
+          await start(page, initial, lang);
+          const cameraBottom = await page.evaluate(async () => {
+            const game = (window as ProbeWindow).__m5aGame!;
+            await new Promise<void>((resolve) => game.events.once('postrender', resolve));
+            const camera = game.scene.getScene('BoardScene').cameras.main;
+            const canvas = game.canvas.getBoundingClientRect();
+            return canvas.top + ((camera.y + camera.height) / game.canvas.height) * canvas.height;
+          });
+          const geometry = await clearGeometry(page);
+          if (viewport.width === 915) expect(geometry.coverage).toBeLessThanOrEqual(22);
+          for (const selector of ['.action-tray', '.dicey-tip']) {
+            const box = await page.locator(selector).boundingBox();
+            expect(box!.y).toBeGreaterThanOrEqual(viewport.height - 72);
+            expect(box!.y).toBeGreaterThanOrEqual(cameraBottom);
+            expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height - 4);
+          }
+          console.log(
+            `U3 inventory ${viewport.width} ${lang} ${items.length}: ${JSON.stringify(geometry)}`,
+          );
+          await page.screenshot({ path: info.outputPath('inventory-bottom-lane.png') });
+          await inventoryAxe(page);
+          const snapshot = await page.evaluate(() => (window as ProbeWindow).__db!.getState());
+          await expect(page.locator('.action-tray button')).toHaveCount(2);
+          await page.getByTestId('action-items').click();
+          expect(await page.evaluate(() => (window as ProbeWindow).__db!.getState())).toEqual(
+            snapshot,
+          );
+          await expect(page.locator('.action-tray')).toHaveAttribute('inert', '');
+          await expect(page.locator('.action-tray [data-action-index]')).toHaveCount(1);
+          const choices = page.locator('.item-dialog [data-choice]');
+          await expect(choices).toHaveCount(actions.length - 1);
+          const close = page.getByTestId('item-close');
+          const pinned = await close.boundingBox();
+          for (let i = 0; i < (await choices.count()); i++) {
+            await choices.nth(i).scrollIntoViewIfNeeded();
+            await assertInside(page, `.item-dialog [data-choice="${i}"]`, '.phase-choices');
+            const hit = await choices.nth(i).evaluate((element) => {
+              const r = element.getBoundingClientRect();
+              return (
+                r.width >= 44 &&
+                r.height >= 44 &&
+                document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === element
+              );
+            });
+            expect(hit).toBe(true);
+            expect(await close.boundingBox()).toEqual(pinned);
+          }
+          await clearGeometry(page);
+          await page.screenshot({ path: info.outputPath('inventory-chooser.png') });
+          await inventoryAxe(page);
+          await close.focus();
+          await page.keyboard.press('Tab');
+          await expect(choices.first()).toBeFocused();
+          await page.keyboard.press('Escape');
+          await expect(page.getByTestId('action-items')).toBeFocused();
+          expect(await page.evaluate(() => (window as ProbeWindow).__db!.getState())).toEqual(
+            snapshot,
+          );
+          await expect(page.locator('.action-tray')).not.toHaveAttribute('inert', '');
+          // Every original engine action still dispatches from one reachable surface.
+          for (const action of actions) {
+            await page.evaluate(
+              (state) =>
+                document
+                  .getElementById('app')!
+                  .dispatchEvent(new CustomEvent('dice-bandits:continue', { detail: state })),
+              initial,
+            );
+            if (action.type === 'useItem') {
+              await page.getByTestId('action-items').click();
+              const index = actions.filter((entry) => entry.type === 'useItem').indexOf(action);
+              await page.locator(`.item-dialog [data-choice="${index}"]`).click();
+            } else await page.getByTestId('action-roll').click();
+            await expect
+              .poll(() => page.evaluate(() => (window as ProbeWindow).__db!.getState()))
+              .toEqual(step(initial, action).state);
+          }
+        });
+      }
+    }
     test(`single reachable modal choices ${viewport.width} ${lang}`, async ({ page }, info) => {
       await page.setViewportSize(viewport);
       const initial = saved();
@@ -159,7 +279,7 @@ for (const viewport of [
       await expect(page.getByTestId('dicey-tip')).toHaveAttribute('data-topic', 'shop');
       await expect(page.locator('.action-tray')).toBeHidden();
       await expect(page.locator('.action-tray button')).toHaveCount(0);
-      const state = await page.evaluate(() => window.__db!.getState());
+      const state = await page.evaluate(() => (window as ProbeWindow).__db!.getState());
       expect(state.phase.kind).toBe('shop');
       await expect(page.locator('[data-choice]')).toHaveCount(legalActions(state, 0).length);
       const choices = page.locator('.phase-choices button');
@@ -219,7 +339,9 @@ for (const viewport of [
         const choice = page.locator(modal ? '[data-choice]' : '[data-action-index]').first();
         const expected = step(fixture, actions[0]!).state;
         await choice.click();
-        await expect.poll(() => page.evaluate(() => window.__db!.getState())).toEqual(expected);
+        await expect
+          .poll(() => page.evaluate(() => (window as ProbeWindow).__db!.getState()))
+          .toEqual(expected);
       }
     });
     test(`A–E evidence and artwork fallback ${viewport.width} ${lang}`, async ({ page }, info) => {
