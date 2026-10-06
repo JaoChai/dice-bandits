@@ -88,6 +88,18 @@ function gameObject(
   return { proxy: proxy as never, rec };
 }
 
+type TestCamera = {
+  id: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  inputEnabled: boolean;
+} & Record<
+  'setViewport' | 'ignore' | 'setBounds' | 'setScroll' | 'setZoom' | 'setVisible' | 'centerOn',
+  ReturnType<typeof vi.fn>
+>;
+
 function makeScene() {
   const objects: Rec[] = [];
   const handlers = new Map<string, (state: GameState) => void>();
@@ -98,9 +110,17 @@ function makeScene() {
     ringTween: null,
     children: { removeAll: vi.fn() },
     scale: { on: vi.fn(), off: vi.fn() },
-    events: { once: vi.fn() },
+    events: { once: vi.fn(), on: vi.fn(), off: vi.fn() },
     cameras: {
+      add: vi.fn(),
+      remove: vi.fn(),
       main: {
+        id: 1,
+        x: 0,
+        y: 0,
+        inputEnabled: true,
+        setViewport: vi.fn(),
+        ignore: vi.fn(),
         setBounds: vi.fn(),
         setScroll: vi.fn(),
         setZoom: vi.fn(),
@@ -119,6 +139,7 @@ function makeScene() {
           handlers.set(event, handler),
         ),
         emit: vi.fn(),
+        off: vi.fn(),
       },
       registry: { get: vi.fn(() => undefined) },
     },
@@ -164,9 +185,13 @@ function makeScene() {
     renderBoard(state: GameState): void;
     create(): void;
     input: { on: ReturnType<typeof vi.fn> };
-    cameras: { main: Record<string, ReturnType<typeof vi.fn> & number> };
+    cameras: { main: TestCamera; add: ReturnType<typeof vi.fn> };
     tweens: { add: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> };
   };
+  scene.cameras.add.mockImplementation((x: number, y: number, width: number, height: number) => {
+    scene.cameras.main = { ...scene.cameras.main, id: 2, x, y, width, height };
+    return scene.cameras.main;
+  });
   return { scene, objects, handlers };
 }
 
@@ -403,6 +428,81 @@ describe('BoardScene ambient life (M5a spec §5: tween-only accents)', () => {
     drawAmbients(scene as never, MAP.nodes);
     expect(scene.tweens.add).not.toHaveBeenCalled();
     expect(window.__db?.art.ambientRunning ?? false).toBe(false);
+  });
+});
+
+describe('BoardScene safe playfield lifecycle', () => {
+  function setup() {
+    const { scene, handlers } = makeScene();
+    const live = scene as unknown as {
+      cameras: {
+        main: typeof scene.cameras.main;
+        add: ReturnType<typeof vi.fn>;
+        remove: ReturnType<typeof vi.fn>;
+      };
+      events: {
+        once: ReturnType<typeof vi.fn>;
+        on: ReturnType<typeof vi.fn>;
+        off: ReturnType<typeof vi.fn>;
+      };
+      scale: { on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn> };
+      game: { canvas: HTMLCanvasElement };
+      mapImages: Array<{ cameraFilter: number }>;
+    };
+    const backdrop = live.cameras.main;
+    const main = { ...backdrop, id: 2, setViewport: vi.fn(), ignore: vi.fn() };
+    live.cameras.add.mockImplementation(() => (live.cameras.main = main));
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    canvas.getBoundingClientRect = () => new DOMRect(0, 0, 1280, 720);
+    live.game.canvas = canvas;
+    scene.create();
+    return { scene, live, backdrop, main, handlers, canvas };
+  }
+
+  it('makes only the safe camera main and leaves the full-bleed backdrop noninteractive', () => {
+    const { live, backdrop, main } = setup();
+    expect(live.cameras.main).not.toBe(backdrop);
+    expect(live.cameras.main).toBe(main);
+    expect(backdrop.inputEnabled).toBe(false);
+    expect(live.cameras.add).toHaveBeenCalledWith(8, 58, 1088, 602, true, 'board-playfield');
+  });
+
+  it('excludes every newly added foreground object including late effects from the backdrop', () => {
+    const { live, backdrop } = setup();
+    const added = live.events.on.mock.calls.find(([name]) => name === 'addedtoscene')?.[1];
+    expect(added).toBeTypeOf('function');
+    for (const kind of ['token', 'building', 'road', 'flag', 'ring', 'fork-zone', 'effect']) {
+      const object = { name: kind, cameraFilter: 0 };
+      added?.(object);
+      expect(backdrop.ignore).toHaveBeenCalledWith(object);
+    }
+  });
+
+  it('reapplies safe and full viewports on resize and removes the extra camera/listeners on shutdown', () => {
+    const { live, scene, main, backdrop, handlers, canvas } = setup();
+    handlers.get('game-state')!(gameFor('resize-safe'));
+    expect(live.mapImages.length).toBeGreaterThan(0);
+    for (const image of live.mapImages) expect(image.cameraFilter & backdrop.id).toBe(0);
+    canvas.width = 1599;
+    canvas.getBoundingClientRect = () => new DOMRect(0, 0, 915, 412);
+    const resize = live.scale.on.mock.calls.find(([name]) => name === 'resize')![1];
+    resize();
+    expect(main.setViewport).toHaveBeenLastCalledWith(
+      expect.closeTo((8 * 1599) / 915, 4),
+      expect.closeTo((58 * 720) / 412, 4),
+      expect.closeTo((771 * 1599) / 915, 4),
+      expect.closeTo((294 * 720) / 412, 4),
+    );
+    expect(backdrop.setViewport).toHaveBeenLastCalledWith(0, 0, 1599, 720);
+    const shutdown = live.events.once.mock.calls.find(([name]) => name === 'shutdown')![1];
+    shutdown();
+    expect(live.cameras.remove).toHaveBeenCalledWith(main);
+    expect(live.cameras.main).toBe(backdrop);
+    expect(live.scale.off).toHaveBeenCalledWith('resize', resize);
+    expect(live.events.off).toHaveBeenCalledWith('addedtoscene', expect.any(Function));
+    expect(scene).toBeDefined();
   });
 });
 

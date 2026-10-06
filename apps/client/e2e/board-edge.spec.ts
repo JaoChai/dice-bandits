@@ -4,6 +4,130 @@ import { observeBoardGame, renderedBoardGeometry, startJourney } from './helpers
 
 type ProbeWindow = Window & { __m5aGame?: Phaser.Game };
 
+for (const viewport of [
+  { width: 915, height: 412 },
+  { width: 932, height: 388 },
+  { width: 1280, height: 720 },
+]) {
+  for (const lang of ['th', 'en'] as const) {
+    test(`safe playfield isolates gameplay from decorative backdrop (${viewport.width}, ${lang})`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize(viewport);
+      await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
+      await observeBoardGame(page);
+      await startJourney(page);
+      await page.waitForFunction(() => window.__db?.art.boardReady);
+      await page.evaluate(() => document.fonts.ready);
+      const geometry = await renderedBoardGeometry(page);
+      const measurement = await page.evaluate(() => {
+        const game = (window as ProbeWindow).__m5aGame!;
+        const scene = game.scene.getScene('BoardScene');
+        const main = scene.cameras.main;
+        const backdrop = scene.cameras.cameras.find((camera) => camera !== main);
+        const rect = game.canvas.getBoundingClientRect();
+        const safe = {
+          left: rect.left + (main.x * rect.width) / game.canvas.width,
+          top: rect.top + (main.y * rect.height) / game.canvas.height,
+          right: rect.left + ((main.x + main.width) * rect.width) / game.canvas.width,
+          bottom: rect.top + ((main.y + main.height) * rect.height) / game.canvas.height,
+        };
+        const foreground = scene.children
+          .getChildren()
+          .filter((child) => 'depth' in child && child.depth !== -10);
+        const state = window.__db!.getState();
+        const origin = state.board.spaces.find(
+          (space) => space.id === state.players[state.turnSeat]!.pos,
+        )!;
+        return {
+          safe,
+          name: main.name,
+          cameras: scene.cameras.cameras.length,
+          backdropInteractive: backdrop?.inputEnabled,
+          leaked: foreground.filter((child) => !backdrop || !(child.cameraFilter & backdrop.id))
+            .length,
+          origin,
+          neighbours: origin.next.map((id) => state.board.spaces.find((space) => space.id === id)!),
+          chrome: [
+            ...document.querySelectorAll('.game-topline, .seat-card, .action-tray, .dicey-tip'),
+          ]
+            .map((element) => element.getBoundingClientRect().toJSON())
+            .filter((box) => box.width && box.height),
+        };
+      });
+      console.log(`Safe playfield ${viewport.width} ${lang}: ${JSON.stringify(measurement)}`);
+      await info.attach('safe-playfield', {
+        body: JSON.stringify({ measurement, geometry }),
+        contentType: 'application/json',
+      });
+      await page.screenshot({ path: info.outputPath('safe-playfield.png') });
+      expect(measurement.name).toBe('board-playfield');
+      expect(measurement.cameras).toBe(2);
+      expect(measurement.backdropInteractive).toBe(false);
+      expect(measurement.leaked, 'foreground duplicated outside safe camera').toBe(0);
+      expect(measurement.safe.left).toBeGreaterThanOrEqual(8);
+      expect(measurement.safe.top).toBeGreaterThanOrEqual(58);
+      const intersects = (
+        a: { left: number; right: number; top: number; bottom: number },
+        b: typeof a,
+      ) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      for (const chrome of measurement.chrome)
+        expect(intersects(measurement.safe, chrome), 'HUD intrudes into safe playfield').toBe(
+          false,
+        );
+      const actors = geometry.tokens.filter(
+        (token) =>
+          Math.hypot(token.world.x - measurement.origin.x, token.world.y - measurement.origin.y) <
+          70,
+      );
+      expect(actors.length).toBeGreaterThan(0);
+      const tiles = geometry.tiles.filter((tile) =>
+        [measurement.origin, ...measurement.neighbours].some(
+          (space) => space.x === tile.world.x && space.y === tile.world.y,
+        ),
+      );
+      expect(tiles).toHaveLength(1 + measurement.neighbours.length);
+      for (const object of [...actors, ...tiles]) {
+        expect(object.left).toBeGreaterThanOrEqual(measurement.safe.left - 0.5);
+        expect(object.right).toBeLessThanOrEqual(measurement.safe.right + 0.5);
+        expect(object.top).toBeGreaterThanOrEqual(measurement.safe.top - 0.5);
+        expect(object.bottom).toBeLessThanOrEqual(measurement.safe.bottom + 0.5);
+        for (const chrome of measurement.chrome) expect(intersects(object, chrome)).toBe(false);
+      }
+      for (const tile of tiles) expect(tile.width).toBeGreaterThanOrEqual(48);
+      const cadence = await page.evaluate(
+        () =>
+          new Promise<{ fps: number; frames: number; canvasRenderer: boolean }>((resolve) => {
+            let first = 0,
+              frames = 0;
+            const sample = (time: number) => {
+              if (!first) first = time;
+              frames++;
+              if (time - first < 2000) requestAnimationFrame(sample);
+              else
+                resolve({
+                  fps: ((frames - 1) * 1000) / (time - first),
+                  frames,
+                  canvasRenderer:
+                    (window as ProbeWindow).__m5aGame!.canvas.getContext('2d') !== null,
+                });
+            };
+            requestAnimationFrame(sample);
+          }),
+      );
+      console.log(
+        `Board cadence ${viewport.width} ${lang}: ${JSON.stringify(cadence)}, tile widths ${JSON.stringify(tiles.map((tile) => tile.width))}`,
+      );
+      await info.attach('board-cadence', {
+        body: JSON.stringify(cadence),
+        contentType: 'application/json',
+      });
+      // Same local interactive floor as layout.spec.ts; never weaken it.
+      if (!process.env.CI) expect(cadence.fps).toBeGreaterThanOrEqual(30);
+    });
+  }
+}
+
 for (const viewport of [undefined, { width: 932, height: 388 }]) {
   for (const lang of ['th', 'en'] as const) {
     test(`board camera keeps the painted map across canvas edges (${lang}, ${viewport?.width ?? 'project'})`, async ({

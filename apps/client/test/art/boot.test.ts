@@ -69,11 +69,27 @@ describe('BootScene cartoon loader contract', () => {
     const startBoard: Array<() => void> = [];
     const launch = vi.fn();
     const renderBoard = vi.fn();
+    const camera = {
+      width: 1280,
+      height: 720,
+      setBounds: vi.fn(),
+      setScroll: vi.fn(),
+      setViewport: vi.fn(),
+      setZoom: vi.fn(),
+      centerOn: vi.fn(),
+      ignore: vi.fn(),
+    };
+    const cameras = {
+      main: camera,
+      remove: vi.fn(),
+      add: vi.fn(() => (cameras.main = { ...camera })),
+    };
     const board = Object.assign(Object.create(BoardScene.prototype), {
       game: { registry, events: new EventEmitter() },
       scale: new EventEmitter(),
       events: new EventEmitter(),
-      cameras: { main: { setBounds: vi.fn(), setScroll: vi.fn() } },
+      cameras,
+      tweens: { killTweensOf: vi.fn() },
       scene: { isActive: vi.fn(() => false), launch },
       renderBoard,
     }) as InstanceType<typeof BoardScene>;

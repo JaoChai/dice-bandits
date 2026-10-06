@@ -29,6 +29,73 @@ afterEach(() => {
   window.diceBanditsSpeed = 1;
 });
 
+describe('boardViewport', () => {
+  it.each([
+    {
+      css: { width: 915, height: 412 },
+      right: 136,
+      want: { x: 16, y: 116, width: 1542, height: 588 },
+    },
+    {
+      css: { width: 932, height: 388 },
+      right: 136,
+      want: { x: 16, y: 116, width: 1576, height: 540 },
+    },
+    {
+      css: { width: 1280, height: 720 },
+      right: 184,
+      want: { x: 16, y: 116, width: 2176, height: 1204 },
+    },
+  ])(
+    'converts approved CSS lanes without changing tile scale at $css.width',
+    async ({ css, right, want }) => {
+      const camera = await import('../../src/scenes/board/camera');
+      expect(
+        camera.boardViewport({ width: css.width * 2, height: css.height * 2 }, css, {
+          left: 8,
+          top: 58,
+          right,
+          bottom: 60,
+        }),
+      ).toEqual(want);
+    },
+  );
+
+  it('bounds invalid dimensions and oversized or nonfinite insets', async () => {
+    const camera = await import('../../src/scenes/board/camera');
+    for (const logical of [
+      { width: NaN, height: Infinity },
+      { width: 0, height: -1 },
+      { width: 1280, height: 720 },
+    ]) {
+      const viewport = camera.boardViewport(
+        logical,
+        { width: 0, height: NaN },
+        { left: Infinity, top: -10, right: 1e12, bottom: NaN },
+      );
+      for (const value of Object.values(viewport)) expect(Number.isFinite(value)).toBe(true);
+      expect(viewport.x).toBeGreaterThanOrEqual(0);
+      expect(viewport.y).toBeGreaterThanOrEqual(0);
+      expect(viewport.width).toBeGreaterThanOrEqual(1);
+      expect(viewport.height).toBeGreaterThanOrEqual(1);
+      expect(viewport.x + viewport.width).toBeLessThanOrEqual(
+        Math.max(1, Number.isFinite(logical.width) ? logical.width : 1),
+      );
+      expect(viewport.y + viewport.height).toBeLessThanOrEqual(
+        Math.max(1, Number.isFinite(logical.height) ? logical.height : 1),
+      );
+    }
+  });
+
+  it('fits the whole authored world inside the safe camera, not the full canvas', () => {
+    const view = { width: 1347, height: 514 };
+    const target = cameraTarget(gameFor('safe-whole'), true, view);
+    expect(view.width / target.zoom).toBeGreaterThanOrEqual(3200);
+    expect(view.height / target.zoom).toBeGreaterThanOrEqual(1800);
+    expect(target.zoom).toBeCloseTo(514 / 1800, 8);
+  });
+});
+
 describe('cameraTarget', () => {
   it('centres on the active seat token position', () => {
     const state = gameFor('camera-centre');

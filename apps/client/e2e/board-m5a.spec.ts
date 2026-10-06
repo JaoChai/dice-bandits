@@ -1,5 +1,6 @@
 // M5a Task 10: real UI journeys and live Phaser display-object/camera geometry.
 // Mutation switches change the rendered objects, not assertion inputs.
+import type Phaser from 'phaser';
 import { createGame, type GameState } from '@dice-bandits/engine';
 import { expect, test, type Page } from '@playwright/test';
 import en from '../src/i18n/en.json' with { type: 'json' };
@@ -114,9 +115,23 @@ async function continueSave(page: Page, lang: Lang): Promise<void> {
 }
 
 type Geometry = Awaited<ReturnType<typeof renderedBoardGeometry>>;
+async function renderedPlayfield(page: Page) {
+  return page.evaluate(() => {
+    const game = (window as Window & { __m5aGame: Phaser.Game }).__m5aGame;
+    const camera = game.scene.getScene('BoardScene').cameras.main;
+    const rect = game.canvas.getBoundingClientRect();
+    return {
+      left: rect.left + (camera.x * rect.width) / game.canvas.width,
+      right: rect.left + ((camera.x + camera.width) * rect.width) / game.canvas.width,
+      top: rect.top + (camera.y * rect.height) / game.canvas.height,
+      bottom: rect.top + ((camera.y + camera.height) * rect.height) / game.canvas.height,
+    };
+  });
+}
+
 function fitsCanvas(
   token: Pick<Geometry['tokens'][number], 'visible' | 'left' | 'right' | 'top' | 'bottom'>,
-  canvas: Geometry['canvas'],
+  canvas: Pick<Geometry['canvas'], 'left' | 'right' | 'top' | 'bottom'>,
 ): boolean {
   return (
     token.visible &&
@@ -260,6 +275,14 @@ for (const lang of ['th', 'en'] as const) {
       expect([whole.scrollX, whole.scrollY]).not.toEqual([before.scrollX, before.scrollY]);
       expect(whole.tokens).toHaveLength(4);
       const flags = await renderedOwnedFlags(page);
+      const safe = await renderedPlayfield(page);
+      expect(safe.left).toBeGreaterThanOrEqual(8);
+      expect(safe.top).toBeGreaterThanOrEqual(58);
+      for (const object of [...whole.tokens, ...whole.tiles, ...flags])
+        expect(
+          fitsCanvas(object, safe),
+          'whole-map actors/path fit safe main-camera viewport',
+        ).toBe(true);
       console.log(
         `Whole-map ${info.project.name} ${lang} ${viewport?.width ?? 'project'}: ${JSON.stringify({ tokens: whole.tokens, flags })}`,
       );
@@ -288,11 +311,16 @@ for (const lang of ['th', 'en'] as const) {
         await renderedBoardGeometry(page);
         await page.setViewportSize(viewport);
         const resized = await renderedBoardGeometry(page);
+        const resizedSafe = await renderedPlayfield(page);
         for (const object of [
           ...resized.tokens,
           ...resized.tiles,
           ...(await renderedOwnedFlags(page)),
         ]) {
+          expect(
+            fitsCanvas(object, resizedSafe),
+            'safe viewport remains contained after live resize',
+          ).toBe(true);
           expect(
             fitsCanvas(object, resized.canvas),
             'gameplay remains contained after live resize',

@@ -262,6 +262,8 @@ for (const viewport of viewports) {
       console.log(`HUD ${viewport.width}x${viewport.height} ${lang}: ${JSON.stringify(hud)}`);
       await testInfo.attach('hud', { body: JSON.stringify(hud), contentType: 'application/json' });
       expect(hud.overlaps).toEqual([]);
+      for (const token of hud.coverage)
+        expect(token.percent, 'safe camera leaves no hero covered by HUD').toBe(0);
       if (viewport.width === 915) expect(hud.hudPercent).toBeLessThanOrEqual(22);
       if (viewport.width < 1000) {
         // Measured on unmodified main 4dedfb0 with m5ab-1, fonts ready:
