@@ -54,20 +54,29 @@ async function tapCurrentSpace(page: Page): Promise<void> {
   await expect(page.locator('[data-testid="space-info"]')).toBeVisible();
 }
 
-test('RF3: saved fork 19 stays clickable while space info is open', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  await continueSave(page, savedFork());
-  await tapCurrentSpace(page);
-  const arrow = page.locator('[data-testid="fork-arrow-37"]');
-  // No force, programmatic DOM click, or test-hook dispatch: hit-testing must work.
-  await arrow.click({ timeout: 5_000 });
-  await expect.poll(() => page.evaluate(() => window.__db!.getState().players[0]!.pos)).toBe(37);
-  await expect(page.locator('[data-testid^="fork-arrow-"]')).toHaveCount(0);
-  await expect(page.locator('[data-testid="space-info"]')).toHaveCount(0);
-  expect(await page.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual({ x: 0, y: 0 });
-  expect(errors).toEqual([]);
-});
+for (const viewport of [
+  { width: 915, height: 412 },
+  { width: 932, height: 388 },
+  { width: 1280, height: 720 },
+]) {
+  test(`RF3: saved fork 19 stays clickable while space info is open (${viewport.width})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await continueSave(page, savedFork());
+    await tapCurrentSpace(page);
+    const arrow = page.locator('[data-testid="fork-arrow-37"]');
+    // No force, programmatic DOM click, or test-hook dispatch: hit-testing must work.
+    await arrow.click({ timeout: 5_000 });
+    await expect.poll(() => page.evaluate(() => window.__db!.getState().players[0]!.pos)).toBe(37);
+    await expect(page.locator('[data-testid^="fork-arrow-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="space-info"]')).toHaveCount(0);
+    expect(await page.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual({ x: 0, y: 0 });
+    expect(errors).toEqual([]);
+  });
+}
 
 test('rolling from fork 19 draws and positions branch controls without scrolling', async ({
   page,

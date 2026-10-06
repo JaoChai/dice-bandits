@@ -9,6 +9,128 @@ for (const viewport of [
   { width: 932, height: 388 },
   { width: 1280, height: 720 },
 ]) {
+  for (const behavior of ['select spaces', 'exit whole-map'] as const) {
+    test(`decorative lane taps cannot ${behavior} (${viewport.width})`, async ({ page }, info) => {
+      await page.setViewportSize(viewport);
+      await observeBoardGame(page);
+      await startJourney(page);
+      await page.waitForFunction(() => window.__db?.art.boardReady);
+      const stateBefore = await page.evaluate(() => window.__db!.getState());
+      const modes =
+        behavior === 'select spaces'
+          ? (['follow'] as const)
+          : (['whole-map', 'resized-whole-map'] as const);
+      for (const mode of modes) {
+        if (mode === 'whole-map') await page.getByTestId('map-toggle').click();
+        if (mode === 'resized-whole-map') {
+          await page.setViewportSize(
+            viewport.width === 1280 ? { width: 932, height: 388 } : { width: 1280, height: 720 },
+          );
+        }
+        await renderedBoardGeometry(page);
+        const probe = await page.evaluate((needNearbySpace) => {
+          const game = (window as ProbeWindow).__m5aGame!;
+          const scene = game.scene.getScene('BoardScene');
+          const camera = scene.cameras.main;
+          const canvas = game.canvas.getBoundingClientRect();
+          const state = window.__db!.getState();
+          // Find an unobstructed REAL canvas point outside the actual viewport.
+          // In follow mode it must inverse-project near a tile, reproducing the
+          // invisible-space bug rather than tapping a harmless blank area.
+          for (let y = canvas.top + 2; y < canvas.bottom; y += 4) {
+            for (let x = canvas.left + 2; x < canvas.right; x += 4) {
+              const logicalX = ((x - canvas.left) * game.canvas.width) / canvas.width;
+              const logicalY = ((y - canvas.top) * game.canvas.height) / canvas.height;
+              if (
+                logicalX >= camera.x &&
+                logicalX < camera.x + camera.width &&
+                logicalY >= camera.y &&
+                logicalY < camera.y + camera.height
+              )
+                continue;
+              if (document.elementFromPoint(x, y) !== game.canvas) continue;
+              const world = camera.getWorldPoint(logicalX, logicalY);
+              const nearest = Math.min(
+                ...state.board.spaces.map((space) =>
+                  Math.hypot(space.x - world.x, space.y - world.y),
+                ),
+              );
+              if (needNearbySpace && nearest > 60) continue;
+              // Observe the real Phaser pointer event to avoid a vacuous DOM test.
+              const input = scene.input as Phaser.Input.InputPlugin & { outsideProbe?: number };
+              input.outsideProbe = 0;
+              scene.input.once('pointerdown', () => {
+                input.outsideProbe!++;
+              });
+              return {
+                x,
+                y,
+                logicalX,
+                logicalY,
+                nearest,
+                zoom: camera.zoom,
+                viewport: { x: camera.x, y: camera.y, width: camera.width, height: camera.height },
+              };
+            }
+          }
+          throw new Error('No unobstructed outside-camera canvas point found');
+        }, mode === 'follow');
+        await info.attach(`${mode}-outside-tap`, {
+          body: JSON.stringify(probe),
+          contentType: 'application/json',
+        });
+        await page.mouse.click(probe.x, probe.y);
+        await page.waitForFunction(() => {
+          const scene = (window as ProbeWindow).__m5aGame!.scene.getScene('BoardScene');
+          return (
+            (scene.input as Phaser.Input.InputPlugin & { outsideProbe?: number }).outsideProbe === 1
+          );
+        });
+        await renderedBoardGeometry(page);
+        await expect(page.getByTestId('space-info')).toHaveCount(0);
+        expect(
+          await page.evaluate(
+            () => (window as ProbeWindow).__m5aGame!.scene.getScene('BoardScene').cameras.main.zoom,
+          ),
+        ).toBeCloseTo(probe.zoom, 8);
+        expect(await page.evaluate(() => window.__db!.getState())).toEqual(stateBefore);
+        await page.screenshot({ path: info.outputPath(`${mode}-outside-tap.png`) });
+      }
+      // A genuine inside-camera tap must still leave whole-map mode.
+      if (behavior === 'select spaces') await page.getByTestId('map-toggle').click();
+      await renderedBoardGeometry(page);
+      const inside = await page.evaluate(() => {
+        const game = (window as ProbeWindow).__m5aGame!;
+        const camera = game.scene.getScene('BoardScene').cameras.main;
+        const rect = game.canvas.getBoundingClientRect();
+        return {
+          x: rect.left + ((camera.x + camera.width / 2) * rect.width) / game.canvas.width,
+          y: rect.top + ((camera.y + camera.height / 2) * rect.height) / game.canvas.height,
+        };
+      });
+      const whole = await renderedBoardGeometry(page);
+      await page.mouse.click(inside.x, inside.y);
+      await expect.poll(async () => (await renderedBoardGeometry(page)).zoom).not.toBe(whole.zoom);
+      const geometry = await renderedBoardGeometry(page);
+      const active = stateBefore.board.spaces.find(
+        (space) => space.id === stateBefore.players[stateBefore.turnSeat]!.pos,
+      )!;
+      const tile = geometry.tiles.find(
+        (image) => image.world.x === active.x && image.world.y === active.y,
+      )!;
+      expect(tile.visible).toBe(true);
+      await page.mouse.click(tile.centre.x, tile.centre.y);
+      await expect(page.getByTestId('space-info')).toBeVisible();
+      expect(await page.evaluate(() => window.__db!.getState())).toEqual(stateBefore);
+    });
+  }
+}
+
+for (const viewport of [
+  { width: 915, height: 412 },
+  { width: 932, height: 388 },
+  { width: 1280, height: 720 },
+]) {
   for (const lang of ['th', 'en'] as const) {
     test(`safe playfield isolates gameplay from decorative backdrop (${viewport.width}, ${lang})`, async ({
       page,
