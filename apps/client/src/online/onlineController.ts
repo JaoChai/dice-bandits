@@ -107,11 +107,11 @@ export class OnlineController {
     }
     if (message.type !== 'view') return;
 
-    if (this.pendingEvents.length > 0) {
-      const events = this.pendingEvents;
-      await this.onEvents(events, message.state);
-      this.pendingEvents = [];
-    }
+    // This callback also commits scene state. An empty batch has nothing to
+    // animate, but its authoritative view must still reach the same commit.
+    const events = this.pendingEvents;
+    await this.onEvents(events, message.state);
+    this.pendingEvents = [];
     this.currentState = message.state;
     this.currentTurn = message.turn;
     this.currentYou = message.you;
