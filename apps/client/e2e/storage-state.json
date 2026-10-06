@@ -1,0 +1,19 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:4173",
+      "localStorage": [
+        { "name": "dice-bandits:intro-seen", "value": "1" },
+        { "name": "dice-bandits:tips", "value": "{\"enabled\":false,\"seen\":[]}" }
+      ]
+    },
+    {
+      "origin": "http://127.0.0.1:8787",
+      "localStorage": [
+        { "name": "dice-bandits:intro-seen", "value": "1" },
+        { "name": "dice-bandits:tips", "value": "{\"enabled\":false,\"seen\":[]}" }
+      ]
+    }
+  ]
+}

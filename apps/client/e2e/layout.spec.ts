@@ -41,7 +41,10 @@ test('board and battle fit the viewport without truncation', async ({ page }) =>
 });
 
 test('reduced motion disables shake and ambient loops', async ({ browser }) => {
-  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const context = await browser.newContext({
+    reducedMotion: 'reduce',
+    storageState: 'e2e/storage-state.json',
+  });
   try {
     const page = await context.newPage();
     // Positive control: the same seed/assets must actually draw ambient loops,
@@ -77,7 +80,10 @@ test('reduced motion disables shake and ambient loops', async ({ browser }) => {
 });
 
 test('normal motion runs ambient loops at normal speed', async ({ browser }) => {
-  const context = await browser.newContext({ reducedMotion: 'no-preference' });
+  const context = await browser.newContext({
+    reducedMotion: 'no-preference',
+    storageState: 'e2e/storage-state.json',
+  });
   try {
     const page = await context.newPage();
     await startBattleJourney(page, 1);

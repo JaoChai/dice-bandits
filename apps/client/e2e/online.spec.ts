@@ -122,6 +122,7 @@ async function playUntilEachHumanActsThreeTimes(
 
 async function newContext(browser: Browser, mobile: boolean): Promise<BrowserContext> {
   return browser.newContext({
+    storageState: 'e2e/storage-state.json',
     viewport: mobile ? { width: 915, height: 412 } : { width: 1280, height: 720 },
     ...(mobile ? { isMobile: true, hasTouch: true } : {}),
   });
