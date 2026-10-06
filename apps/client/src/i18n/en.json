@@ -297,5 +297,22 @@
   "map.back": "Back to the action",
   "turn.ribbon": "{name}'s turn",
   "error.boardOutdated": "This room was created with an older board. Please start a new game.",
-  "common.close": "Close"
+  "common.close": "Close",
+  "dicey.name": "Dicey",
+  "dicey.ok": "Got it",
+  "menu.diceyTips": "Dicey tips",
+  "menu.diceyReset": "Reset tips",
+  "dicey.tip.roll": "Tap the big die to roll, then move that many spaces!",
+  "dicey.tip.fork": "A fork! Tap an arrow to pick your road.",
+  "dicey.tip.castle": "The castle heals you fully. Come back when you're hurt!",
+  "dicey.tip.town": "A town! Claim it, invest to grow it, or battle its guardian.",
+  "dicey.tip.shop": "Shop time! Buy gear to win more fights.",
+  "dicey.tip.chest": "A chest! Free gold — sometimes an item too.",
+  "dicey.tip.monster": "A monster! Beat it for gold and XP — or pay the toll.",
+  "dicey.tip.event": "Something random happens here. Good luck!",
+  "dicey.tip.trap": "Ouch, a trap! You may lose gold or your next move.",
+  "dicey.tip.battle": "Battle! Pick a card each round and outguess your foe.",
+  "dicey.tip.duel": "You caught up with a rival! Duel to rob them — or keep moving.",
+  "dicey.tip.levelUp": "Level up! Pick a perk to get stronger.",
+  "dicey.tip.townManage": "Your own town! Invest gold to raise its income."
 }

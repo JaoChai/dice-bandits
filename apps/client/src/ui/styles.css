@@ -1761,3 +1761,69 @@ h1 {
     padding-bottom: 8px;
   }
 }
+
+/* Dicey occupies the free left lane between board corner cards, never a shade.
+   In battle the free lane starts to the right of the 215px takeover cards. */
+.dicey-tip {
+  position: fixed;
+  z-index: 8;
+  top: max(140px, calc(50vh - 100px));
+  left: max(10px, env(safe-area-inset-left));
+  width: 316px;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  color: var(--c-cocoa);
+  pointer-events: none;
+}
+.battle-mode .dicey-tip {
+  left: max(240px, env(safe-area-inset-left));
+}
+.dicey-portrait {
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+}
+.dicey-bubble {
+  flex: 1;
+  min-width: 0;
+  border: 2px solid var(--c-gold);
+  outline: 2px solid var(--c-cocoa);
+  border-radius: var(--t-radius);
+  padding: 4px 10px;
+  background: var(--c-cream);
+  box-shadow: var(--t-shadow);
+  font-size: 14px;
+  line-height: 20px;
+}
+.dicey-name {
+  display: block;
+  font-size: 14px;
+  line-height: 20px;
+}
+.dicey-text {
+  margin: 4px 0 6px;
+  overflow-wrap: anywhere;
+}
+.dicey-ok {
+  min-width: 88px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 2px solid var(--c-cocoa);
+  border-radius: 10px;
+  color: var(--c-cocoa);
+  background: var(--c-gold);
+  font-weight: 600;
+  box-shadow: var(--t-shadow);
+  pointer-events: auto;
+}
+.dicey-ok:hover {
+  filter: brightness(1.06);
+}
+.dicey-ok:active {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+.dicey-ok:focus-visible {
+  outline: 3px solid var(--c-cocoa);
+  outline-offset: 3px;
+}

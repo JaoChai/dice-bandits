@@ -4,7 +4,7 @@ import './ui/theme.css';
 import './ui/styles.css';
 import Phaser from 'phaser';
 import { createGame as createPhaserGame } from './game';
-import { createGame, type Action, type GameState } from '@dice-bandits/engine';
+import { createGame, type Action, type GameEvent, type GameState } from '@dice-bandits/engine';
 import { GameController } from './controller';
 import { showSetup, showTitle } from './ui/screens';
 import { clearSave, saveGame } from './save';
@@ -28,13 +28,17 @@ import { renderResults } from './ui/results';
 import { shake } from './fx';
 import { clearForkArrows } from './scenes/board/forkArrows';
 import { closeSpaceInfo } from './ui/spaceInfo';
+import { createDiceyGuide } from './ui/diceyTip';
 
 const app = getMount();
 initAudio();
 let game: Phaser.Game | null = null;
+let diceyGuide: ReturnType<typeof createDiceyGuide> | undefined;
 
 /** Phaser destroy is deferred; remove body-owned board UI synchronously. */
 function destroyGame(): void {
+  diceyGuide?.destroy();
+  diceyGuide = undefined;
   closeSpaceInfo();
   clearForkArrows();
   game?.destroy(true);
@@ -94,12 +98,31 @@ export function startOnlineGame(
   destroyGame();
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
+  const guide = createDiceyGuide(app);
+  diceyGuide = guide;
+  let previousTipState = firstView.state;
+  let tipEvents: GameEvent[] = [];
+  let tipsReady = false;
 
   const renderOnlineHud = (): void => {
     renderHud(app, controller.state, (action) => void controller.dispatch(action), {
       legal: controller.legal,
       online: controller.hudOnlineState,
     });
+    // onEvents runs before the authoritative view updates you/seats. Wait for
+    // that existing view handoff, never for a tip or a new animation/timer.
+    if (tipsReady && !controller.hudOnlineState.awaitingView) {
+      guide.update({
+        prev: previousTipState,
+        next: controller.state,
+        events: tipEvents,
+        isLocalHuman: (seat) =>
+          seat === controller.you &&
+          controller.seats.find((entry) => entry.seat === seat)?.controller !== 'botTakeover',
+      });
+      previousTipState = controller.state;
+      tipEvents = [];
+    }
   };
   const showOnlineError = (key: string): void => {
     destroyGame();
@@ -129,6 +152,8 @@ export function startOnlineGame(
     state: firstView.state,
     socket,
     onEvents: async (events, nextState) => {
+      guide.dismiss();
+      tipEvents.push(...events);
       onGameEvents(events, nextState);
       renderHud(app, nextState, (action) => void controller.dispatch(action), {
         legal: controller.legal,
@@ -206,6 +231,7 @@ export function startOnlineGame(
       return;
     }
     setMusic(musicForState(controller.state));
+    tipsReady = true;
     renderOnlineHud();
     game = createPhaserGame('phaser-board');
     // Fork arrows (canvas) dispatch through the same controller as the DOM tray.
@@ -303,12 +329,19 @@ function startGame(state: GameState): void {
   setMusic(musicForState(state));
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
+  const guide = createDiceyGuide(app);
+  diceyGuide = guide;
+  let previousTipState = state;
+  const isLocalHuman = (seat: number): boolean =>
+    controller.state.players[seat]?.control === 'human';
   const controller = new GameController({
     state,
     speed: testHooks.speed,
     onEvents: async (events, nextState) => {
       onGameEvents(events, nextState);
       renderHud(app, nextState, dispatch);
+      guide.update({ prev: previousTipState, next: nextState, events, isLocalHuman });
+      previousTipState = nextState;
       renderEventToast(app, events);
       const scene = game?.scene.getScene('BoardScene') as BoardScene | undefined;
       const battleScene = game?.scene.getScene('BattleScene') as BattleScene | undefined;
@@ -348,6 +381,7 @@ function startGame(state: GameState): void {
   }
   // The HUD mounts `#phaser-board`; Phaser must be created after it exists.
   renderHud(app, controller.state, dispatch);
+  guide.update({ prev: state, next: controller.state, events: [], isLocalHuman });
   game = createPhaserGame('phaser-board');
   game.events.on('board-chooseBranch', (to: number) => {
     void controller.dispatch({ type: 'chooseBranch', to });
