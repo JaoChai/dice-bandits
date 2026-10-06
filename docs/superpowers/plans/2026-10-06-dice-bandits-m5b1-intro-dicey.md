@@ -6,7 +6,7 @@
 
 **Art (owner checkpoint A approved 2026-10-06, already committed on this branch):**
 - `apps/client/public/art/story/panel{1..4}.webp` (1600×900) and `panel{1..4}-sm.webp` (960×540). Use `-sm` when `window.innerWidth <= 960`.
-- `apps/client/public/art/dicey.webp` + `dicey.json` (frames `happy`, `point`, `surprised`; produced by `tools/cartoonize` entry `dicey`). DOM-only asset: do NOT add it to `ART_ATLASES` / BootScene.
+- `apps/client/public/art/tutor/dicey.webp` + `tutor/dicey.json` (frames `happy`, `point`, `surprised`; produced by `tools/cartoonize` entry `dicey`). DOM-only asset: do NOT add it to `ART_ATLASES` / BootScene.
 - Shipped art total after this commit: 4 364 940 bytes (budget 6 000 000, checked by `scripts/check-art-budget.mjs`).
 
 ## Global constraints
@@ -57,7 +57,7 @@ If a tip contradicts actual engine behaviour, change the wording minimally in bo
 
 ## Task 1 — Intro comic (dev card T1)
 
-Files: create `apps/client/src/ui/introComic.ts`, `apps/client/src/ui/introComic.test.ts`, `apps/client/e2e/intro.spec.ts`, `apps/client/e2e/storage-state.json`; modify `apps/client/src/ui/screens.ts` (title "Story" button `data-testid="title-story"` + first-visit auto-open in `showTitle`), `apps/client/src/ui/styles.css`, `apps/client/src/i18n/en.json`, `th.json`, `apps/client/playwright.config.ts`, plus `online.spec.ts` only if it creates contexts manually.
+Files: create `apps/client/src/ui/introComic.ts`, `apps/client/test/ui/introComic.test.ts`, `apps/client/e2e/intro.spec.ts`, `apps/client/e2e/storage-state.json`; modify `apps/client/src/ui/screens.ts` (title "Story" button `data-testid="title-story"` + first-visit auto-open in `showTitle`), `apps/client/src/ui/styles.css`, `apps/client/src/i18n/en.json`, `th.json`, `apps/client/playwright.config.ts`, plus `online.spec.ts` only if it creates contexts manually.
 
 Behaviour: `openIntroComic({ onClose })` mounts `data-testid="intro-comic"` (role dialog, aria-modal, focus trapped) over the title; panel image `intro-panel` (object-fit cover), caption `intro-caption` (bottom strip, Thai wraps), dots, buttons `intro-back`, `intro-next`, `intro-skip` (always visible), `intro-done` on panel 4. Keys: →/Enter/Space next, ← back, Esc skip; tap on panel = next. Done or skip sets `intro-seen` and removes the overlay. Motion: slow pan/zoom ≤ 6 % per panel + cross-fade 250 ms; reduced motion / speed 0 → none. Title music keeps playing; reuse the existing UI click SFX on page turn if a helper exists (no new audio files). Auto-open only from `showTitle` when `intro-seen` is unset; the `/r/<CODE>` route never reaches `showTitle` on first load so it never auto-opens there — keep it that way.
 
@@ -65,11 +65,11 @@ Tests: unit (state machine next/back/skip/done, flag set on both exits, storage 
 
 ## Task 2 — Dicey tips core (dev card T2)
 
-Files: create `apps/client/src/tutor/tips.ts` (pure), `apps/client/src/tutor/tips.test.ts`, `apps/client/src/ui/diceyTip.ts`, `apps/client/src/ui/diceyTip.test.ts`; modify `apps/client/src/main.ts` (both `onEvents` handlers: hot-seat ~line 309, online ~line 131), `styles.css`, i18n files.
+Files: create `apps/client/src/tutor/tips.ts` (pure), `apps/client/test/tutor/tips.test.ts`, `apps/client/src/ui/diceyTip.ts`, `apps/client/test/ui/diceyTip.test.ts`; modify `apps/client/src/main.ts` (both `onEvents` handlers: hot-seat ~line 309, online ~line 131), `styles.css`, i18n files.
 
 `tips.ts`: `topicsFor(input: { prev: GameState; events: GameEvent[]; next: GameState; isLocalHuman: (seat: number) => boolean }): TipTopic[]` — pure, ordered: `roll` when `next.phase.kind === 'awaitRoll'` for a local human; `fork` on `chooseBranch`; `duel` on `duelOffer`; `battle` on `battle` phase involving a local human seat; `levelUp`; `townManage`; space topics from the final landing of a local human this batch (last `Moved` event of that seat; kind = the space whose `id === to` in `next.board.spaces` (look up by id, not index)). Plus `loadTips()/markSeen()/setEnabled()/resetTips()` over the storage key, and a queue that shows at most 2 tips per human turn (carry the rest to the next local human turn). `isLocalHuman`: hot-seat `players[seat].control === 'human'`; online `seat === online.you` and that seat's controller is not `botTakeover`.
 
-`diceyTip.ts`: `data-testid="dicey-tip"` (role status, not modal, no focus steal), Dicey sprite via CSS background from `/art/dicey.webp` using the frame rects in `dicey.json` (import the JSON), bubble text, `dicey-tip-ok` button. Any game action button press or a new state from the controller dismisses the visible tip (counts as seen). Placement: a fixed corner zone that has 0 px² overlap with action tray, HP/seat cards, turn ribbon, menu/map buttons and battle HUD at 1280×720 and 915×412 — measure with the existing overlap helpers. Missing art → text-only bubble + `console.warn`.
+`diceyTip.ts`: `data-testid="dicey-tip"` (role status, not modal, no focus steal), Dicey sprite via CSS background from `/art/tutor/dicey.webp` using the frame rects in `public/art/tutor/dicey.json` (import the JSON), bubble text, `dicey-tip-ok` button. Any game action button press or a new state from the controller dismisses the visible tip (counts as seen). Placement: a fixed corner zone that has 0 px² overlap with action tray, HP/seat cards, turn ribbon, menu/map buttons and battle HUD at 1280×720 and 915×412 — measure with the existing overlap helpers. Missing art → text-only bubble + `console.warn`.
 
 Tests: unit for every topic trigger, never for bot/remote/botTakeover seats, disabled → none, seen → none, queue cap 2, storage corrupt → defaults; DOM test for the component.
 
