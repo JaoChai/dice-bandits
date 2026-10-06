@@ -18,7 +18,7 @@ type HudOnlineState = {
   reclaim: () => void;
 };
 
-type HudOptions = { legal?: Action[]; online?: HudOnlineState };
+type HudOptions = { legal?: Action[]; online?: HudOnlineState; presentationBusy?: boolean };
 
 const hudContexts = new WeakMap<
   HTMLElement,
@@ -33,6 +33,7 @@ export function renderHud(
   options?: HudOptions,
 ): void {
   const online = options?.online;
+  const busy = options?.presentationBusy === true || online?.awaitingView === true;
   const suppliedLegal = options?.legal;
   const battleSeat =
     state.phase.kind === 'battle'
@@ -62,7 +63,7 @@ export function renderHud(
     ? actions
         .map(
           (action, index) =>
-            `<button class="action-button" data-testid="${testId(action)}" data-action-index="${index}"${online?.awaitingView ? ' disabled' : ''}>${escapeHtml(actionName(action))}</button>`,
+            `<button class="action-button" data-testid="${testId(action)}" data-action-index="${index}"${busy ? ' disabled' : ''}>${escapeHtml(actionName(action))}</button>`,
         )
         .join('')
     : '';
@@ -214,7 +215,7 @@ export function renderHud(
     actionName,
     canAct,
     online !== undefined,
-    online?.awaitingView ?? false,
+    busy,
   );
   if (!isBattle) {
     actionBar.setAttribute('aria-label', t('board.actions'));
@@ -226,10 +227,9 @@ export function renderHud(
       if (action) button.onclick = () => dispatch(action);
     });
   }
-  if (state.phase.kind === 'pvpReward')
-    showActionDialog(root, actions, dispatch, online?.awaitingView);
+  if (state.phase.kind === 'pvpReward') showActionDialog(root, actions, dispatch, busy);
   else if (state.phase.kind === 'levelUp' || state.phase.kind === 'shop')
-    showPhaseDialog(root, state, actions, dispatch, online?.awaitingView);
+    showPhaseDialog(root, state, actions, dispatch, busy);
 }
 
 function playerCard(state: GameState, player: Player, seats?: PublicSeat[]): string {

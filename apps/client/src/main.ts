@@ -29,14 +29,24 @@ import { shake } from './fx';
 import { clearForkArrows } from './scenes/board/forkArrows';
 import { closeSpaceInfo } from './ui/spaceInfo';
 import { createDiceyGuide } from './ui/diceyTip';
+import { createDiceRoll, readRollResult } from './ui/diceRoll';
+import { reducedMotion } from './art/motion';
 
 const app = getMount();
 initAudio();
 let game: Phaser.Game | null = null;
 let diceyGuide: ReturnType<typeof createDiceyGuide> | undefined;
+let diceRoll: ReturnType<typeof createDiceRoll> | undefined;
+let sessionGeneration = 0;
+let unbindGameLanguage: (() => void) | undefined;
 
 /** Phaser destroy is deferred; remove body-owned board UI synchronously. */
 function destroyGame(): void {
+  sessionGeneration++;
+  unbindGameLanguage?.();
+  unbindGameLanguage = undefined;
+  diceRoll?.destroy();
+  diceRoll = undefined;
   diceyGuide?.destroy();
   diceyGuide = undefined;
   closeSpaceInfo();
@@ -96,18 +106,31 @@ export function startOnlineGame(
   firstView: Extract<ServerMsg, { type: 'view' }>,
 ): void {
   destroyGame();
+  const generation = sessionGeneration;
+  const isCurrent = (): boolean => generation === sessionGeneration;
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
   const guide = createDiceyGuide(app);
   diceyGuide = guide;
+  const rollView = createDiceRoll(app);
+  diceRoll = rollView;
+  let displayedState = firstView.state;
+  let presentationBusy = false;
   let previousTipState = firstView.state;
   let tipEvents: GameEvent[] = [];
   let tipsReady = false;
 
+  const dispatch = (action: Action): void => {
+    if (!isCurrent() || presentationBusy) return;
+    void controller.dispatch(action);
+  };
   const renderOnlineHud = (): void => {
-    renderHud(app, controller.state, (action) => void controller.dispatch(action), {
+    if (!isCurrent()) return;
+    if (!presentationBusy) displayedState = controller.state;
+    renderHud(app, displayedState, dispatch, {
       legal: controller.legal,
       online: controller.hudOnlineState,
+      presentationBusy,
     });
     // onEvents runs before the authoritative view updates you/seats. Wait for
     // that existing view handoff, never for a tip or a new animation/timer.
@@ -125,6 +148,7 @@ export function startOnlineGame(
     }
   };
   const showOnlineError = (key: string): void => {
+    if (!isCurrent()) return;
     destroyGame();
     app.innerHTML = `<main class="screen online-screen" data-testid="screen-online-error"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button></header><p class="error" role="alert" data-testid="online-error">${escapeHtml(t(key))}</p></main>`;
     app.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', () => {
@@ -133,6 +157,7 @@ export function startOnlineGame(
     });
   };
   const showOnlineResults = (state: GameState): void => {
+    if (!isCurrent()) return;
     destroyGame();
     setMusic('board');
     renderResults(
@@ -152,36 +177,50 @@ export function startOnlineGame(
     state: firstView.state,
     socket,
     onEvents: async (events, nextState) => {
+      if (!isCurrent()) return;
+      presentationBusy = true;
       guide.dismiss();
       tipEvents.push(...events);
       onGameEvents(events, nextState);
-      renderHud(app, nextState, (action) => void controller.dispatch(action), {
-        legal: controller.legal,
-        online: controller.hudOnlineState,
-      });
-      renderEventToast(app, events);
-      const scene = game?.scene.getScene('BoardScene') as BoardScene | undefined;
-      const battleScene = game?.scene.getScene('BattleScene') as BattleScene | undefined;
+      renderOnlineHud();
+      const ownedGame = game;
+      const scene = ownedGame?.scene.getScene('BoardScene') as BoardScene | undefined;
+      const battleScene = ownedGame?.scene.getScene('BattleScene') as BattleScene | undefined;
       await animateThenRender(
         async () => {
+          for (const event of events) {
+            const result = readRollResult(event);
+            if (result) {
+              // A static badge updates synchronously; no timer or view backlog.
+              void rollView.play(result, {
+                speed: testHooks.speed,
+                reduced: reducedMotion(),
+                waitBeforeMovement: false,
+              });
+            }
+          }
+          if (!isCurrent()) return;
           await Promise.all([
             scene?.playEvents(events) ?? Promise.resolve(),
-            game?.scene.isActive('BattleScene')
-              ? (battleScene?.playEvents(events, window.diceBanditsSpeed) ?? Promise.resolve())
+            ownedGame?.scene.isActive('BattleScene')
+              ? (battleScene?.playEvents(events, testHooks.speed) ?? Promise.resolve())
               : Promise.resolve(),
           ]);
         },
         () => {
-          game?.registry.set('state', nextState);
-          game?.events.emit('game-state', nextState);
+          if (!isCurrent()) return;
+          presentationBusy = false;
+          renderEventToast(app, events);
+          ownedGame?.registry.set('state', nextState);
+          ownedGame?.events.emit('game-state', nextState);
           if (nextState.phase.kind === 'battle') {
-            // The DOM can advance while BootScene is still loading atlases.
-            // BootScene launches the current battle only after registration.
-            if (game?.scene.isActive('BoardScene') && !game.scene.isActive('BattleScene'))
+            if (ownedGame?.scene.isActive('BoardScene') && !ownedGame.scene.isActive('BattleScene'))
               scene?.scene.launch('BattleScene');
-          } else if (game?.scene.isActive('BattleScene')) {
+          } else if (ownedGame?.scene.isActive('BattleScene')) {
             scene?.scene.stop('BattleScene');
           }
+          // OnlineController commits its new legal/view immediately after this
+          // promise settles; only that handoff mounts the actionable next HUD.
         },
       );
     },
@@ -199,6 +238,7 @@ export function startOnlineGame(
     window.setTimeout(() => notice.remove(), 3000);
   };
   const handleMessage = (message: ServerMsg): void => {
+    if (!isCurrent()) return;
     if (message.type === 'error') {
       if (message.key === 'online.error.notFound') {
         clearSession(session.code);
@@ -207,12 +247,13 @@ export function startOnlineGame(
       return;
     }
     void controller.handleMessage(message).then(() => {
-      if (message.type !== 'view') return;
+      if (!isCurrent() || message.type !== 'view') return;
       if (controller.state.phase.kind === 'gameOver') showOnlineResults(controller.state);
       else renderOnlineHud();
     });
   };
   const handleStatus = (status: RoomSocketStatus): void => {
+    if (!isCurrent()) return;
     controller.setSocketStatus(status);
     if (app.querySelector('[data-testid="screen-board"]')) renderOnlineHud();
   };
@@ -220,12 +261,14 @@ export function startOnlineGame(
     onMessage: handleMessage,
     onStatus: handleStatus,
     onTerminal: (code) => {
+      if (!isCurrent()) return;
       if (code === 4404) clearSession(session.code);
       showOnlineError(code === 4404 ? 'online.error.notFound' : 'online.error.openedElsewhere');
     },
   });
 
   void controller.handleMessage(firstView).then(() => {
+    if (!isCurrent()) return;
     if (controller.state.phase.kind === 'gameOver') {
       showOnlineResults(controller.state);
       return;
@@ -235,9 +278,7 @@ export function startOnlineGame(
     renderOnlineHud();
     game = createPhaserGame('phaser-board');
     // Fork arrows (canvas) dispatch through the same controller as the DOM tray.
-    game.events.on('board-chooseBranch', (to: number) => {
-      void controller.dispatch({ type: 'chooseBranch', to });
-    });
+    game.events.on('board-chooseBranch', (to: number) => dispatch({ type: 'chooseBranch', to }));
     game.registry.set('state', controller.state);
     window.diceBanditsMapWhole = false;
     game.registry.set('onBoardOutdated', (): void => {
@@ -252,6 +293,7 @@ export function startOnlineGame(
       };
     }
     window.addEventListener('dice-bandits:lang', renderOnlineHud);
+    unbindGameLanguage = () => window.removeEventListener('dice-bandits:lang', renderOnlineHud);
   });
 }
 
@@ -326,80 +368,106 @@ function startGame(state: GameState): void {
     renderResults(app, state, startSetup, () => showTitle(startSetup));
     return;
   }
+  const generation = sessionGeneration;
+  const isCurrent = (): boolean => generation === sessionGeneration;
   setMusic(musicForState(state));
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
   const guide = createDiceyGuide(app);
   diceyGuide = guide;
-  let previousTipState = state;
-  const isLocalHuman = (seat: number): boolean =>
-    controller.state.players[seat]?.control === 'human';
+  const rollView = createDiceRoll(app);
+  diceRoll = rollView;
+  let displayedState = state;
+  let presentationBusy = false;
+  const isLocalHuman = (seat: number): boolean => displayedState.players[seat]?.control === 'human';
+  const renderLocalHud = (): void => {
+    if (isCurrent()) renderHud(app, displayedState, dispatch, { presentationBusy });
+  };
   const controller = new GameController({
     state,
     speed: testHooks.speed,
     onEvents: async (events, nextState) => {
+      if (!isCurrent()) return;
+      presentationBusy = true;
+      guide.dismiss();
+      renderLocalHud();
       onGameEvents(events, nextState);
-      renderHud(app, nextState, dispatch);
-      guide.update({ prev: previousTipState, next: nextState, events, isLocalHuman });
-      previousTipState = nextState;
-      renderEventToast(app, events);
-      const scene = game?.scene.getScene('BoardScene') as BoardScene | undefined;
-      const battleScene = game?.scene.getScene('BattleScene') as BattleScene | undefined;
+      const ownedGame = game;
+      const scene = ownedGame?.scene.getScene('BoardScene') as BoardScene | undefined;
+      const battleScene = ownedGame?.scene.getScene('BattleScene') as BattleScene | undefined;
       await animateThenRender(
         async () => {
+          for (const event of events) {
+            const result = readRollResult(event);
+            if (!result) continue;
+            await rollView.play(result, {
+              speed: testHooks.speed,
+              reduced: reducedMotion(),
+              waitBeforeMovement: result.seat !== null && isLocalHuman(result.seat),
+            });
+            if (!isCurrent()) return;
+          }
+          if (!isCurrent()) return;
           await Promise.all([
             scene?.playEvents(events) ?? Promise.resolve(),
-            game?.scene.isActive('BattleScene')
-              ? (battleScene?.playEvents(events, window.diceBanditsSpeed) ?? Promise.resolve())
+            ownedGame?.scene.isActive('BattleScene')
+              ? (battleScene?.playEvents(events, testHooks.speed) ?? Promise.resolve())
               : Promise.resolve(),
           ]);
         },
         () => {
-          game?.registry.set('state', nextState);
-          game?.events.emit('game-state', nextState);
+          // destroyGame settles play; its continuation must not touch a new game.
+          if (!isCurrent()) return;
+          const previous = displayedState;
+          displayedState = nextState;
+          presentationBusy = false;
+          renderLocalHud();
+          guide.update({ prev: previous, next: nextState, events, isLocalHuman });
+          renderEventToast(app, events);
+          ownedGame?.registry.set('state', nextState);
+          ownedGame?.events.emit('game-state', nextState);
           if (nextState.phase.kind === 'battle') {
-            // The DOM can advance while BootScene is still loading atlases.
-            // BootScene launches the current battle only after registration.
-            if (game?.scene.isActive('BoardScene') && !game.scene.isActive('BattleScene'))
+            // BootScene handles battle entry when atlases are still loading.
+            if (ownedGame?.scene.isActive('BoardScene') && !ownedGame.scene.isActive('BattleScene'))
               scene?.scene.launch('BattleScene');
-          } else if (game?.scene.isActive('BattleScene')) {
+          } else if (ownedGame?.scene.isActive('BattleScene')) {
             scene?.scene.stop('BattleScene');
           }
         },
       );
+      if (!isCurrent()) return;
       if (nextState.phase.kind === 'gameOver') {
         destroyGame();
         setMusic('board');
-        renderResults(app, nextState, startSetup, () => {
-          showTitle(startSetup);
-        });
+        renderResults(app, nextState, startSetup, () => showTitle(startSetup));
       }
     },
   });
   function dispatch(action: Action): void {
+    if (!isCurrent() || presentationBusy) return;
     void controller.dispatch(action);
   }
   // The HUD mounts `#phaser-board`; Phaser must be created after it exists.
-  renderHud(app, controller.state, dispatch);
-  guide.update({ prev: state, next: controller.state, events: [], isLocalHuman });
+  renderLocalHud();
+  guide.update({ prev: state, next: state, events: [], isLocalHuman });
   game = createPhaserGame('phaser-board');
-  game.events.on('board-chooseBranch', (to: number) => {
-    void controller.dispatch({ type: 'chooseBranch', to });
-  });
+  game.events.on('board-chooseBranch', (to: number) => dispatch({ type: 'chooseBranch', to }));
   game.registry.set('state', state);
   window.diceBanditsMapWhole = false;
   game.registry.set('onBoardOutdated', (): void => {
+    if (!isCurrent()) return;
     destroyGame();
     showOnlineErrorScreen('error.boardOutdated');
   });
-  bindMapToggle(app, game, () => controller.state);
+  bindMapToggle(app, game, () => displayedState);
   if (import.meta.env.VITE_TEST_HOOKS === '1') {
     window.__db = {
       getState: () => controller.state,
       art: createArtProbe(),
     };
   }
-  window.addEventListener('dice-bandits:lang', () => renderHud(app, controller.state, dispatch));
+  window.addEventListener('dice-bandits:lang', renderLocalHud);
+  unbindGameLanguage = () => window.removeEventListener('dice-bandits:lang', renderLocalHud);
   saveGame(controller.state);
 }
 
