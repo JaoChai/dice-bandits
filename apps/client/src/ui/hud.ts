@@ -237,6 +237,17 @@ export function renderHud(
     .querySelector<HTMLButtonElement>('[data-testid="online-reclaim"]')
     ?.addEventListener('click', online!.reclaim);
   const actionBar = root.querySelector<HTMLElement>('.action-tray')!;
+  const modalPhase = ['shop', 'levelUp', 'pvpReward'].includes(state.phase.kind);
+  const modalActions =
+    state.phase.kind === 'pvpReward'
+      ? actions.filter((action) => action.type === 'pvpReward')
+      : actions;
+  const ownsModal = modalPhase && canAct && modalActions.length > 0;
+  const hadModal =
+    actionBar.dataset.modalPhase === state.phase.kind && !!root.querySelector('.dialog-shade');
+  actionBar.hidden = ownsModal;
+  actionBar.toggleAttribute('inert', ownsModal);
+  actionBar.dataset.modalPhase = ownsModal ? state.phase.kind : '';
   const isBattle = renderBattleUi(
     root,
     state,
@@ -250,7 +261,7 @@ export function renderHud(
   );
   if (!isBattle) {
     actionBar.setAttribute('aria-label', t('board.actions'));
-    const markup = buttons || `<span>${t('board.botThinking')}</span>`;
+    const markup = ownsModal ? '' : buttons || `<span>${t('board.botThinking')}</span>`;
     if (actionBar.innerHTML !== markup) actionBar.innerHTML = markup;
     root.querySelector('.dialog-shade')?.remove();
     root.querySelectorAll<HTMLButtonElement>('[data-action-index]').forEach((button) => {
@@ -258,9 +269,16 @@ export function renderHud(
       if (action) button.onclick = () => dispatch(action);
     });
   }
-  if (state.phase.kind === 'pvpReward') showActionDialog(root, actions, dispatch, busy);
-  else if (state.phase.kind === 'levelUp' || state.phase.kind === 'shop')
-    showPhaseDialog(root, state, actions, dispatch, busy);
+  if (ownsModal && (!busy || hadModal)) {
+    if (state.phase.kind === 'pvpReward') showActionDialog(root, modalActions, dispatch, busy);
+    else showPhaseDialog(root, state, modalActions, dispatch, busy);
+    const dialog = root.querySelector<HTMLElement>('.game-dialog')!;
+    dialog.setAttribute('aria-label', dialog.querySelector('h2')!.textContent!);
+    // Move the existing button, never clone it: preserve action indices,
+    // native disabled semantics, labels and the original dispatch handler.
+    const leave = dialog.querySelector<HTMLButtonElement>('[data-testid="shop-leave-leave"]');
+    if (leave) dialog.append(leave);
+  }
 }
 
 function playerCard(state: GameState, player: Player, seats?: PublicSeat[]): string {

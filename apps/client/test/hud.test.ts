@@ -53,6 +53,105 @@ function pvpBattleWithSeatZeroPicking(): GameState {
   return state;
 }
 
+describe('single modal choice surface', () => {
+  // Breaks caught: mirrored choices, blank remote/bot modals, busy dispatch,
+  // stale hidden tray after a modal and Leave scrolling out of reach.
+  it.each(['shop', 'levelUp', 'pvpReward'] as const)(
+    'owns the only %s choices for local and eligible online seats',
+    (kind) => {
+      const state = createGame(config);
+      state.phase =
+        kind === 'shop'
+          ? { kind, stock: ['potion'] }
+          : kind === 'levelUp'
+            ? { kind, seat: 0, choices: ['quickFeet'], then: 'endTurn' }
+            : { kind, winner: 0, loser: 1 };
+      const actions = legalActions(state, 0);
+      expect(actions.length).toBeGreaterThan(0);
+      for (const online of [false, true]) {
+        const root = document.createElement('div');
+        const sent: unknown[] = [];
+        const options = online
+          ? {
+              legal: actions,
+              online: {
+                you: 0,
+                seats: [],
+                opponentPicked: false,
+                socketStatus: 'open' as const,
+                awaitingView: false,
+                reclaim: () => {},
+              },
+            }
+          : undefined;
+        renderHud(root, state, (action) => sent.push(action), options);
+        renderHud(root, state, (action) => sent.push(action), options);
+        const tray = root.querySelector<HTMLElement>('.action-tray')!;
+        expect(tray.hidden).toBe(true);
+        expect(tray.hasAttribute('inert')).toBe(true);
+        expect(tray.querySelectorAll('button')).toHaveLength(0);
+        expect(root.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+        expect(root.querySelectorAll('[data-choice]')).toHaveLength(actions.length);
+        if (kind === 'shop') {
+          expect(root.querySelector('.phase-choices [data-testid="shop-leave-leave"]')).toBeNull();
+          expect(
+            root.querySelector('.phase-dialog > [data-testid="shop-leave-leave"]'),
+          ).not.toBeNull();
+        }
+        renderHud(root, state, (action) => sent.push(action), {
+          ...options,
+          presentationBusy: true,
+        });
+        for (const button of root.querySelectorAll<HTMLButtonElement>('[data-choice]')) {
+          expect(button.disabled).toBe(true);
+          button.click();
+        }
+        expect(sent).toEqual([]);
+        state.phase = { kind: 'townManage', spaceId: state.towns[0]!.spaceId };
+        state.towns[0]!.owner = 0;
+        renderHud(root, state, (action) => sent.push(action));
+        expect(root.querySelector('.dialog-shade')).toBeNull();
+        expect(tray.hidden).toBe(false);
+        expect(tray.hasAttribute('inert')).toBe(false);
+        expect(tray.querySelector('[data-testid="action-leave"]')).not.toBeNull();
+        // Restore the modal fixture for the other mode.
+        state.phase =
+          kind === 'shop'
+            ? { kind, stock: ['potion'] }
+            : kind === 'levelUp'
+              ? { kind, seat: 0, choices: ['quickFeet'], then: 'endTurn' }
+              : { kind, winner: 0, loser: 1 };
+      }
+    },
+  );
+  it('does not mount blank bot/remote dialogs or fresh choices during an awaiting view', () => {
+    const state = createGame(config);
+    state.phase = { kind: 'shop', stock: ['potion'] };
+    const root = document.createElement('div');
+    state.players[0]!.control = 'bot';
+    renderHud(root, state, () => {});
+    expect(root.querySelector('.dialog-shade')).toBeNull();
+    state.players[0]!.control = 'human';
+    for (const awaitingView of [false, true]) {
+      renderHud(root, state, () => {}, {
+        legal: [],
+        online: {
+          you: 1,
+          seats: [],
+          opponentPicked: false,
+          socketStatus: 'open',
+          awaitingView,
+          reclaim: () => {},
+        },
+      });
+      expect(root.querySelector('.dialog-shade')).toBeNull();
+    }
+    renderHud(root, state, () => {}, { presentationBusy: true });
+    expect(root.querySelector('.dialog-shade')).toBeNull();
+    expect(root.querySelectorAll('[data-choice]:enabled')).toHaveLength(0);
+  });
+});
+
 describe('compact board HUD', () => {
   it('keeps exactly one copy of every status and control inside one top bar', () => {
     const root = document.createElement('div');

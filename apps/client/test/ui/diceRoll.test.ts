@@ -209,6 +209,19 @@ it.each(['awaitRoll', 'shop', 'levelUp', 'pvpReward'] as const)(
       state.phase = { kind: 'levelUp', seat: 0, choices: ['quickFeet'], then: 'endTurn' };
     if (phase === 'pvpReward') state.phase = { kind: 'pvpReward', winner: 0, loser: 1 };
     let dispatched = 0;
+    // U3 suppresses fresh choices during presentation. Seed the previously
+    // actionable modal first, then prove the busy refresh disables that same
+    // choice surface (all original non-empty/disabled/no-dispatch gates stay).
+    if (['shop', 'levelUp', 'pvpReward'].includes(phase)) {
+      renderHud(
+        root,
+        state,
+        () => {
+          dispatched++;
+        },
+        { legal },
+      );
+    }
     renderHud(
       root,
       state,

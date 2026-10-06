@@ -305,7 +305,7 @@
   "dicey.ok": "Got it",
   "menu.diceyTips": "Dicey tips",
   "menu.diceyReset": "Reset tips",
-  "dicey.tip.roll": "Tap the big die to roll, then move that many spaces!",
+  "dicey.tip.roll": "Tap Roll to see your dice total.",
   "dicey.tip.fork": "A fork! Tap an arrow to pick your road.",
   "dicey.tip.castle": "Castle heals fully; Cursed Capital heals 50% of max HP.",
   "dicey.tip.town": "A town! Claim it, invest to grow it, or battle its guardian.",

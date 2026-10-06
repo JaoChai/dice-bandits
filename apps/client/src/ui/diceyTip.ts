@@ -44,24 +44,61 @@ export function showDiceyTip(
   const loader = tip.querySelector<HTMLImageElement>('.dicey-art-loader')!;
   const button = tip.querySelector<HTMLButtonElement>('.dicey-ok')!;
   const frame = atlas.frames[poses[topic]];
-  const scale = 64 / frame.w;
-  portrait.style.width = '64px';
+  const portraitSize = topic === 'roll' ? 40 : 64;
+  const scale = portraitSize / frame.w;
+  portrait.style.width = `${portraitSize}px`;
   portrait.style.height = `${frame.h * scale}px`;
   portrait.style.backgroundImage = 'url("/art/tutor/dicey.webp")';
   portrait.style.backgroundSize = `${900 * scale}px ${300 * scale}px`;
   portrait.style.backgroundPosition = `${-frame.x * scale}px ${-frame.y * scale}px`;
+  let closed = false;
+  const position = (): void => {
+    if (closed || topic !== 'roll') return;
+    const roll = root.querySelector<HTMLElement>('[data-testid="action-roll"]');
+    const rect = roll?.getBoundingClientRect();
+    const pointer = tip.querySelector('.dicey-pointer');
+    if (!rect || !rect.width || !rect.height) {
+      pointer?.remove();
+      tip.classList.remove('dicey-anchored');
+      return;
+    }
+    tip.classList.add('dicey-anchored');
+    if (!pointer) {
+      const triangle = document.createElement('span');
+      triangle.className = 'dicey-pointer';
+      triangle.setAttribute('aria-hidden', 'true');
+      tip.append(triangle);
+    }
+    tip.style.setProperty('--dicey-cta-x', `${rect.left + rect.width / 2}px`);
+    const tray = roll?.closest('.action-tray')?.getBoundingClientRect();
+    tip.style.left = `${Math.max(8, (tray?.left ?? rect.left) - tip.getBoundingClientRect().width - 14)}px`;
+    tip.style.bottom = `${Math.max(8, window.innerHeight - rect.bottom)}px`;
+  };
+  let frameId = 0;
   const refresh = (): void => {
+    tip.setAttribute('aria-label', t('dicey.name'));
     tip.querySelector('.dicey-name')!.textContent = t('dicey.name');
     tip.querySelector('.dicey-text')!.textContent = t(`dicey.tip.${topic}`);
     button.textContent = t('dicey.ok');
+    position();
+    cancelAnimationFrame(frameId);
+    frameId = requestAnimationFrame(position);
   };
   refresh();
   const unsubscribe = onLangChange(refresh);
-  let closed = false;
+  const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(position);
+  resize?.observe(root);
+  const mutations = new MutationObserver(position);
+  mutations.observe(root, { childList: true, subtree: true });
+  window.addEventListener('resize', position);
   const cleanup = (): void => {
     if (closed) return;
     closed = true;
     unsubscribe();
+    resize?.disconnect();
+    mutations.disconnect();
+    window.removeEventListener('resize', position);
+    cancelAnimationFrame(frameId);
     loader.onload = null;
     loader.onerror = null;
     tip.remove();
@@ -81,6 +118,7 @@ export function showDiceyTip(
   // Dialog shades are siblings of the z-index:1 game shell. A child cannot
   // escape that stacking context, even with a higher local z-index.
   root.append(tip);
+  position();
   loader.src = '/art/tutor/dicey.webp';
   return cleanup;
 }

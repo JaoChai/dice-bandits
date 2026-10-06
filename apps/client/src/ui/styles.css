@@ -1762,14 +1762,13 @@ h1 {
   }
 }
 
-/* Dicey occupies the free left lane between board corner cards, never a shade.
-   In battle the free lane starts to the right of the 215px takeover cards. */
+/* Dicey's board lane is exterior to the playfield; battle keeps its proven lane. */
 .dicey-tip {
   position: fixed;
   z-index: 8;
-  top: max(140px, calc(50vh - 100px));
+  bottom: max(8px, env(safe-area-inset-bottom));
   left: max(10px, env(safe-area-inset-left));
-  width: 316px;
+  width: 540px;
   display: flex;
   align-items: flex-end;
   gap: 6px;
@@ -1777,7 +1776,10 @@ h1 {
   pointer-events: none;
 }
 .battle-mode ~ .dicey-tip {
+  top: max(140px, calc(50vh - 100px));
+  bottom: auto;
   left: max(240px, env(safe-area-inset-left));
+  width: 316px;
 }
 /* A dialog shade fills the viewport even outside its panel. Reserve the
    existing tip lane in the dialog layout AND lift the tip above the shade;
@@ -2208,6 +2210,110 @@ body:has(.game-dialog) .dicey-tip {
   display: block;
   height: 100%;
 }
+/* U3: native hidden wins over the tray's flex display; token chrome also
+   applies to bot/awaiting/presentation-busy text, never a plain white box. */
+.game-shell:not(.battle-mode) .action-tray {
+  border: 2px solid var(--t-outline);
+  border-radius: var(--t-radius);
+  background: var(--t-panel);
+  color: var(--t-ink);
+}
+.action-tray[hidden] {
+  display: none;
+}
+.game-shell:not(.battle-mode) .action-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.game-shell:not(.battle-mode):has(~ .dicey-tip) .action-tray {
+  left: auto;
+  right: calc(var(--hud-rail-width) + 24px);
+  max-width: calc(100vw - var(--hud-rail-width) - 350px);
+  transform: none;
+}
+.dicey-anchored {
+  top: auto;
+  width: 306px;
+  padding-right: 10px;
+}
+.game-shell:not(.battle-mode) ~ .dicey-tip .dicey-bubble {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
+}
+.game-shell:not(.battle-mode) ~ .dicey-tip .dicey-name,
+.game-shell:not(.battle-mode) ~ .dicey-tip .dicey-text {
+  grid-column: 1;
+}
+.game-shell:not(.battle-mode) ~ .dicey-tip .dicey-ok {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+.dicey-anchored .dicey-bubble {
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.dicey-anchored .dicey-name {
+  display: none;
+}
+.dicey-anchored .dicey-text {
+  margin: 0;
+}
+.dicey-anchored .dicey-ok {
+  min-width: 64px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.dicey-pointer {
+  position: absolute;
+  right: 0;
+  bottom: 14px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 10px solid var(--c-cocoa);
+}
+body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
+  :is(.dialog-shade, .world-info-shade):has(.game-dialog) {
+  padding: 58px 136px 104px 8px;
+}
+.game-shell:not(.battle-mode) ~ .dialog-shade:has(.phase-dialog, .reward-dialog) {
+  padding: 58px 136px 88px 8px;
+}
+.game-shell:not(.battle-mode) ~ .dialog-shade :is(.phase-dialog, .reward-dialog) {
+  max-height: 100%;
+  overflow: auto;
+  outline: 2px solid var(--t-outline);
+}
+.game-shell:not(.battle-mode) ~ .dialog-shade .phase-dialog {
+  grid-template-rows: auto minmax(0, auto) auto;
+}
+.game-shell:not(.battle-mode) ~ .dialog-shade .phase-choices {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: 52px;
+  max-height: 112px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scroll-padding-block: 0;
+}
+.game-shell:not(.battle-mode) ~ .dialog-shade .phase-choices button {
+  scroll-snap-align: start;
+  min-height: 52px;
+}
+.game-shell:not(.battle-mode) ~ .dialog-shade .game-dialog button {
+  min-width: 44px;
+  min-height: 44px;
+}
+@media (min-height: 600px) {
+  .game-shell:not(.battle-mode) ~ .dialog-shade .phase-choices {
+    max-height: 232px;
+  }
+}
+
 @media (min-height: 600px) {
   .game-shell:not(.battle-mode) {
     --hud-rail-width: 160px;
