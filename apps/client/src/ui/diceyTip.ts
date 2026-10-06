@@ -106,8 +106,7 @@ export function createDiceyGuide(root: HTMLElement) {
       showNext();
     });
   };
-  const enqueue = (input: TipInput): void => {
-    const { next, isLocalHuman } = input;
+  const humanTurnFor = ({ next, isLocalHuman }: TipInput): string | null => {
     const actor = next.phase.kind === 'levelUp' ? next.phase.seat : next.turnSeat;
     const localBattle =
       next.phase.kind === 'battle' &&
@@ -115,12 +114,18 @@ export function createDiceyGuide(root: HTMLElement) {
         (fighter) =>
           fighter.kind === 'player' && fighter.seat !== null && isLocalHuman(fighter.seat),
       );
-    const turn = isLocalHuman(actor) || localBattle ? `${next.round}:${next.turnSeat}` : null;
-    queue.enqueue(topicsFor(input), turn);
+    return isLocalHuman(actor) || localBattle ? `${next.round}:${next.turnSeat}` : null;
+  };
+  const enqueue = (input: TipInput): void => {
+    queue.enqueue(topicsFor(input), humanTurnFor(input));
     showNext();
   };
   const onAction = (event: Event): void => {
-    if (event.target instanceof Element && event.target.closest('[data-action-index]')) dismiss();
+    if (
+      event.target instanceof Element &&
+      event.target.closest('button[data-action-index], button[data-choice]')
+    )
+      dismiss();
   };
   root.addEventListener('click', onAction, true);
   const unsubscribe = onTipsChange((change) => {
@@ -136,9 +141,11 @@ export function createDiceyGuide(root: HTMLElement) {
   return {
     update(input: TipInput): void {
       if (destroyed) return;
+      // A status refresh can omit the landing events that produced the visible
+      // tip. Only a new state or loss of eligibility invalidates that tip.
       if (
         lastInput &&
-        (lastInput.next !== input.next || !loadTips().enabled || topicsFor(input).length === 0)
+        (lastInput.next !== input.next || !loadTips().enabled || humanTurnFor(input) === null)
       )
         dismiss();
       lastInput = input;
