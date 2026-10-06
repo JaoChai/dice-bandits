@@ -177,6 +177,15 @@
       "out": "ui"
     },
     {
+      "name": "dicey",
+      "input": "raw/dicey.png",
+      "kind": "pose",
+      "cell": [300, 300],
+      "shipHeight": 256,
+      "poses": ["happy", "point", "surprised"],
+      "out": "tutor/dicey"
+    },
+    {
       "name": "map",
       "input": "raw/map.png",
       "kind": "map",

@@ -5,6 +5,7 @@ import { loadGame, onSaveToast } from '../save';
 import { testHooks } from '../testHooks';
 import { latestSession } from '../online/session';
 import { portraitStyle } from './artFrames';
+import { openIntroComic, shouldShowIntroComic } from './introComic';
 
 const classes: ClassId[] = ['knight', 'thief', 'mage', 'cleric'];
 const personalities: Personality[] = ['greedy', 'vengeful', 'cowardly'];
@@ -54,7 +55,7 @@ export function showTitle(
     const saved = loadGame();
     const room = latestSession();
     unsubscribe();
-    root.innerHTML = `<main class="screen title-screen card" data-testid="screen-title" style="background-image:url('/art/title.webp')"><header>${languageToggle()}<button type="button" class="text-button" data-testid="audio-settings">${t('audio.settings')}</button></header><h1 class="game-logo">${t('title.gameName')}</h1><p>${t('title.subtitle')}</p><div class="title-actions"><button class="primary" data-action="new">${t('title.newGame')}</button>${saved ? `<button class="secondary" data-action="continue">${t('title.continue')}</button>` : ''}<button class="secondary" data-testid="online-create">${t('online.create')}</button><button class="secondary" data-testid="online-join">${t('online.join')}</button>${room ? `<button class="secondary" data-testid="online-back">${t('online.backToRoom', { code: room.code })}</button>` : ''}</div></main>`;
+    root.innerHTML = `<main class="screen title-screen card" data-testid="screen-title" style="background-image:url('/art/title.webp')"><header>${languageToggle()}<button type="button" class="text-button" data-testid="audio-settings">${t('audio.settings')}</button></header><h1 class="game-logo">${t('title.gameName')}</h1><p>${t('title.subtitle')}</p><div class="title-actions"><button class="primary" data-action="new">${t('title.newGame')}</button>${saved ? `<button class="secondary" data-action="continue">${t('title.continue')}</button>` : ''}<button class="secondary" data-testid="online-create">${t('online.create')}</button><button class="secondary" data-testid="online-join">${t('online.join')}</button><button class="secondary" data-testid="title-story">${t('title.story')}</button>${room ? `<button class="secondary" data-testid="online-back">${t('online.backToRoom', { code: room.code })}</button>` : ''}</div></main>`;
     if (discarded) {
       const toast = document.createElement('div');
       toast.className = 'toast';
@@ -65,6 +66,11 @@ export function showTitle(
     bindLanguageToggle(root, render);
     root.querySelector('[data-testid="audio-settings"]')?.addEventListener('click', () => {
       openSoundDialog(root.querySelector<HTMLButtonElement>('[data-testid="audio-settings"]')!);
+    });
+    root.querySelector('[data-testid="title-story"]')?.addEventListener('click', () => {
+      openIntroComic({
+        onClose: () => root.querySelector<HTMLElement>('[data-testid="title-story"]')?.focus(),
+      });
     });
     root.querySelector('[data-action="new"]')?.addEventListener('click', onNewGame);
     root
@@ -102,6 +108,11 @@ export function showTitle(
     });
   };
   render();
+  if (shouldShowIntroComic()) {
+    openIntroComic({
+      onClose: () => root.querySelector<HTMLElement>('[data-testid="title-story"]')?.focus(),
+    });
+  }
 }
 
 export function showSetup(onStart: (config: GameConfig) => void): void {

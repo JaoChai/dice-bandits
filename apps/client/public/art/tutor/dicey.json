@@ -1,0 +1,29 @@
+{
+  "frames": {
+    "happy": {
+      "x": 6,
+      "y": 85,
+      "w": 287,
+      "h": 215,
+      "anchorX": 143,
+      "anchorY": 215
+    },
+    "point": {
+      "x": 306,
+      "y": 81,
+      "w": 287,
+      "h": 219,
+      "anchorX": 143,
+      "anchorY": 219
+    },
+    "surprised": {
+      "x": 600,
+      "y": 93,
+      "w": 300,
+      "h": 207,
+      "anchorX": 150,
+      "anchorY": 207
+    }
+  },
+  "image": "dicey.webp"
+}

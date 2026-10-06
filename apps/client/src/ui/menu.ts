@@ -1,5 +1,6 @@
 import { getLang, setLang, t } from '../i18n';
 import { getAudioSettings, setAudioSettings } from '../audio';
+import { loadTips, resetTips, setEnabled } from '../tutor/tips';
 
 export interface MenuOptions {
   /** Invoked by the menu's exit control (single exit path keeps e2e selectors stable). */
@@ -69,6 +70,15 @@ export function renderMenu(root: HTMLElement, options: MenuOptions): void {
       );
       if (settings) settings.textContent = t('audio.settings');
     }
+    const tips = panel.querySelector<HTMLButtonElement>('[data-testid="menu-dicey-tips"]');
+    if (tips) {
+      const enabled = loadTips().enabled;
+      tips.textContent = t('menu.diceyTips');
+      tips.setAttribute('aria-pressed', String(enabled));
+      tips.classList.toggle('selected', enabled);
+    }
+    const reset = panel.querySelector<HTMLButtonElement>('[data-testid="menu-dicey-reset"]');
+    if (reset) reset.textContent = t('menu.diceyReset');
     const exit = panel.querySelector<HTMLButtonElement>('[data-action="exit"]');
     if (exit) exit.textContent = t('menu.exit');
   };
@@ -97,6 +107,18 @@ export function renderMenu(root: HTMLElement, options: MenuOptions): void {
         );
       });
     panel
+      .querySelector<HTMLButtonElement>('[data-testid="menu-dicey-tips"]')
+      ?.addEventListener('click', () => {
+        setEnabled(!loadTips().enabled);
+        refreshPanel(panel);
+      });
+    panel
+      .querySelector<HTMLButtonElement>('[data-testid="menu-dicey-reset"]')
+      ?.addEventListener('click', () => {
+        resetTips();
+        refreshPanel(panel);
+      });
+    panel
       .querySelector<HTMLButtonElement>('[data-action="exit"]')
       ?.addEventListener('click', () => {
         closePanel();
@@ -108,9 +130,16 @@ export function renderMenu(root: HTMLElement, options: MenuOptions): void {
     const lang = getLang();
     const panel = document.createElement('div');
     panel.className = 'menu-panel';
-    panel.innerHTML = `<div class="menu-section" data-testid="menu-language"><span class="menu-label">${t('menu.language')}</span><nav class="language-toggle" aria-label="${t('menu.language')}"><button type="button" data-lang="th" class="${lang === 'th' ? 'selected' : ''}" aria-pressed="${lang === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" class="${lang === 'en' ? 'selected' : ''}" aria-pressed="${lang === 'en'}">${t('lang.en')}</button></nav></div><div class="menu-section" data-testid="menu-sound"><span class="menu-label">${t('menu.sound')}</span>${audioMenuHtml()}<button type="button" class="text-button" data-testid="audio-settings">${t('audio.settings')}</button></div><div class="menu-section" data-testid="menu-exit"><button type="button" class="text-button" data-action="exit">${t('menu.exit')}</button></div>`;
+    // Open toward the centre/right, away from Dicey's left-side tip zone.
+    panel.style.left = '0';
+    panel.style.right = 'auto';
+    panel.innerHTML = `<div class="menu-section" data-testid="menu-language"><span class="menu-label">${t('menu.language')}</span><nav class="language-toggle" aria-label="${t('menu.language')}"><button type="button" data-lang="th" class="${lang === 'th' ? 'selected' : ''}" aria-pressed="${lang === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" class="${lang === 'en' ? 'selected' : ''}" aria-pressed="${lang === 'en'}">${t('lang.en')}</button></nav></div><div class="menu-section" data-testid="menu-sound"><span class="menu-label">${t('menu.sound')}</span>${audioMenuHtml()}<button type="button" class="text-button" data-testid="audio-settings">${t('audio.settings')}</button></div><div class="menu-section" data-testid="menu-dicey"><div class="language-toggle"><button type="button" data-testid="menu-dicey-tips" aria-pressed="${loadTips().enabled}" class="${loadTips().enabled ? 'selected' : ''}">${t('menu.diceyTips')}</button><button type="button" data-testid="menu-dicey-reset">${t('menu.diceyReset')}</button></div></div><div class="menu-section" data-testid="menu-exit"><button type="button" class="text-button" data-action="exit">${t('menu.exit')}</button></div>`;
     bindPanel(panel);
     button.after(panel);
+    // Keep the expanded menu inside a short landscape viewport; keyboard focus
+    // and normal scrolling can still reach every section, including Exit.
+    panel.style.maxHeight = `calc(100dvh - ${panel.getBoundingClientRect().top + 6}px)`;
+    panel.style.overflowY = 'auto';
     button.setAttribute('aria-expanded', 'true');
     document.addEventListener('keydown', onKeydown, true);
   };
