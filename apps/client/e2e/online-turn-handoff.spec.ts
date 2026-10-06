@@ -52,9 +52,10 @@ for (const language of ['th', 'en']) {
         });
       }
       let reached = false;
-      // Worker seeds/RNG are private. Play actual choices; a shop route ends
-      // through Leave instead of explicit End Turn, so use another real room
-      // for that route. Never fabricate RNG, server frames or game state.
+      // Worker seeds/RNG are private. Ordinary spaces/Leave auto-end turns;
+      // advance actual legal choices until Alice has explicit empty End Turn.
+      // Bob may act during preparation, but stays idle after the tested handoff.
+      // Never fabricate RNG, server frames or game state.
       for (let room = 0; room < 6 && !reached; room++) {
         await host.goto('http://127.0.0.1:8787/?speed=0');
         await host.getByTestId('online-create').click();
@@ -70,31 +71,53 @@ for (const language of ['th', 'en']) {
         await Promise.all(
           pages.map((page) => page.waitForFunction(() => window.__db?.art.boardReady)),
         );
-        for (let action = 0; action < 40; action++) {
+        for (let action = 0; action < 80; action++) {
           const state = (await snapshot(host)).controller;
-          if (state.turnSeat !== 0 || state.phase.kind === 'shop') break;
-          if (state.phase.kind === 'endOfTurn') {
+          if (state.turnSeat === 0 && state.phase.kind === 'endOfTurn') {
             const next = step(state, { type: 'endTurn' });
             reached = next.events.length === 0 && next.state.turnSeat === 1;
+            // Taxes/skipped turns are not this regression; use another room.
             break;
           }
-          const received = frames[0]!.filter((message) => message.type === 'view').length;
-          const dialog = host.locator('button[data-choice]:visible:enabled').first();
-          const tray = host.locator('button[data-action-index]:visible:enabled').first();
-          await ((await dialog.count()) ? dialog : tray).click();
+          const buttons = pages.map((page) =>
+            page
+              .locator(
+                'button[data-choice]:visible:enabled, button[data-action-index]:visible:enabled',
+              )
+              .first(),
+          );
           await expect
-            .poll(() => frames[0]!.filter((message) => message.type === 'view').length, {
+            .poll(
+              async () =>
+                (await Promise.all(buttons.map((button) => button.count()))).some(Boolean),
+              {
+                intervals: [10, 25, 50],
+              },
+            )
+            .toBe(true);
+          const actor = (await buttons[0]!.count()) ? 0 : 1;
+          const page = pages[actor]!;
+          const received = frames[actor]!.filter((message) => message.type === 'view').length;
+          const attack = page.getByTestId('pick-attack');
+          const leave = page
+            .locator(
+              '[data-testid^="shop-leave-"]:visible:enabled, [data-testid="action-leave"]:visible:enabled, [data-testid="action-duel"]:visible:enabled',
+            )
+            .first();
+          const button = (await attack.isVisible())
+            ? attack
+            : (await leave.count())
+              ? leave
+              : buttons[actor]!;
+          await button.click();
+          await expect
+            .poll(() => frames[actor]!.filter((message) => message.type === 'view').length, {
               intervals: [10, 25, 50],
             })
             .toBeGreaterThan(received);
-          await expect
-            .poll(async () => JSON.stringify((await snapshot(host)).controller), {
-              intervals: [10, 25, 50],
-            })
-            .not.toBe(JSON.stringify(state));
         }
       }
-      expect(reached, 'reached an actual first-turn empty End Turn; Bob never acts').toBe(true);
+      expect(reached, 'reached an actual Alice to Bob empty End Turn').toBe(true);
       await expect(host.getByTestId('action-endTurn')).toBeEnabled();
       const before = await snapshot(host);
       expect(before.controller).toMatchObject({ turnSeat: 0, phase: { kind: 'endOfTurn' } });
