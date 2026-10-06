@@ -65,9 +65,7 @@ async function fillMeasurement(page: Page) {
 async function hudMeasurement(page: Page) {
   const geometry = await renderedBoardGeometry(page);
   const chrome = await page
-    .locator(
-      '.seat-card, .game-topline > :not(.menu-slot), .menu-button, .action-tray, .event-banner, .turn-ribbon',
-    )
+    .locator('.game-topline, .seat-card, .action-tray, .online-status > *')
     .evaluateAll((elements) =>
       elements
         .filter((element) => {
@@ -85,6 +83,40 @@ async function hudMeasurement(page: Page) {
           ...element.getBoundingClientRect().toJSON(),
         })),
     );
+  // Composite surfaces only: no header/child double-counting.
+  const viewport = page.viewportSize()!;
+  const clipped = chrome
+    .map((box) => ({
+      left: Math.max(0, box.left),
+      right: Math.min(box.right, viewport.width),
+      top: Math.max(0, box.top),
+      bottom: Math.min(box.bottom, viewport.height),
+    }))
+    .filter((box) => box.right > box.left && box.bottom > box.top);
+  const xs = [...new Set(clipped.flatMap((box) => [box.left, box.right]))].sort((a, b) => a - b);
+  let hudArea = 0;
+  for (let i = 1; i < xs.length; i++) {
+    const intervals = clipped
+      .filter((box) => box.left < xs[i]! && box.right > xs[i - 1]!)
+      .map((box) => [box.top, box.bottom] as const)
+      .sort((a, b) => a[0] - b[0]);
+    let end = -Infinity;
+    let height = 0;
+    for (const [top, bottom] of intervals) {
+      height += Math.max(0, bottom - Math.max(top, end));
+      end = Math.max(end, bottom);
+    }
+    hudArea += (xs[i]! - xs[i - 1]!) * height;
+  }
+  const hudPercent = (100 * hudArea) / (viewport.width * viewport.height);
+  const overlaps: string[] = [];
+  for (let i = 0; i < chrome.length; i++)
+    for (let j = i + 1; j < chrome.length; j++) {
+      const a = chrome[i]!,
+        b = chrome[j]!;
+      if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top)
+        overlaps.push(`${a.name} / ${b.name}`);
+    }
   const cards = chrome.filter((rect) => rect.name.includes('seat-card'));
   // Union of intersections: overlapping chrome must not be double-counted.
   const coverage = geometry.tokens.map((token) => {
@@ -118,6 +150,8 @@ async function hudMeasurement(page: Page) {
     area: cards.reduce((sum, card) => sum + card.width * card.height, 0),
     coverage,
     chrome,
+    hudPercent,
+    overlaps,
   };
 }
 
@@ -135,6 +169,8 @@ for (const viewport of viewports) {
       const hud = await hudMeasurement(page);
       console.log(`HUD ${viewport.width}x${viewport.height} ${lang}: ${JSON.stringify(hud)}`);
       await testInfo.attach('hud', { body: JSON.stringify(hud), contentType: 'application/json' });
+      expect(hud.overlaps).toEqual([]);
+      if (viewport.width === 915) expect(hud.hudPercent).toBeLessThanOrEqual(22);
       if (viewport.width < 1000) {
         // Measured on unmodified main 4dedfb0 with m5ab-1, fonts ready:
         // 915x412 TH 80961.470703125 / EN 96236.9609375 CSS px²;
@@ -164,6 +200,19 @@ for (const viewport of viewports) {
         if (mode === 'whole-map' || mode === 'board-return')
           await page.locator('[data-testid="map-toggle"]').click();
         if (mode === 'battle') {
+          await playUntil(page, (state) => state.round >= 3 && state.phase.kind === 'awaitRoll');
+          await expect(page.getByTestId('action-roll')).toBeVisible();
+          const midgame = await hudMeasurement(page);
+          console.log(
+            `Midgame HUD ${viewport.width}x${viewport.height} ${lang}: ${JSON.stringify(midgame)}`,
+          );
+          await testInfo.attach('midgame-hud', {
+            body: JSON.stringify(midgame),
+            contentType: 'application/json',
+          });
+          expect(midgame.overlaps).toEqual([]);
+          if (viewport.width === 915) expect(midgame.hudPercent).toBeLessThanOrEqual(22);
+          await page.screenshot({ path: testInfo.outputPath('board-midgame.png') });
           await playUntil(page, (state) => state.phase.kind === 'battle');
           await waitForBattleArt(page);
         }

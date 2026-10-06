@@ -271,7 +271,8 @@ describe('cartoon re-skin', () => {
       expect(gold, `seat ${seat} mounts its coin pill`).not.toBeNull();
       expect(gold?.textContent).toContain(String(player.gold));
       expect(gold?.getAttribute('aria-label')).toContain(String(player.gold));
-      const health = card.querySelector('.seat-health');
+      card.querySelector<HTMLButtonElement>('[data-seat-open]')!.click();
+      const health = root.querySelector('[data-testid="seat-detail-panel"] .seat-health');
       expect(health?.getAttribute('role')).toBe('meter');
       expect(health?.getAttribute('aria-valuenow')).toBe(String(player.hp));
       expect(health?.getAttribute('aria-valuemax')).toBe(String(player.stats.maxHp));
@@ -280,6 +281,7 @@ describe('cartoon re-skin', () => {
       expect(health?.querySelector<HTMLElement>('.hp-track span')?.style.width).toBe(
         seat === 0 ? '50%' : '100%',
       );
+      root.querySelector<HTMLButtonElement>('[data-testid="seat-detail-close"]')!.click();
     });
   });
 });

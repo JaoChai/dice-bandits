@@ -1983,3 +1983,237 @@ body:has(.game-dialog) .dicey-tip {
     animation: none;
   }
 }
+
+/* U2a: one board-only bar and right rail. Battle retains its corner/HP lanes. */
+.game-shell:not(.battle-mode) {
+  --hud-rail-width: 112px;
+}
+.game-shell:not(.battle-mode) .game-topline {
+  inset: calc(6px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-right, 0px)) auto
+    calc(8px + env(safe-area-inset-left, 0px));
+  min-height: 44px;
+  padding: 0 8px;
+  gap: 8px;
+  justify-content: flex-start;
+  transform: none;
+  border: 2px solid var(--t-outline);
+  border-radius: var(--t-radius);
+  background: var(--t-panel);
+  box-shadow: var(--t-shadow);
+  pointer-events: auto;
+  font-size: 14px;
+  line-height: 20px;
+}
+.game-shell:not(.battle-mode) .round-label,
+.game-shell:not(.battle-mode) .turn-ribbon {
+  position: static;
+  flex: 0 1 auto;
+  max-width: 23%;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  transform: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--t-ink);
+  font-size: 14px;
+  line-height: 20px;
+  opacity: 1;
+  white-space: normal;
+}
+.game-shell:not(.battle-mode) .turn-ribbon {
+  text-align: left;
+  border-left: 1px solid var(--t-outline-soft);
+  padding-left: 8px;
+}
+.game-shell:not(.battle-mode) .world-chip,
+.game-shell:not(.battle-mode) .game-topline > .text-button,
+.game-shell:not(.battle-mode) .game-topline > .audio-toggle {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 24%;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--t-ink);
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  font-size: 12px;
+  line-height: 16px;
+}
+.game-shell:not(.battle-mode) .menu-slot {
+  order: 2;
+  flex: 0 0 auto;
+}
+.game-shell:not(.battle-mode) .event-banner {
+  position: static;
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  min-height: 44px;
+  padding: 0 4px;
+  transform: none;
+  border: 0;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 16px;
+}
+.game-shell:not(.battle-mode) .event-banner.expanded {
+  align-items: center;
+}
+.game-shell:not(.battle-mode) .event-banner.expanded .event-text {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  padding: 12px;
+  border: 2px solid var(--t-outline);
+  border-radius: var(--t-radius);
+  background: var(--t-panel);
+  box-shadow: var(--t-shadow);
+}
+.game-shell:not(.battle-mode) .world-chip {
+  margin-left: auto;
+  background: var(--c-cream);
+}
+/* The existing menu script anchors left inline; this rail places its button
+   at the right edge, so only board layout opens the panel inward. */
+.game-shell:not(.battle-mode) .menu-slot .menu-panel {
+  left: auto !important;
+  right: 0 !important;
+}
+.game-shell:not(.battle-mode) .last-roll-chip {
+  order: 1;
+  font-size: 12px;
+  padding: 2px 8px;
+}
+.game-shell:not(.battle-mode) .seat-hud {
+  inset: calc(64px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-right, 0px)) auto
+    auto;
+  width: var(--hud-rail-width);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.game-shell:not(.battle-mode) .seat-card {
+  position: relative;
+  inset: auto;
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  height: auto;
+  border: 0;
+  padding: 0;
+  border-radius: 10px;
+  background: var(--t-panel);
+}
+.game-shell:not(.battle-mode) .seat-summary {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  width: 100%;
+  padding: 3px 5px;
+  border: 2px solid var(--t-outline);
+  border-radius: 10px;
+  background: var(--t-panel);
+  color: var(--t-ink);
+  text-align: left;
+  font-size: 12px;
+  line-height: 16px;
+}
+.game-shell:not(.battle-mode) .seat-card.is-active .seat-summary {
+  background: var(--c-gold);
+}
+.game-shell:not(.battle-mode) .seat-summary .seat-portrait {
+  width: 26px;
+  height: 30px;
+}
+.seat-summary-info {
+  min-width: 0;
+}
+.seat-summary-info strong,
+.seat-summary-info .seat-status {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: inherit;
+  line-height: inherit;
+}
+.seat-summary-info .gold-pill {
+  display: block;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: nowrap;
+}
+.seat-summary:focus-visible,
+.seat-detail-panel button:focus-visible,
+.game-shell:not(.battle-mode) .event-banner:focus-visible {
+  outline: 3px solid var(--c-blue);
+  outline-offset: 2px;
+}
+.seat-detail-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: calc(64px + env(safe-area-inset-top, 0px)) calc(136px + env(safe-area-inset-right, 0px))
+    16px calc(8px + env(safe-area-inset-left, 0px));
+  background: rgb(92 51 23 / 25%);
+}
+.seat-detail-panel {
+  width: min(320px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.seat-detail-panel h2 {
+  margin: 8px 0;
+  font-size: 18px;
+  line-height: 24px;
+}
+.seat-detail-panel p {
+  margin: 4px 0;
+}
+.seat-detail-panel button {
+  min-width: 44px;
+  min-height: 44px;
+  margin-top: 8px;
+  background: var(--c-cream);
+  color: var(--c-cocoa);
+  border: 2px solid var(--t-outline);
+}
+.seat-detail-panel .hp-track span {
+  display: block;
+  height: 100%;
+}
+@media (min-height: 600px) {
+  .game-shell:not(.battle-mode) {
+    --hud-rail-width: 160px;
+  }
+  .game-shell:not(.battle-mode) .seat-summary {
+    grid-template-columns: 36px minmax(0, 1fr);
+    min-height: 56px;
+    padding: 4px 8px;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .game-shell:not(.battle-mode) .seat-summary .seat-portrait {
+    width: 36px;
+    height: 40px;
+  }
+  .seat-detail-shade {
+    padding-right: calc(184px + env(safe-area-inset-right, 0px));
+  }
+}
