@@ -196,6 +196,11 @@ for (const viewport of [
       await expect(page.locator('.seat-card')).toHaveCount(4);
       await expect(page.locator('[data-seat-open]')).toHaveCount(4);
       await expect(page.getByTestId('action-tray')).toHaveCount(1);
+      await assertInside(page, '.seat-card:visible');
+      for (let seat = 0; seat < 4; seat++) {
+        const card = `.seat-card:has([data-seat-open="${seat}"])`;
+        await assertInside(page, `${card} *:visible`, card);
+      }
       const before = await page.evaluate(() =>
         JSON.stringify((window as Window & { __db?: { getState(): unknown } }).__db!.getState()),
       );

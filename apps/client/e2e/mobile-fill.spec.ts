@@ -1,3 +1,5 @@
+import en from '../src/i18n/en.json' with { type: 'json' };
+import th from '../src/i18n/th.json' with { type: 'json' };
 import type Phaser from 'phaser';
 import { expect, test, type Page } from '@playwright/test';
 import {
@@ -153,6 +155,96 @@ async function hudMeasurement(page: Page) {
     hudPercent,
     overlaps,
   };
+}
+
+// Regression: allowing all four max-length names to wrap grows the fourth
+// summary past the short phone's bottom. Badge sizing must not hide gold/name.
+for (const viewport of viewports) {
+  for (const lang of ['th', 'en'] as const) {
+    for (const takeover of [false, true]) {
+      test(`max-name rail ${viewport.width}x${viewport.height} ${lang} takeover=${takeover}`, async ({
+        page,
+      }, info) => {
+        await page.setViewportSize(viewport);
+        await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
+        await observeBoardGame(page);
+        await page.goto('/?seed=e2e-layout&speed=0');
+        await page.locator('[data-action="new"]').click();
+        const names = Array.from({ length: 4 }, () => 'W'.repeat(18));
+        for (const [seat, name] of names.entries()) {
+          await page
+            .locator(`[data-seat="${seat}"] select[data-field="control"]`)
+            .selectOption('human');
+          await page.locator(`[data-seat="${seat}"] input[data-field="name"]`).fill(name);
+        }
+        await page.locator('#setup-form button[type="submit"]').click();
+        await expect(page.getByTestId('screen-board')).toBeVisible();
+        await page.waitForFunction(() => window.__db?.art.boardReady);
+        await page.evaluate(() => document.fonts.ready);
+        const before = await page.evaluate(() => JSON.stringify(window.__db!.getState()));
+        if (takeover) {
+          // Test-only DOM fixture, matching hud.ts's board summaryBadge exactly.
+          // Local hot-seat setup has no online disconnect; unit tests cover the
+          // real botTakeover condition, accessible label and reclaim details.
+          await page.evaluate(
+            (label) => {
+              document.querySelectorAll('.seat-summary-info').forEach((summary, seat) => {
+                const badge = document.createElement('span');
+                badge.className = 'seat-status';
+                badge.dataset.testid = `seat-takeover-${seat}`;
+                badge.textContent = label;
+                summary.append(badge);
+              });
+            },
+            (lang === 'th' ? th : en)['setup.bot'],
+          );
+        }
+        const hud = await hudMeasurement(page);
+        console.log(
+          `Max-name HUD ${viewport.width} ${lang} takeover=${takeover}: ${JSON.stringify({ cards: hud.cards, overlaps: hud.overlaps, hudPercent: hud.hudPercent })}`,
+        );
+        await info.attach('max-name-hud', {
+          body: JSON.stringify(hud),
+          contentType: 'application/json',
+        });
+        await page.screenshot({ path: info.outputPath('max-name-rail.png') });
+        expect(hud.overlaps).toEqual([]);
+        if (viewport.width === 915) expect(hud.hudPercent).toBeLessThanOrEqual(22);
+        await assertInside(page, '.seat-card:visible');
+        await assertMinFont(page, '.seat-card', 12);
+        for (let seat = 0; seat < 4; seat++) {
+          const selector = `.seat-card:has([data-seat-open="${seat}"])`;
+          await assertInside(page, `${selector} *:visible`, selector);
+          // Only the unpredictable name may truncate, never gold or takeover.
+          await assertNoEllipsis(page, `${selector} .gold-pill`);
+          if (takeover) {
+            await expect(page.getByTestId(`seat-takeover-${seat}`)).toBeVisible();
+            await assertNoEllipsis(page, `[data-testid="seat-takeover-${seat}"]`);
+          }
+          const button = page.locator(`[data-seat-open="${seat}"]`);
+          const rect = (await button.boundingBox())!;
+          expect(rect.width).toBeGreaterThanOrEqual(44);
+          expect(rect.height).toBeGreaterThanOrEqual(44);
+          await expect(button).toHaveAccessibleName(new RegExp(names[seat]!));
+          await button.focus();
+          await page.keyboard.press('Enter');
+          const panel = page.getByTestId('seat-detail-panel');
+          await expect(panel.locator('h2')).toContainText(names[seat]!);
+          await assertNoEllipsis(page, '[data-testid="seat-detail-panel"]');
+          await assertInside(
+            page,
+            '[data-testid="seat-detail-panel"] h2',
+            '[data-testid="seat-detail-panel"]',
+          );
+          if (seat === 3) await page.screenshot({ path: info.outputPath('max-name-detail.png') });
+          await page.keyboard.press('Escape');
+          await expect(panel).toHaveCount(0);
+          await expect(button).toBeFocused();
+        }
+        expect(await page.evaluate(() => JSON.stringify(window.__db!.getState()))).toBe(before);
+      });
+    }
+  }
 }
 
 for (const viewport of viewports) {

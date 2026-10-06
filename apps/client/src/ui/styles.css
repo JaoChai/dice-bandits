@@ -2026,6 +2026,10 @@ body:has(.game-dialog) .dicey-tip {
   text-align: left;
   border-left: 1px solid var(--t-outline-soft);
   padding-left: 8px;
+  /* The same max-length seat name appears here: keep it readable within
+     the top lane rather than letting its wrap extend into the rail. */
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 .game-shell:not(.battle-mode) .world-chip,
 .game-shell:not(.battle-mode) .game-topline > .text-button,
@@ -2136,12 +2140,18 @@ body:has(.game-dialog) .dicey-tip {
 .seat-summary-info {
   min-width: 0;
 }
-.seat-summary-info strong,
-.seat-summary-info .seat-status {
+.game-shell:not(.battle-mode) .seat-summary-info strong,
+.game-shell:not(.battle-mode) .seat-summary-info .seat-status {
   display: block;
-  overflow-wrap: anywhere;
   font-size: inherit;
   line-height: inherit;
+  white-space: nowrap;
+}
+/* Only the name may truncate: the labelled button opens its full value in
+   details. Gold and takeover keep their own readable, non-clipped lines. */
+.game-shell:not(.battle-mode) .seat-summary-info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .seat-summary-info .gold-pill {
   display: block;
