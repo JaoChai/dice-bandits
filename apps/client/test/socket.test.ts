@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { clearTimeout as realClearTimeout, setTimeout as realSetTimeout } from 'node:timers';
 import type { ClientMsg, ServerMsg } from '@dice-bandits/room';
 import { RoomSocket } from '../src/online/socket';
 
@@ -86,9 +87,70 @@ function socket(
   return { roomSocket, timers, onStatus, onMessage };
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+// happy-dom binds its timers, masking Chromium's receiver check. Keep real
+// scheduling/cancellation, but reproduce the browser host-function boundary.
+function installBrowserTimers(): void {
+  vi.stubGlobal('setTimeout', function (this: unknown, ...args: Parameters<typeof setTimeout>) {
+    if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+    return Reflect.apply(realSetTimeout, globalThis, args);
+  });
+  vi.stubGlobal('clearTimeout', function (this: unknown, ...args: Parameters<typeof clearTimeout>) {
+    if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+    return Reflect.apply(realClearTimeout, globalThis, args);
+  });
+}
 
 describe('RoomSocket', () => {
+  it('reconnects with default browser timers after a non-terminal close', async () => {
+    installBrowserTimers();
+    FakeWebSocket.instances = [];
+    const statuses: string[] = [];
+    const roomSocket = new RoomSocket({
+      url: 'wss://example.test/api/rooms/ABCDE/ws',
+      onMessage: () => undefined,
+      onStatus: (status) => statuses.push(status),
+      wsFactory: (url) => new FakeWebSocket(url) as unknown as WebSocket,
+    });
+    try {
+      FakeWebSocket.instances[0]!.open();
+      expect(() => FakeWebSocket.instances[0]!.disconnect(1001)).not.toThrow();
+      expect(statuses).toEqual(['open', 'reconnecting']);
+      await expect.poll(() => FakeWebSocket.instances.length, { timeout: 2000 }).toBe(2);
+      FakeWebSocket.instances[1]!.open();
+      expect(statuses).toEqual(['open', 'reconnecting', 'open']);
+      roomSocket.send({ type: 'reclaim' });
+      expect(FakeWebSocket.instances[1]!.sent).toEqual(['{"type":"reclaim"}']);
+    } finally {
+      roomSocket.close();
+    }
+  });
+
+  it('cancels a pending default browser timer when manually closed', async () => {
+    installBrowserTimers();
+    // Isolate clearTimeout's receiver contract from the scheduling failure.
+    vi.stubGlobal('setTimeout', realSetTimeout.bind(globalThis));
+    FakeWebSocket.instances = [];
+    const roomSocket = new RoomSocket({
+      url: 'wss://example.test/api/rooms/ABCDE/ws',
+      onMessage: () => undefined,
+      onStatus: () => undefined,
+      wsFactory: (url) => new FakeWebSocket(url) as unknown as WebSocket,
+    });
+    try {
+      expect(() => FakeWebSocket.instances[0]!.disconnect(1001)).not.toThrow();
+      expect(() => roomSocket.close()).not.toThrow();
+      await new Promise<void>((resolve) => realSetTimeout(resolve, 1100));
+      expect(FakeWebSocket.instances).toHaveLength(1);
+    } finally {
+      roomSocket.close();
+    }
+  });
+
   it('backs off 1, 2, 4, 8, then caps at 10 seconds and resets after opening', () => {
     const { roomSocket, timers } = socket();
     const firstSocket = FakeWebSocket.instances[0];
