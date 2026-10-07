@@ -93,6 +93,41 @@ function makeController(
 }
 
 describe('OnlineController', () => {
+  it.each([true, false])(
+    'commits the next scene state exactly once for a view with no events (empty batch: %s)',
+    async (sendEmptyBatch) => {
+      const before = structuredClone(initialState);
+      before.phase = { kind: 'endOfTurn' };
+      const next = step(before, { type: 'endTurn' });
+      expect(next.events).toEqual([]);
+      expect(next.state.turnSeat).toBe(1);
+      expect(next.state.phase.kind).toBe('awaitRoll');
+      let sceneState = before;
+      const commits: Array<{ events: GameEvent[]; state: GameState }> = [];
+      const { controller } = makeController(async (events, state) => {
+        sceneState = state;
+        commits.push({ events, state });
+      });
+      await controller.handleMessage(view({ state: before }));
+      // A welcome/initial view has no preceding batch, but still commits once
+      // with no presentation events and leaves the HUD ready for input.
+      expect(commits).toEqual([{ events: [], state: before }]);
+      expect(sceneState).toEqual(before);
+      expect(controller.hudOnlineState.awaitingView).toBe(false);
+      commits.length = 0;
+
+      if (sendEmptyBatch) await controller.handleMessage({ type: 'events', turn: 13, events: [] });
+      await controller.handleMessage(
+        view({ turn: 13, state: next.state, legal: legalActions(next.state, 0) }),
+      );
+
+      expect(controller.state).toEqual(next.state);
+      expect(sceneState).toEqual(next.state);
+      expect(commits).toEqual([{ events: [], state: next.state }]);
+      expect(controller.hudOnlineState.awaitingView).toBe(false);
+    },
+  );
+
   it('disables actions after dispatch until the next view and ignores duplicate dispatches', async () => {
     const { controller, socket } = makeController();
     await controller.handleMessage(view());
@@ -191,9 +226,13 @@ describe('OnlineController', () => {
     const animation = new Promise<void>((resolve) => {
       releaseAnimation = resolve;
     });
-    const onEvents = vi.fn(() => animation);
+    const onEvents = vi.fn((events: GameEvent[]) =>
+      events.length > 0 ? animation : Promise.resolve(),
+    );
     const { controller } = makeController(onEvents);
     await controller.handleMessage(view({ turn: 10 }));
+    // The initial view now commits too; count only the pending event batches.
+    onEvents.mockClear();
     const view1State = { ...structuredClone(initialState), round: 2 };
     const view2State = { ...structuredClone(initialState), round: 3 };
     const events = [{ type: 'turnEnded' } as unknown as GameEvent];

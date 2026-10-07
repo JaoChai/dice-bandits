@@ -61,11 +61,18 @@ async function measureTip(page: Page, name: string, info: TestInfo) {
       const rect = control.getBoundingClientRect();
       const style = getComputedStyle(control);
       const visible = style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0;
+      // Rows below the approved scroll viewport are clipped, not painted
+      // controls. Measure their painted intersection with the choice list;
+      // U3's dedicated journey separately scrolls/hit-tests every legal row.
+      const clip = control.closest('.phase-choices');
+      const bounds = clip?.getBoundingClientRect();
+      const bottom = bounds ? Math.min(rect.bottom, bounds.bottom) : rect.bottom;
+      const top = bounds ? Math.max(rect.top, bounds.top) : rect.top;
       return {
         control: control.className,
         overlap: visible
           ? Math.max(0, Math.min(tip.right, rect.right) - Math.max(tip.left, rect.left)) *
-            Math.max(0, Math.min(tip.bottom, rect.bottom) - Math.max(tip.top, rect.top))
+            Math.max(0, Math.min(tip.bottom, bottom) - Math.max(tip.top, top))
           : 0,
       };
     });

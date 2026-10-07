@@ -15,6 +15,17 @@ for (const lang of ['en', 'th'] as const) {
     await page.evaluate(() => document.fonts.ready);
     await expect(page.getByTestId('dicey-tip')).toBeVisible();
     await expect(page.locator('.dicey-portrait')).toBeVisible({ timeout: 15_000 });
+    // The approved Roll tip is now a compact anchored variant. Copy fixtures
+    // for other topics use the regular bubble, not Roll's two-line footprint.
+    await page.evaluate(() => {
+      const roll = document.querySelector<HTMLElement>('.dicey-tip')!;
+      const regular = roll.cloneNode(true) as HTMLElement;
+      regular.classList.remove('dicey-anchored');
+      regular.dataset.topic = 'castle';
+      regular.removeAttribute('style');
+      regular.querySelector('.dicey-pointer')?.remove();
+      roll.replaceWith(regular);
+    });
     const results = [];
     // Copy-only visual fixtures in the real rendered bubble. Trigger/translation
     // semantics are covered by the real guide/engine/controller unit regressions.

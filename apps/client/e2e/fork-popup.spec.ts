@@ -1,5 +1,6 @@
 import { createGame, type GameState } from '@dice-bandits/engine';
 import { expect, test, type Page } from '@playwright/test';
+import { observeBoardGame, renderedBoardGeometry } from './helpers';
 
 function savedFork(): GameState {
   const state = createGame({
@@ -16,6 +17,7 @@ function savedFork(): GameState {
 }
 
 async function continueSave(page: Page, state: GameState): Promise<void> {
+  await observeBoardGame(page);
   await page.addInitScript((saved) => {
     localStorage.setItem('diceBandits.save', JSON.stringify({ version: 2, state: saved }));
     localStorage.setItem('diceBandits.lang', 'en');
@@ -32,25 +34,49 @@ async function continueSave(page: Page, state: GameState): Promise<void> {
 async function tapCurrentSpace(page: Page): Promise<void> {
   const canvas = await page.locator('canvas').boundingBox();
   expect(canvas).not.toBeNull();
-  // Follow camera centres the active tile. A real canvas pointer opens the popup.
-  await page.mouse.click(canvas!.x + canvas!.width / 2, canvas!.y + canvas!.height / 2);
+  // The active space is centred in the inset gameplay camera, not the canvas.
+  // Project its REAL rendered tile through that camera and the canvas CSS scale.
+  const space = await page.evaluate(() => {
+    const state = window.__db!.getState();
+    return state.board.spaces.find(
+      (candidate) => candidate.id === state.players[state.turnSeat]!.pos,
+    )!;
+  });
+  const geometry = await renderedBoardGeometry(page);
+  const tile = geometry.tiles.find(
+    (image) => image.world.x === space.x && image.world.y === space.y,
+  );
+  expect(tile, 'active space has a rendered tile').toBeDefined();
+  expect(tile!.visible).toBe(true);
+  console.log('real fork tap', JSON.stringify({ space: space.id, point: tile!.centre }));
+  // No force, test dispatch or DOM click: exercise the shipped Phaser hit-test.
+  await page.mouse.click(tile!.centre.x, tile!.centre.y);
   await expect(page.locator('[data-testid="space-info"]')).toBeVisible();
 }
 
-test('RF3: saved fork 19 stays clickable while space info is open', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  await continueSave(page, savedFork());
-  await tapCurrentSpace(page);
-  const arrow = page.locator('[data-testid="fork-arrow-37"]');
-  // No force, programmatic DOM click, or test-hook dispatch: hit-testing must work.
-  await arrow.click({ timeout: 5_000 });
-  await expect.poll(() => page.evaluate(() => window.__db!.getState().players[0]!.pos)).toBe(37);
-  await expect(page.locator('[data-testid^="fork-arrow-"]')).toHaveCount(0);
-  await expect(page.locator('[data-testid="space-info"]')).toHaveCount(0);
-  expect(await page.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual({ x: 0, y: 0 });
-  expect(errors).toEqual([]);
-});
+for (const viewport of [
+  { width: 915, height: 412 },
+  { width: 932, height: 388 },
+  { width: 1280, height: 720 },
+]) {
+  test(`RF3: saved fork 19 stays clickable while space info is open (${viewport.width})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await continueSave(page, savedFork());
+    await tapCurrentSpace(page);
+    const arrow = page.locator('[data-testid="fork-arrow-37"]');
+    // No force, programmatic DOM click, or test-hook dispatch: hit-testing must work.
+    await arrow.click({ timeout: 5_000 });
+    await expect.poll(() => page.evaluate(() => window.__db!.getState().players[0]!.pos)).toBe(37);
+    await expect(page.locator('[data-testid^="fork-arrow-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="space-info"]')).toHaveCount(0);
+    expect(await page.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual({ x: 0, y: 0 });
+    expect(errors).toEqual([]);
+  });
+}
 
 test('rolling from fork 19 draws and positions branch controls without scrolling', async ({
   page,

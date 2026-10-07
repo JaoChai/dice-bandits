@@ -37,7 +37,10 @@ export class RoomSocket {
     this.onStatus = options.onStatus;
     this.onTerminal = options.onTerminal;
     this.wsFactory = options.wsFactory ?? ((url) => new WebSocket(url));
-    this.timers = options.timers ?? { set: setTimeout, clear: clearTimeout };
+    this.timers = options.timers ?? {
+      set: setTimeout.bind(globalThis),
+      clear: clearTimeout.bind(globalThis),
+    };
     this.connect();
   }
 

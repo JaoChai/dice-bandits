@@ -163,6 +163,77 @@ for (const lang of ['th', 'en'] as const) {
 
 const screenshotDir = join(process.env.TMPDIR ?? tmpdir(), 'm4a', 'layout');
 
+for (const viewport of [
+  { width: 915, height: 412 },
+  { width: 932, height: 388 },
+  { width: 1280, height: 720 },
+]) {
+  for (const lang of ['th', 'en'] as const) {
+    test(`compact header and accessible rail ${viewport.width}x${viewport.height} ${lang}`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize(viewport);
+      await page.addInitScript((locale) => {
+        localStorage.setItem('lang', locale);
+        localStorage.setItem('dice-bandits:tips-enabled', 'false');
+      }, lang);
+      await startJourney(page);
+      await page.evaluate(() => document.fonts.ready);
+      const ids = [
+        'round-ribbon',
+        'turn-ribbon',
+        'event-banner',
+        'world-chip',
+        'map-toggle',
+        'audio-toggle',
+        'menu-button',
+      ];
+      await expect(page.locator('.game-topline')).toHaveCount(1);
+      for (const id of ids) {
+        await expect(page.getByTestId(id)).toHaveCount(1);
+        await expect(page.locator(`.game-topline [data-testid="${id}"]`)).toHaveCount(1);
+      }
+      await expect(page.locator('.seat-card')).toHaveCount(4);
+      await expect(page.locator('[data-seat-open]')).toHaveCount(4);
+      await expect(page.getByTestId('action-tray')).toHaveCount(1);
+      await assertInside(page, '.seat-card:visible');
+      for (let seat = 0; seat < 4; seat++) {
+        const card = `.seat-card:has([data-seat-open="${seat}"])`;
+        await assertInside(page, `${card} *:visible`, card);
+      }
+      const before = await page.evaluate(() =>
+        JSON.stringify((window as Window & { __db?: { getState(): unknown } }).__db!.getState()),
+      );
+      for (const button of await page.locator('[data-seat-open]').all()) {
+        const rect = (await button.boundingBox())!;
+        expect(rect.width).toBeGreaterThanOrEqual(44);
+        expect(rect.height).toBeGreaterThanOrEqual(44);
+        await button.click();
+        const panel = page.getByTestId('seat-detail-panel');
+        await expect(panel).toBeVisible();
+        await expect(panel.getByRole('meter')).toBeVisible();
+        await assertInside(page, '[data-testid="seat-detail-panel"] *:visible');
+        await assertMinFont(page, '[data-testid="seat-detail-panel"]', 12);
+        await page.keyboard.press('Escape');
+        await expect(panel).toHaveCount(0);
+        await expect(button).toBeFocused();
+      }
+      expect(
+        await page.evaluate(() =>
+          JSON.stringify((window as Window & { __db?: { getState(): unknown } }).__db!.getState()),
+        ),
+      ).toBe(before);
+      const controls = page.locator('.game-topline button:visible');
+      for (const button of await controls.all()) {
+        const rect = (await button.boundingBox())!;
+        expect(rect.width).toBeGreaterThanOrEqual(44);
+        expect(rect.height).toBeGreaterThanOrEqual(44);
+      }
+      await page.screenshot({ path: info.outputPath(`compact-${lang}.png`) });
+    });
+  }
+}
+
 for (const name of ['Sir Bram', 'Sir Bram the Great']) {
   test(`four-player hot-seat HUD controls fit without overlap at readable sizes (${name})`, async ({
     page,
@@ -181,7 +252,11 @@ for (const name of ['Sir Bram', 'Sir Bram the Great']) {
     await expect(page.locator('.seat-card')).toHaveCount(4);
     await expect(page.locator('.corner-tl strong')).toHaveText(name);
     await expect(page.locator('.seat-card .gold-pill')).toHaveCount(4);
-    await expect(page.locator('.seat-card .hp-heart')).toHaveCount(4);
+    for (const summary of await page.locator('[data-seat-open]').all()) {
+      await summary.click();
+      await expect(page.locator('[data-testid="seat-detail-panel"] .hp-heart')).toHaveCount(1);
+      await page.keyboard.press('Escape');
+    }
 
     for (const lang of ['th', 'en'] as const) {
       await page.locator('[data-testid="menu-button"]').click();
@@ -196,8 +271,6 @@ for (const name of ['Sir Bram', 'Sir Bram the Great']) {
               getComputedStyle(element).display !== 'none' &&
               element.getBoundingClientRect().width > 0,
           ),
-          shell.querySelector<HTMLElement>('[data-testid="turn-ribbon"]')!,
-          shell.querySelector<HTMLElement>('[data-testid="event-banner"]')!,
           ...Array.from(shell.querySelectorAll<HTMLElement>('.seat-card')),
           shell.querySelector<HTMLElement>('[data-testid="action-tray"]')!,
         ];

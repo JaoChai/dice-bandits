@@ -82,6 +82,88 @@ export function showActionDialog(
   root.append(dialog);
 }
 
+/** One scrollable item/target choice surface; no engine or timing ownership. */
+export function showItemDialog(
+  root: HTMLElement,
+  actions: Action[],
+  label: (action: Action) => string,
+  testId: (action: Action) => string,
+  dispatch: (action: Action) => void,
+  onClose: () => void,
+): () => void {
+  const shade = document.createElement('div');
+  shade.className = 'dialog-shade';
+  const panel = document.createElement('section');
+  panel.className = 'game-dialog phase-dialog item-dialog card';
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  panel.setAttribute('aria-label', t('action.itemsTitle'));
+  const heading = document.createElement('h2');
+  heading.textContent = t('action.itemsTitle');
+  const choices = document.createElement('div');
+  choices.className = 'phase-choices';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.dataset.testid = 'item-close';
+  close.textContent = t('common.close');
+  const siblings = [...root.children].map((node) => ({
+    node: node as HTMLElement,
+    inert: (node as HTMLElement).inert,
+  }));
+  siblings.forEach(({ node }) => {
+    node.inert = true;
+  });
+  const tray = root.querySelector<HTMLElement>('.action-tray')!;
+  const wasInert = tray.hasAttribute('inert');
+  tray.setAttribute('inert', '');
+  let closed = false;
+  const dispose = (): void => {
+    if (closed) return;
+    closed = true;
+    shade.remove();
+    siblings.forEach(({ node, inert }) => {
+      node.inert = inert;
+    });
+    tray.toggleAttribute('inert', wasInert);
+    onClose();
+  };
+  actions.forEach((action, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'action-button';
+    button.dataset.testid = testId(action);
+    button.dataset.choice = String(index);
+    button.textContent = label(action);
+    button.addEventListener('click', () => {
+      dispose();
+      dispatch(action);
+    });
+    choices.append(button);
+  });
+  close.addEventListener('click', dispose);
+  shade.addEventListener('click', (event) => {
+    if (event.target === shade) dispose();
+  });
+  shade.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      dispose();
+    } else if (event.key === 'Tab') {
+      const buttons = [...panel.querySelectorAll<HTMLButtonElement>('button')];
+      const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const next = current + (event.shiftKey ? -1 : 1);
+      event.preventDefault();
+      buttons[(next + buttons.length) % buttons.length]?.focus();
+    }
+  });
+  panel.append(heading, choices, close);
+  shade.append(panel);
+  root.append(shade);
+  choices.querySelector<HTMLButtonElement>('button')?.focus();
+  return dispose;
+}
+
 function rewardLabel(action: Extract<Action, { type: 'pvpReward' }>): string {
   let detail = '';
   if (action.item) detail = ` · ${t(`item.${action.item}`)}`;

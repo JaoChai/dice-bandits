@@ -58,6 +58,31 @@ export function tilePxAt(viewportWidth: number, viewportHeight: number): number 
   return TILE_MAP_SIZE_PX * gameplayZoom() * cssPerWorld;
 }
 
+/** CSS lane reservations, including device safe areas. */
+export type BoardInsets = { left: number; top: number; right: number; bottom: number };
+
+/** Convert CSS HUD lanes to a bounded logical camera viewport (Scale.EXPAND). */
+export function boardViewport(
+  logical: { width: number; height: number },
+  css: { width: number; height: number },
+  insets: BoardInsets,
+): { x: number; y: number; width: number; height: number } {
+  const dimension = (value: number) => (Number.isFinite(value) ? Math.max(1, value) : 1);
+  const lane = (value: number) => (Number.isFinite(value) ? Math.max(0, value) : 0);
+  const width = dimension(logical.width),
+    height = dimension(logical.height);
+  const sx = width / dimension(css.width),
+    sy = height / dimension(css.height);
+  const x = Math.min(width - 1, lane(insets.left) * sx);
+  const y = Math.min(height - 1, lane(insets.top) * sy);
+  return {
+    x,
+    y,
+    width: Math.max(1, width - x - lane(insets.right) * sx),
+    height: Math.max(1, height - y - lane(insets.bottom) * sy),
+  };
+}
+
 export interface CameraTarget {
   x: number;
   y: number;

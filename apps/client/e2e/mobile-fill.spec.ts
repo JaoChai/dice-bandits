@@ -1,3 +1,5 @@
+import en from '../src/i18n/en.json' with { type: 'json' };
+import th from '../src/i18n/th.json' with { type: 'json' };
 import type Phaser from 'phaser';
 import { expect, test, type Page } from '@playwright/test';
 import {
@@ -65,9 +67,7 @@ async function fillMeasurement(page: Page) {
 async function hudMeasurement(page: Page) {
   const geometry = await renderedBoardGeometry(page);
   const chrome = await page
-    .locator(
-      '.seat-card, .game-topline > :not(.menu-slot), .menu-button, .action-tray, .event-banner, .turn-ribbon',
-    )
+    .locator('.game-topline, .seat-card, .action-tray, .online-status > *')
     .evaluateAll((elements) =>
       elements
         .filter((element) => {
@@ -85,6 +85,40 @@ async function hudMeasurement(page: Page) {
           ...element.getBoundingClientRect().toJSON(),
         })),
     );
+  // Composite surfaces only: no header/child double-counting.
+  const viewport = page.viewportSize()!;
+  const clipped = chrome
+    .map((box) => ({
+      left: Math.max(0, box.left),
+      right: Math.min(box.right, viewport.width),
+      top: Math.max(0, box.top),
+      bottom: Math.min(box.bottom, viewport.height),
+    }))
+    .filter((box) => box.right > box.left && box.bottom > box.top);
+  const xs = [...new Set(clipped.flatMap((box) => [box.left, box.right]))].sort((a, b) => a - b);
+  let hudArea = 0;
+  for (let i = 1; i < xs.length; i++) {
+    const intervals = clipped
+      .filter((box) => box.left < xs[i]! && box.right > xs[i - 1]!)
+      .map((box) => [box.top, box.bottom] as const)
+      .sort((a, b) => a[0] - b[0]);
+    let end = -Infinity;
+    let height = 0;
+    for (const [top, bottom] of intervals) {
+      height += Math.max(0, bottom - Math.max(top, end));
+      end = Math.max(end, bottom);
+    }
+    hudArea += (xs[i]! - xs[i - 1]!) * height;
+  }
+  const hudPercent = (100 * hudArea) / (viewport.width * viewport.height);
+  const overlaps: string[] = [];
+  for (let i = 0; i < chrome.length; i++)
+    for (let j = i + 1; j < chrome.length; j++) {
+      const a = chrome[i]!,
+        b = chrome[j]!;
+      if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top)
+        overlaps.push(`${a.name} / ${b.name}`);
+    }
   const cards = chrome.filter((rect) => rect.name.includes('seat-card'));
   // Union of intersections: overlapping chrome must not be double-counted.
   const coverage = geometry.tokens.map((token) => {
@@ -118,7 +152,99 @@ async function hudMeasurement(page: Page) {
     area: cards.reduce((sum, card) => sum + card.width * card.height, 0),
     coverage,
     chrome,
+    hudPercent,
+    overlaps,
   };
+}
+
+// Regression: allowing all four max-length names to wrap grows the fourth
+// summary past the short phone's bottom. Badge sizing must not hide gold/name.
+for (const viewport of viewports) {
+  for (const lang of ['th', 'en'] as const) {
+    for (const takeover of [false, true]) {
+      test(`max-name rail ${viewport.width}x${viewport.height} ${lang} takeover=${takeover}`, async ({
+        page,
+      }, info) => {
+        await page.setViewportSize(viewport);
+        await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
+        await observeBoardGame(page);
+        await page.goto('/?seed=e2e-layout&speed=0');
+        await page.locator('[data-action="new"]').click();
+        const names = Array.from({ length: 4 }, () => 'W'.repeat(18));
+        for (const [seat, name] of names.entries()) {
+          await page
+            .locator(`[data-seat="${seat}"] select[data-field="control"]`)
+            .selectOption('human');
+          await page.locator(`[data-seat="${seat}"] input[data-field="name"]`).fill(name);
+        }
+        await page.locator('#setup-form button[type="submit"]').click();
+        await expect(page.getByTestId('screen-board')).toBeVisible();
+        await page.waitForFunction(() => window.__db?.art.boardReady);
+        await page.evaluate(() => document.fonts.ready);
+        const before = await page.evaluate(() => JSON.stringify(window.__db!.getState()));
+        if (takeover) {
+          // Test-only DOM fixture, matching hud.ts's board summaryBadge exactly.
+          // Local hot-seat setup has no online disconnect; unit tests cover the
+          // real botTakeover condition, accessible label and reclaim details.
+          await page.evaluate(
+            (label) => {
+              document.querySelectorAll('.seat-summary-info').forEach((summary, seat) => {
+                const badge = document.createElement('span');
+                badge.className = 'seat-status';
+                badge.dataset.testid = `seat-takeover-${seat}`;
+                badge.textContent = label;
+                summary.append(badge);
+              });
+            },
+            (lang === 'th' ? th : en)['setup.bot'],
+          );
+        }
+        const hud = await hudMeasurement(page);
+        console.log(
+          `Max-name HUD ${viewport.width} ${lang} takeover=${takeover}: ${JSON.stringify({ cards: hud.cards, overlaps: hud.overlaps, hudPercent: hud.hudPercent })}`,
+        );
+        await info.attach('max-name-hud', {
+          body: JSON.stringify(hud),
+          contentType: 'application/json',
+        });
+        await page.screenshot({ path: info.outputPath('max-name-rail.png') });
+        expect(hud.overlaps).toEqual([]);
+        if (viewport.width === 915) expect(hud.hudPercent).toBeLessThanOrEqual(22);
+        await assertInside(page, '.seat-card:visible');
+        await assertMinFont(page, '.seat-card', 12);
+        for (let seat = 0; seat < 4; seat++) {
+          const selector = `.seat-card:has([data-seat-open="${seat}"])`;
+          await assertInside(page, `${selector} *:visible`, selector);
+          // Only the unpredictable name may truncate, never gold or takeover.
+          await assertNoEllipsis(page, `${selector} .gold-pill`);
+          if (takeover) {
+            await expect(page.getByTestId(`seat-takeover-${seat}`)).toBeVisible();
+            await assertNoEllipsis(page, `[data-testid="seat-takeover-${seat}"]`);
+          }
+          const button = page.locator(`[data-seat-open="${seat}"]`);
+          const rect = (await button.boundingBox())!;
+          expect(rect.width).toBeGreaterThanOrEqual(44);
+          expect(rect.height).toBeGreaterThanOrEqual(44);
+          await expect(button).toHaveAccessibleName(new RegExp(names[seat]!));
+          await button.focus();
+          await page.keyboard.press('Enter');
+          const panel = page.getByTestId('seat-detail-panel');
+          await expect(panel.locator('h2')).toContainText(names[seat]!);
+          await assertNoEllipsis(page, '[data-testid="seat-detail-panel"]');
+          await assertInside(
+            page,
+            '[data-testid="seat-detail-panel"] h2',
+            '[data-testid="seat-detail-panel"]',
+          );
+          if (seat === 3) await page.screenshot({ path: info.outputPath('max-name-detail.png') });
+          await page.keyboard.press('Escape');
+          await expect(panel).toHaveCount(0);
+          await expect(button).toBeFocused();
+        }
+        expect(await page.evaluate(() => JSON.stringify(window.__db!.getState()))).toBe(before);
+      });
+    }
+  }
 }
 
 for (const viewport of viewports) {
@@ -135,6 +261,10 @@ for (const viewport of viewports) {
       const hud = await hudMeasurement(page);
       console.log(`HUD ${viewport.width}x${viewport.height} ${lang}: ${JSON.stringify(hud)}`);
       await testInfo.attach('hud', { body: JSON.stringify(hud), contentType: 'application/json' });
+      expect(hud.overlaps).toEqual([]);
+      for (const token of hud.coverage)
+        expect(token.percent, 'safe camera leaves no hero covered by HUD').toBe(0);
+      if (viewport.width === 915) expect(hud.hudPercent).toBeLessThanOrEqual(22);
       if (viewport.width < 1000) {
         // Measured on unmodified main 4dedfb0 with m5ab-1, fonts ready:
         // 915x412 TH 80961.470703125 / EN 96236.9609375 CSS px²;
@@ -164,6 +294,19 @@ for (const viewport of viewports) {
         if (mode === 'whole-map' || mode === 'board-return')
           await page.locator('[data-testid="map-toggle"]').click();
         if (mode === 'battle') {
+          await playUntil(page, (state) => state.round >= 3 && state.phase.kind === 'awaitRoll');
+          await expect(page.getByTestId('action-roll')).toBeVisible();
+          const midgame = await hudMeasurement(page);
+          console.log(
+            `Midgame HUD ${viewport.width}x${viewport.height} ${lang}: ${JSON.stringify(midgame)}`,
+          );
+          await testInfo.attach('midgame-hud', {
+            body: JSON.stringify(midgame),
+            contentType: 'application/json',
+          });
+          expect(midgame.overlaps).toEqual([]);
+          if (viewport.width === 915) expect(midgame.hudPercent).toBeLessThanOrEqual(22);
+          await page.screenshot({ path: testInfo.outputPath('board-midgame.png') });
           await playUntil(page, (state) => state.phase.kind === 'battle');
           await waitForBattleArt(page);
         }

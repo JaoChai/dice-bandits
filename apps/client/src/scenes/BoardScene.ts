@@ -7,7 +7,7 @@ import { createHeroToken, tokenLayout } from './board/tokens';
 import { drawRoad } from './board/road';
 import { drawTiles } from './board/tiles';
 import { drawBuildings } from './board/buildings';
-import { cameraBounds, cameraTarget, gameplayZoom, WORLD } from './board/camera';
+import { boardViewport, cameraBounds, cameraTarget, gameplayZoom, WORLD } from './board/camera';
 import { drawMapLayer, roadSegments, validate } from './board/mapLayer';
 import { clearForkArrows, drawForkArrows } from './board/forkArrows';
 import { drawAmbients } from './board/ambient';
@@ -29,6 +29,68 @@ export default class BoardScene extends Phaser.Scene {
   private wholeMap = false;
   private ringTween: Phaser.Tweens.Tween | null = null;
   private latestState: GameState | null = null;
+  private backdropCamera: Phaser.Cameras.Scene2D.Camera | null = null;
+
+  /** HUD geometry is read only on redraw/resize, never on an animation frame.
+   * DOM lane bounds also carry the CSS env(safe-area-inset-*) offsets. */
+  private playfieldViewport() {
+    const canvas = this.game.canvas;
+    const logical = canvas ? { width: canvas.width, height: canvas.height } : this.cameras.main;
+    const css = canvas?.getBoundingClientRect() ?? {
+      width: logical.width,
+      height: logical.height,
+      left: 0,
+      top: 0,
+      right: logical.width,
+      bottom: logical.height,
+    };
+    const top = document
+      .querySelector('.game-shell:not(.battle-mode) .game-topline')
+      ?.getBoundingClientRect();
+    const rail = document
+      .querySelector('.game-shell:not(.battle-mode) .seat-hud')
+      ?.getBoundingClientRect();
+    const tray = document
+      .querySelector('.game-shell:not(.battle-mode) .action-tray')
+      ?.getBoundingClientRect();
+    return boardViewport(logical, css, {
+      left: Math.max(8, top ? top.left - css.left : 0),
+      top: Math.max(58, top ? top.bottom - css.top + 4 : 0),
+      right: Math.max(css.height >= 600 ? 184 : 136, rail ? css.right - rail.left + 16 : 0),
+      bottom: Math.max(60, tray ? css.bottom - tray.top + 8 : 0),
+    });
+  }
+
+  private applyViewports(): void {
+    if (!this.backdropCamera) return;
+    const safe = this.playfieldViewport();
+    this.cameras.main.setViewport(safe.x, safe.y, safe.width, safe.height);
+    const canvas = this.game.canvas;
+    this.backdropCamera.setViewport(0, 0, canvas?.width ?? 1280, canvas?.height ?? 720);
+    const bounds = cameraBounds(this.backdropCamera, true);
+    this.backdropCamera.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+    this.backdropCamera.setZoom(
+      Math.min(this.backdropCamera.width / WORLD.width, this.backdropCamera.height / WORLD.height),
+    );
+    this.backdropCamera.centerOn(WORLD.width / 2, WORLD.height / 2);
+  }
+
+  private drawPaintedMap(): void {
+    // Both passes share native map textures and the existing culling gate.
+    // Paint the union of their whole-map gutters, not just the safe viewport.
+    const a = cameraBounds(this.cameras.main, true);
+    const b = cameraBounds(this.backdropCamera ?? this.cameras.main, true);
+    const x = Math.min(a.x, b.x),
+      y = Math.min(a.y, b.y);
+    this.mapImages = drawMapLayer(this, {
+      x,
+      y,
+      width: Math.max(a.x + a.width, b.x + b.width) - x,
+      height: Math.max(a.y + a.height, b.y + b.height) - y,
+    });
+    if (this.backdropCamera)
+      for (const image of this.mapImages) image.cameraFilter &= ~this.backdropCamera.id;
+  }
 
   constructor() {
     super('BoardScene');
@@ -38,13 +100,32 @@ export default class BoardScene extends Phaser.Scene {
     // Keep the zoomed viewport on the painted map, including during follow
     // tweens and whole-map transitions. Otherwise a start near the left edge
     // centres on negative world coordinates and reveals the renderer background.
+    this.backdropCamera = this.cameras.main;
+    this.backdropCamera.inputEnabled = false;
+    const safe = this.playfieldViewport();
+    const gameplayCamera = this.cameras.add(
+      safe.x,
+      safe.y,
+      safe.width,
+      safe.height,
+      true,
+      'board-playfield',
+    );
+    // Fail closed: late dust/coin effects and interactive zones are foreground
+    // too. Only explicitly identified painted-map objects enter the backdrop.
+    const onAdded = (object: Phaser.GameObjects.GameObject): void => {
+      this.backdropCamera?.ignore(object);
+    };
+    this.events.on('addedtoscene', onAdded);
+    this.applyViewports();
     this.cameras.main.setBounds(0, 0, WORLD.width, WORLD.height);
     this.cameras.main.setScroll(0, 0);
     const onState = (state: GameState): void => this.renderBoard(state);
     const onResize = (): void => {
+      this.applyViewports();
       if (!this.latestState) return;
       for (const image of this.mapImages) image.destroy();
-      this.mapImages = drawMapLayer(this, cameraBounds(this.cameras.main, true));
+      this.drawPaintedMap();
       const target = cameraTarget(this.latestState, this.wholeMap, this.cameras.main);
       this.applyCamera({ ...target, duration: 0 });
     };
@@ -52,6 +133,11 @@ export default class BoardScene extends Phaser.Scene {
     this.game.events.on('game-state', onState);
     this.events.once('shutdown', () => {
       this.scale.off('resize', onResize);
+      this.events.off('addedtoscene', onAdded);
+      this.tweens.killTweensOf(gameplayCamera);
+      this.cameras.remove(gameplayCamera);
+      if (this.backdropCamera) this.cameras.main = this.backdropCamera;
+      this.backdropCamera = null;
       this.game.events.off('game-state', onState);
       clearForkArrows(this);
       closeSpaceInfo();
@@ -174,6 +260,8 @@ export default class BoardScene extends Phaser.Scene {
     // Do this before the signature guard: entering/leaving battle may change
     // no board geometry, but must still hide/restore the board camera.
     this.cameras.main.setVisible(state.phase.kind !== 'battle');
+    this.backdropCamera?.setVisible(state.phase.kind !== 'battle');
+    this.applyViewports();
     // Combat picks and other nonvisual updates can arrive several times per
     // second. Recreating the entire tiled board for each one overwhelms
     // software-rendered Chromium and starves DOM input on CI machines.
@@ -200,7 +288,7 @@ export default class BoardScene extends Phaser.Scene {
     }
 
     // Layer 1: painted map background (5×3 WebP tiles, flat fallbacks).
-    this.mapImages = drawMapLayer(this, cameraBounds(this.cameras.main, true));
+    this.drawPaintedMap();
 
     // Layer 2: cream road along every `next` edge (map pixels).
     drawRoad(this, roadSegments(state.board));

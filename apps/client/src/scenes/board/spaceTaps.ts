@@ -29,12 +29,22 @@ export function bindSpaceTaps(
   // re-renders pile up stale listeners.
   unbind?.();
   const handler = (pointer: Phaser.Input.Pointer): void => {
+    const camera = scene.cameras.main;
+    // Scene-level pointerdown also fires over decorative canvas lanes. Phaser
+    // inverse projection does not clip them, so reject logical coordinates
+    // before either whole-map exit or selecting a potentially invisible tile.
+    if (
+      pointer.x < camera.x ||
+      pointer.y < camera.y ||
+      pointer.x >= camera.x + camera.width ||
+      pointer.y >= camera.y + camera.height
+    )
+      return;
     const { state, wholeMap } = contextOf();
     if (wholeMap) {
       onWholeMapExit();
       return;
     }
-    const camera = scene.cameras.main;
     const worldPoint = camera.getWorldPoint(pointer.x, pointer.y);
     let nearest: { id: number; distance: number } | null = null;
     for (const space of state.board.spaces) {

@@ -6,8 +6,12 @@ import { getLang, setLang, t } from '../i18n';
 import { getAudioSettings, setAudioSettings } from '../audio';
 import { renderBattleUi } from './battleUi';
 import { portraitStyle } from './artFrames';
-import { showActionDialog, showPhaseDialog } from './dialogs';
+import { showActionDialog, showItemDialog, showPhaseDialog } from './dialogs';
 import { renderMenu } from './menu';
+import { showSeatDetails } from './seatDetails';
+
+const seatDetailClosers = new WeakMap<HTMLElement, () => void>();
+const itemDialogClosers = new WeakMap<HTMLElement, () => void>();
 
 type HudOnlineState = {
   you: number;
@@ -18,7 +22,7 @@ type HudOnlineState = {
   reclaim: () => void;
 };
 
-type HudOptions = { legal?: Action[]; online?: HudOnlineState };
+type HudOptions = { legal?: Action[]; online?: HudOnlineState; presentationBusy?: boolean };
 
 const hudContexts = new WeakMap<
   HTMLElement,
@@ -32,7 +36,9 @@ export function renderHud(
   dispatch: (action: Action) => void,
   options?: HudOptions,
 ): void {
+  itemDialogClosers.get(root)?.();
   const online = options?.online;
+  const busy = options?.presentationBusy === true || online?.awaitingView === true;
   const suppliedLegal = options?.legal;
   const battleSeat =
     state.phase.kind === 'battle'
@@ -58,17 +64,24 @@ export function renderHud(
     : (suppliedLegal ?? legalActions(state, activeSeat));
   const seats = state.players.map((seat) => playerCard(state, seat, online?.seats)).join('');
   const canAct = online ? online.you === activeSeat : player.control === 'human';
+  const itemActions =
+    state.phase.kind === 'awaitRoll' ? actions.filter((action) => action.type === 'useItem') : [];
   const buttons = canAct
     ? actions
+        .map((action, index) => ({ action, index }))
+        .filter(({ action }) => !(itemActions.length && action.type === 'useItem'))
         .map(
-          (action, index) =>
-            `<button class="action-button" data-testid="${testId(action)}" data-action-index="${index}"${online?.awaitingView ? ' disabled' : ''}>${escapeHtml(actionName(action))}</button>`,
+          ({ action, index }) =>
+            `<button class="action-button" data-testid="${testId(action)}" data-action-index="${index}"${busy ? ' disabled' : ''}>${escapeHtml(actionName(action))}</button>`,
         )
-        .join('')
+        .join('') +
+      (itemActions.length
+        ? `<button type="button" class="action-button" data-testid="action-items" aria-haspopup="dialog"${busy ? ' disabled' : ''}>${escapeHtml(t('action.items', { count: new Set(itemActions.map((action) => (action.type === 'useItem' ? action.item : ''))).size }))}</button>`
+        : '')
     : '';
-  const header = `<header class="game-topline"><span class="round-label" data-testid="round-ribbon">${t('board.round', { round: state.round, total: state.config.rounds })}</span><button type="button" class="world-chip" data-testid="world-chip" aria-haspopup="dialog" aria-label="${escapeHtml(t(`worldRule.${state.worldRule}`))}">${t(`worldRule.${state.worldRule}`)}</button><div class="menu-slot"></div>${audioToggleHtml()}<button class="text-button" data-testid="map-toggle" aria-pressed="false">${t('map.whole')}</button></header>`;
+  const header = `<header class="game-topline"><span class="round-label" data-testid="round-ribbon">${t('board.round', { round: state.round, total: state.config.rounds })}</span><div class="turn-ribbon visible" data-testid="turn-ribbon" role="status"></div><div class="event-banner" data-testid="event-banner" role="status" tabindex="0"><span class="event-text">${state.round >= 10 ? t('event.FrenzyStarted') : ''}</span></div><button type="button" class="world-chip" data-testid="world-chip" aria-haspopup="dialog" aria-label="${escapeHtml(t(`worldRule.${state.worldRule}`))}">${t(`worldRule.${state.worldRule}`)}</button><div class="menu-slot"></div>${audioToggleHtml()}<button class="text-button" data-testid="map-toggle" aria-pressed="false">${t('map.whole')}</button></header>`;
   if (!root.querySelector('.game-shell')) {
-    root.innerHTML = `<section class="game-shell" data-testid="screen-board"><div class="board-stage" id="phaser-board"></div>${header}<div class="event-banner card" data-testid="event-banner" role="status" tabindex="0"><span class="event-text">${state.round >= 10 ? t('event.FrenzyStarted') : ''}</span></div><div class="online-status" aria-live="polite"></div><section class="seat-hud">${seats}</section><nav class="action-tray action-bar card" data-testid="action-tray" aria-label="${t('board.actions')}"></nav><div class="rotate-hint" data-testid="rotate-hint">${t('board.rotateHint')}</div></section>`;
+    root.innerHTML = `<section class="game-shell" data-testid="screen-board"><div class="board-stage" id="phaser-board"></div>${header}<div class="online-status" aria-live="polite"></div><section class="seat-hud">${seats}</section><nav class="action-tray action-bar card" data-testid="action-tray" aria-label="${t('board.actions')}"></nav><div class="rotate-hint" data-testid="rotate-hint">${t('board.rotateHint')}</div></section>`;
     bindAudioToggle(root.querySelector('.game-topline [data-testid="audio-toggle"]'));
   } else {
     const existingHeader = root.querySelector('.game-topline');
@@ -95,6 +108,7 @@ export function renderHud(
     }
   }
   const shell = root.querySelector<HTMLElement>('.game-shell')!;
+  seatDetailClosers.get(shell)?.();
   hudContexts.set(shell, { state, dispatch, options });
   // Menu (re)mount is idempotent; every render re-arms it so the panel exists
   // whether the shell was just created or is being updated in place.
@@ -115,6 +129,35 @@ export function renderHud(
     shell.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const summary = target.closest<HTMLButtonElement>('[data-seat-open]');
+      if (summary) {
+        const context = hudContexts.get(shell);
+        if (!context) return;
+        seatDetailClosers.get(shell)?.();
+        const seat = Number(summary.dataset.seatOpen);
+        const close = showSeatDetails(shell, context.state, seat, () => {
+          seatDetailClosers.delete(shell);
+          shell.querySelector<HTMLButtonElement>(`[data-seat-open="${seat}"]`)?.focus();
+        });
+        seatDetailClosers.set(shell, close);
+        const online = context.options?.online;
+        const publicSeat = online?.seats.find((player) => player.seat === seat);
+        if (publicSeat?.controller === 'botTakeover') {
+          const panel = shell.querySelector<HTMLElement>('[data-testid="seat-detail-panel"]')!;
+          const status = document.createElement('p');
+          status.textContent = t('online.takeover');
+          panel.insertBefore(status, panel.lastElementChild);
+          if (online?.you === seat) {
+            const reclaim = document.createElement('button');
+            reclaim.type = 'button';
+            reclaim.dataset.testid = 'seat-detail-reclaim';
+            reclaim.textContent = t('online.reclaim');
+            reclaim.addEventListener('click', online.reclaim);
+            panel.insertBefore(reclaim, panel.lastElementChild);
+          }
+        }
+        return;
+      }
       const banner = target.closest<HTMLElement>('[data-testid="event-banner"]');
       if (banner) banner.classList.toggle('expanded');
       const langButton = target.closest<HTMLButtonElement>('[data-lang]');
@@ -160,20 +203,18 @@ export function renderHud(
       document.body.append(popup);
     });
   }
+  const focusedSeat = shell.contains(document.activeElement)
+    ? (document.activeElement as HTMLElement)?.dataset.seatOpen
+    : undefined;
   root.querySelector('.seat-hud')!.innerHTML = seats;
+  if (focusedSeat !== undefined)
+    shell.querySelector<HTMLButtonElement>(`[data-seat-open="${focusedSeat}"]`)?.focus();
   // Round ribbon (brief): reads "Round 3/12" / "รอบ 3/12" and doubles as the
   // turn marker ("<name>'s turn" (spec §7) stays in `.turn-ribbon`).
   const ribbon = root.querySelector<HTMLElement>('[data-testid="round-ribbon"]')!;
   ribbon.textContent = t('board.round', { round: state.round, total: state.config.rounds });
   // "<name>'s turn" ribbon (spec §7): re-created per render, cheapest correct.
-  let turnRibbon = root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]');
-  if (!turnRibbon) {
-    turnRibbon = document.createElement('div');
-    turnRibbon.className = 'turn-ribbon';
-    turnRibbon.dataset.testid = 'turn-ribbon';
-    turnRibbon.setAttribute('role', 'status');
-    root.querySelector('.game-shell')!.append(turnRibbon);
-  }
+  const turnRibbon = root.querySelector<HTMLElement>('[data-testid="turn-ribbon"]')!;
   turnRibbon.textContent = t('turn.ribbon', {
     name: state.players[state.turnSeat]?.name ?? '',
   });
@@ -205,6 +246,17 @@ export function renderHud(
     .querySelector<HTMLButtonElement>('[data-testid="online-reclaim"]')
     ?.addEventListener('click', online!.reclaim);
   const actionBar = root.querySelector<HTMLElement>('.action-tray')!;
+  const modalPhase = ['shop', 'levelUp', 'pvpReward'].includes(state.phase.kind);
+  const modalActions =
+    state.phase.kind === 'pvpReward'
+      ? actions.filter((action) => action.type === 'pvpReward')
+      : actions;
+  const ownsModal = modalPhase && canAct && modalActions.length > 0;
+  const hadModal =
+    actionBar.dataset.modalPhase === state.phase.kind && !!root.querySelector('.dialog-shade');
+  actionBar.hidden = ownsModal;
+  actionBar.toggleAttribute('inert', ownsModal);
+  actionBar.dataset.modalPhase = ownsModal ? state.phase.kind : '';
   const isBattle = renderBattleUi(
     root,
     state,
@@ -214,22 +266,39 @@ export function renderHud(
     actionName,
     canAct,
     online !== undefined,
-    online?.awaitingView ?? false,
+    busy,
   );
   if (!isBattle) {
     actionBar.setAttribute('aria-label', t('board.actions'));
-    const markup = buttons || `<span>${t('board.botThinking')}</span>`;
+    const markup = ownsModal ? '' : buttons || `<span>${t('board.botThinking')}</span>`;
     if (actionBar.innerHTML !== markup) actionBar.innerHTML = markup;
     root.querySelector('.dialog-shade')?.remove();
     root.querySelectorAll<HTMLButtonElement>('[data-action-index]').forEach((button) => {
       const action = actions[Number(button.dataset.actionIndex)];
       if (action) button.onclick = () => dispatch(action);
     });
+    const itemsButton = actionBar.querySelector<HTMLButtonElement>('[data-testid="action-items"]');
+    if (itemsButton)
+      itemsButton.onclick = () => {
+        if (busy || !canAct) return;
+        itemDialogClosers.get(root)?.();
+        const close = showItemDialog(root, itemActions, actionName, testId, dispatch, () => {
+          itemDialogClosers.delete(root);
+          itemsButton.focus();
+        });
+        itemDialogClosers.set(root, close);
+      };
   }
-  if (state.phase.kind === 'pvpReward')
-    showActionDialog(root, actions, dispatch, online?.awaitingView);
-  else if (state.phase.kind === 'levelUp' || state.phase.kind === 'shop')
-    showPhaseDialog(root, state, actions, dispatch, online?.awaitingView);
+  if (ownsModal && (!busy || hadModal)) {
+    if (state.phase.kind === 'pvpReward') showActionDialog(root, modalActions, dispatch, busy);
+    else showPhaseDialog(root, state, modalActions, dispatch, busy);
+    const dialog = root.querySelector<HTMLElement>('.game-dialog')!;
+    dialog.setAttribute('aria-label', dialog.querySelector('h2')!.textContent!);
+    // Move the existing button, never clone it: preserve action indices,
+    // native disabled semantics, labels and the original dispatch handler.
+    const leave = dialog.querySelector<HTMLButtonElement>('[data-testid="shop-leave-leave"]');
+    if (leave) dialog.append(leave);
+  }
 }
 
 function playerCard(state: GameState, player: Player, seats?: PublicSeat[]): string {
@@ -246,6 +315,12 @@ function playerCard(state: GameState, player: Player, seats?: PublicSeat[]): str
       : '';
   const classes = ['corner-tl', 'corner-tr', 'corner-bl', 'corner-br'];
   const accent = ['#f15b4a', '#52c2ed', '#a5d65b', '#cd76d7'][player.seat % 4]!;
+  if (state.phase.kind !== 'battle') {
+    const summaryBadge = takeoverBadge
+      ? `<span class="seat-status" data-testid="seat-takeover-${player.seat}">${t('setup.bot')}</span>`
+      : '';
+    return `<article class="seat-card ${classes[player.seat % 4]} ${player.seat === state.turnSeat ? 'is-active' : ''}" style="--seat-color:${accent}"><button type="button" class="seat-summary" data-seat-open="${player.seat}" aria-haspopup="dialog" aria-label="${escapeHtml(`${t('setup.seat', { seat: player.seat + 1 })} · ${name} · ${player.gold} ${t('board.gold')}${takeoverBadge ? ` · ${t('online.takeover')}` : ''}`)}"><span class="seat-portrait portrait-${player.classId}" style="${portraitStyle(player.classId)}" aria-hidden="true"></span><span class="seat-summary-info"><strong>${escapeHtml(name)}</strong><span class="gold-pill" aria-label="${player.gold} ${escapeHtml(t('board.gold'))}">${player.gold} ${t('board.gold')}</span>${summaryBadge}</span></button></article>`;
+  }
   return `<article class="seat-card ${classes[player.seat % 4]} ${player.seat === state.turnSeat ? 'is-active' : ''}" style="--seat-color:${accent}"><div class="seat-portrait portrait-${player.classId}" style="${portraitStyle(player.classId)}" role="img" aria-label="${t(`class.${player.classId}`)}"></div><div class="seat-details"><strong>${escapeHtml(name)}</strong><div class="seat-stats"><span class="gold-pill" aria-label="${player.gold} ${escapeHtml(t('board.gold'))}">${player.gold} ${t('board.gold')}</span><span aria-label="${escapeHtml(t('board.level'))} ${player.level}">${t('board.levelShort')} ${player.level}</span><span aria-label="${towns} ${escapeHtml(t('board.towns'))}">${towns} ${t('board.towns')}</span></div><div class="seat-health" role="meter" aria-label="${escapeHtml(t('board.hp'))}" aria-valuemin="0" aria-valuemax="${player.stats.maxHp}" aria-valuenow="${player.hp}"><svg class="hp-heart" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21 3 12C-3 6 5-2 12 5c7-7 15 1 9 7Z"/></svg><div class="hp-track"><span style="width:${hp}%"></span></div></div>${compactCards}${takeoverBadge}</div></article>`;
 }
 

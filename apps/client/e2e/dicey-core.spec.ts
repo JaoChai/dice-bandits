@@ -124,10 +124,14 @@ for (const lang of ['en', 'th'] as const) {
     const lines = await page.evaluate(
       (messages) => {
         const text = document.querySelector<HTMLElement>('.dicey-text')!;
+        const tip = text.closest<HTMLElement>('.dicey-tip')!;
         const original = text.textContent;
         const rows = Object.entries(messages)
           .filter(([key]) => key.startsWith('dicey.tip.'))
           .map(([key, value]) => {
+            // Match the approved topic-specific bubble. Other topics no
+            // longer share Roll's compact two-line width; keep the 2-line gate.
+            tip.classList.toggle('dicey-anchored', key === 'dicey.tip.roll');
             text.textContent = value;
             return {
               key,
@@ -135,6 +139,7 @@ for (const lang of ['en', 'th'] as const) {
                 text.getBoundingClientRect().height / parseFloat(getComputedStyle(text).lineHeight),
             };
           });
+        tip.classList.add('dicey-anchored');
         text.textContent = original;
         return rows;
       },

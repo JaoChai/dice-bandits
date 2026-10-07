@@ -57,12 +57,59 @@ it('shows a non-modal status without stealing focus and dismisses by Got it', ()
   );
   expect(find('dicey-tip')?.getAttribute('role')).toBe('status');
   expect(find('dicey-tip')?.hasAttribute('aria-modal')).toBe(false);
-  expect(find('dicey-tip')?.textContent).toContain('Tap the big die');
+  expect(find('dicey-tip')?.textContent).toContain('Tap Roll to see your dice total.');
   expect(document.activeElement?.id).toBe('focused');
   find('dicey-tip-ok')!.click();
   expect(dismissed).toBe(1);
   expect(find('dicey-tip')).toBeNull();
 });
+// Break caught: roll pointer stays at stale coordinates or leaks observers after dismissal.
+it('tracks the real roll CTA on resize/language and cleans its observer without dispatch', () => {
+  const roll = root().querySelector<HTMLButtonElement>('[data-action-index]')!;
+  roll.dataset.testid = 'action-roll';
+  let x = 600;
+  vi.spyOn(roll, 'getBoundingClientRect').mockImplementation(() => new DOMRect(x, 350, 80, 44));
+  const disconnect = vi.fn();
+  let onResize: () => void = () => {};
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: () => void) {
+        onResize = callback;
+      }
+      observe() {}
+      disconnect = disconnect;
+    },
+  );
+  const cleanup = showDiceyTip(root(), 'roll', () => {});
+  cleanups.push(cleanup);
+  const pointer = find('dicey-tip')!.querySelector<HTMLElement>('.dicey-pointer');
+  expect(pointer).not.toBeNull();
+  expect(find('dicey-tip')!.style.getPropertyValue('--dicey-cta-x')).toBe('640px');
+  x = 500;
+  window.dispatchEvent(new Event('resize'));
+  expect(find('dicey-tip')!.style.getPropertyValue('--dicey-cta-x')).toBe('540px');
+  x = 450;
+  setLang('th');
+  onResize();
+  expect(find('dicey-tip')!.style.getPropertyValue('--dicey-cta-x')).toBe('490px');
+  expect(find('dicey-tip')!.textContent).toContain('แตะปุ่มทอยเต๋าเพื่อดูแต้มที่ได้');
+  cleanup();
+  expect(disconnect).toHaveBeenCalledTimes(1);
+  x = 700;
+  window.dispatchEvent(new Event('resize'));
+  onResize();
+  expect(find('dicey-tip')).toBeNull();
+  vi.unstubAllGlobals();
+});
+it('omits the roll pointer for non-roll topics or an absent roll control', () => {
+  for (const topic of ['shop', 'levelUp', 'chest', 'roll'] as const) {
+    const cleanup = showDiceyTip(root(), topic, () => {});
+    expect(find('dicey-tip')!.querySelector('.dicey-pointer')).toBeNull();
+    cleanup();
+  }
+});
+
 it('keeps the text usable while loading, then crops the pointing atlas frame', () => {
   cleanups.push(showDiceyTip(root(), 'roll', () => {}));
   const portrait = document.querySelector<HTMLElement>('.dicey-portrait')!;
