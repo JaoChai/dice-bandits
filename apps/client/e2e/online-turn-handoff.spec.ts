@@ -26,6 +26,10 @@ for (const language of ['th', 'en']) {
     page: host,
     browser,
   }, info) => {
+    // Private worker RNG can require several real two-browser turns to reach
+    // explicit End Turn. CI traces took 24–28s in prep, before context cleanup;
+    // allow that setup, not a slower handoff (the scene deadline stays 2000ms).
+    test.slow();
     const guestContext = await browser.newContext({
       storageState: 'e2e/storage-state.json',
       viewport: info.project.use.viewport,
@@ -71,6 +75,18 @@ for (const language of ['th', 'en']) {
         await Promise.all(
           pages.map((page) => page.waitForFunction(() => window.__db?.art.boardReady)),
         );
+        // Initial/welcome views have no event batch. They must commit without
+        // inventing a roll/toast or leaving presentationBusy blocking actions.
+        await expect(host.getByTestId('action-roll')).toBeEnabled();
+        for (const page of pages) {
+          await expect(page.getByTestId('dice-roll')).toHaveCount(0);
+          await expect(page.getByTestId('last-roll-chip')).toHaveCount(0);
+          await expect(page.locator('[data-testid="event-banner"] .event-text')).toHaveText('');
+          await expect(page.locator('.game-toast')).toHaveCount(0);
+          const initial = await snapshot(page);
+          expect(initial.registry).toEqual(initial.controller);
+          expect(initial.board).toEqual(initial.controller);
+        }
         for (let action = 0; action < 80; action++) {
           const state = (await snapshot(host)).controller;
           if (state.turnSeat === 0 && state.phase.kind === 'endOfTurn') {

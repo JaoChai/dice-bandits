@@ -109,6 +109,11 @@ describe('OnlineController', () => {
         commits.push({ events, state });
       });
       await controller.handleMessage(view({ state: before }));
+      // A welcome/initial view has no preceding batch, but still commits once
+      // with no presentation events and leaves the HUD ready for input.
+      expect(commits).toEqual([{ events: [], state: before }]);
+      expect(sceneState).toEqual(before);
+      expect(controller.hudOnlineState.awaitingView).toBe(false);
       commits.length = 0;
 
       if (sendEmptyBatch) await controller.handleMessage({ type: 'events', turn: 13, events: [] });

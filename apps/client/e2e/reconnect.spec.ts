@@ -53,6 +53,7 @@ for (const language of ['th', 'en']) {
     await expect(page.getByTestId('action-roll')).toBeEnabled();
     await page.waitForFunction(() => window.__db?.art.boardReady);
     const before = await page.evaluate(() => JSON.stringify(window.__db!.getState()));
+    const eventText = await page.locator('[data-testid="event-banner"] .event-text').textContent();
     const url = page.url();
     await connections[0]!.client.close({ code: 1001, reason: 'Reconnect regression' });
     await connections[0]!.server.close({ code: 1001, reason: 'Reconnect regression' });
@@ -77,6 +78,13 @@ for (const language of ['th', 'en']) {
     expect(connection.closed).toEqual([1001]);
     expect(connection.welcome).toMatchObject({ type: 'welcome', seat: 0 });
     expect(connection.hasView).toBe(true);
+    // The view-only reconnect commits state, not a new presentation event.
+    // Enabled Roll above also proves presentationBusy was restored.
+    expect(await page.evaluate(() => JSON.stringify(window.__db!.getState()))).toBe(before);
+    await expect(page.getByTestId('dice-roll')).toHaveCount(0);
+    await expect(page.getByTestId('last-roll-chip')).toHaveCount(0);
+    await expect(page.locator('[data-testid="event-banner"] .event-text')).toHaveText(eventText!);
+    await expect(page.locator('.game-toast')).toHaveCount(0);
     await page.getByTestId('action-roll').click();
     await expect(page.getByTestId('last-roll-chip')).toBeVisible();
     await expect
