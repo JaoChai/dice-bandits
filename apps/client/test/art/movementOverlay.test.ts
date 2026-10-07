@@ -1,4 +1,4 @@
-import { createGame, type GameEvent } from '@dice-bandits/engine';
+import { createGame, step, type GameEvent } from '@dice-bandits/engine';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type Phaser from 'phaser';
 import { planMovement } from '../../src/scenes/board/movementPlan';
@@ -120,6 +120,36 @@ describe('movement plan', () => {
 });
 
 describe('detached movement overlay', () => {
+  it('BoardScene ignores older and repeated generations before touching the current ghost', async () => {
+    window.diceBanditsSpeed = 1;
+    const { scene, objects } = setup();
+    const board = Object.assign(Object.create(BoardScene.prototype), scene, {
+      scene: { isActive: () => true },
+    });
+    const legalEvents = step(state, { type: 'roll' }).events;
+    expect(legalEvents.filter((event) => event.type === 'Moved')).toHaveLength(5);
+    board.presentOnlineMovement(state, state, legalEvents, 2);
+    const oldCallback = scene.tweens.add.mock.calls[0]![0].onComplete;
+    board.presentOnlineMovement(state, state, legalEvents, 1);
+    board.presentOnlineMovement(state, state, legalEvents, 2);
+    expect(objects).toHaveLength(1);
+    expect(objects[0]!.destroy).not.toHaveBeenCalled();
+    board.cancelOnlineMovement();
+    expect(objects[0]!.destroy).toHaveBeenCalledOnce();
+    // Cancellation/replacement must not reset the fence or revive old callbacks.
+    board.presentOnlineMovement(state, state, legalEvents, 1);
+    board.presentOnlineMovement(state, state, legalEvents, 2);
+    expect(objects).toHaveLength(1);
+    board.presentOnlineMovement(state, state, legalEvents, 3);
+    oldCallback();
+    expect(scene.tweens.add).toHaveBeenCalledTimes(2);
+    expect(objects[1]!.destroy).not.toHaveBeenCalled();
+    board.cancelOnlineMovement();
+    scene.tweens.add.mock.calls[1]![0].onComplete();
+    await vi.runAllTimersAsync();
+    expect(scene.tweens.add).toHaveBeenCalledTimes(2);
+    expect(objects[1]!.destroy).toHaveBeenCalledOnce();
+  });
   it.each(['shutdown', 'destroy', 'resize'])(
     'BoardScene %s clears real overlay ownership and stale callbacks',
     async (event) => {

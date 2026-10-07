@@ -109,8 +109,118 @@ function makeController(
 }
 
 describe('online main movement seam', () => {
+  it.each(['reconnect', 'newer-view'])(
+    'keeps queued authoritative commits but suppresses ghosts superseded by %s',
+    async (invalidation) => {
+      document.body.innerHTML = '<div id="app"></div>';
+      vi.resetModules();
+      const { startOnlineGame } = await import('../src/main');
+      const previous = createGame({
+        seed: 'movement-overlay',
+        rounds: 12,
+        seats: initialState.players.map((player) => ({
+          name: player.name,
+          classId: player.classId,
+          control: player.control,
+          personality: player.personality,
+        })),
+      });
+      const next = step(previous, { type: 'roll' });
+      expect(next.events.filter((event) => event.type === 'Moved')).toHaveLength(5);
+      let battleActive = false;
+      let releaseBattle!: () => void;
+      const board = {
+        presentOnlineMovement: vi.fn(),
+        cancelOnlineMovement: vi.fn(),
+        playEvents: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              releaseBattle = resolve;
+            }),
+        ),
+        scene: { launch: vi.fn(), stop: vi.fn() },
+      };
+      const mounted = {
+        destroy: vi.fn(),
+        registry: { set: vi.fn() },
+        events: { on: vi.fn(), emit: vi.fn() },
+        scene: { getScene: () => board, isActive: () => battleActive },
+      };
+      fakeGame.mockReturnValue(mounted);
+      let handlers!: import('../src/online/socket').RoomSocketHandlers;
+      const socket = {
+        send: vi.fn(),
+        close: vi.fn(),
+        setHandlers: (next: typeof handlers) => {
+          handlers = next;
+        },
+      };
+      const flush = async () => {
+        for (let i = 0; i < 60; i++) await Promise.resolve();
+      };
+      startOnlineGame(
+        socket,
+        { code: 'ABCDE', seat: 0, token: 'test', name: 'Human' },
+        view({ turn: 1, state: previous }),
+      );
+      await flush();
+      board.presentOnlineMovement.mockClear();
+      mounted.registry.set.mockClear();
+      try {
+        // Unchanged battle playback holds the queue before the next view's callback starts.
+        battleActive = true;
+        handlers.onMessage(view({ turn: 2, state: previous }));
+        await flush();
+        expect(board.playEvents).toHaveBeenCalledOnce();
+        handlers.onMessage({ type: 'events', turn: 3, events: next.events });
+        handlers.onMessage(
+          view({ turn: 3, state: next.state, legal: legalActions(next.state, 0) }),
+        );
+        if (invalidation === 'reconnect') {
+          handlers.onStatus('reconnecting');
+          handlers.onStatus('open');
+        } else {
+          handlers.onMessage(
+            view({ turn: 4, state: next.state, legal: legalActions(next.state, 0) }),
+          );
+        }
+        battleActive = false;
+        releaseBattle();
+        await flush();
+        expect(mounted.registry.set.mock.calls).toEqual([
+          ['state', previous],
+          ['state', next.state],
+          ...(invalidation === 'newer-view' ? [['state', next.state]] : []),
+        ]);
+        if (invalidation === 'reconnect') {
+          expect(board.presentOnlineMovement).not.toHaveBeenCalled();
+          // Only a view received after reconnect may schedule movement again.
+          handlers.onMessage({ type: 'events', turn: 4, events: next.events });
+          handlers.onMessage(
+            view({ turn: 4, state: next.state, legal: legalActions(next.state, 0) }),
+          );
+          await flush();
+        }
+        expect(board.presentOnlineMovement).toHaveBeenCalledOnce();
+        expect(board.presentOnlineMovement).toHaveBeenLastCalledWith(
+          next.state,
+          next.state,
+          invalidation === 'reconnect' ? next.events : [],
+          expect.any(Number),
+        );
+        const actions = document.querySelectorAll<HTMLButtonElement>(
+          '[data-action-index], [data-choice]',
+        );
+        expect(actions.length).toBeGreaterThan(0);
+        expect([...actions].every((action) => !action.disabled)).toBe(true);
+      } finally {
+        document.querySelector('#app')!.dispatchEvent(new Event('dice-bandits:menu-exit'));
+      }
+    },
+  );
   it('commits views and enables legal actions before a delayed board tween; cancels on input/reconnect/exit', async () => {
     document.body.innerHTML = '<div id="app"></div>';
+    vi.resetModules();
     const { startOnlineGame } = await import('../src/main');
     const board = {
       playEvents: vi.fn(() => new Promise<void>(() => undefined)),

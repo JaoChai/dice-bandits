@@ -121,6 +121,9 @@ export function startOnlineGame(
   let tipEvents: GameEvent[] = [];
   let tipsReady = false;
   let movementGeneration = 0;
+  // OnlineController serializes one onEvents callback per received view. Keep
+  // receipt ownership in the same FIFO; queued work must never renew it.
+  const receivedMovementGenerations: number[] = [];
   const cancelMovement = (): void => {
     movementGeneration++;
     (game?.scene.getScene('BoardScene') as BoardScene | undefined)?.cancelOnlineMovement?.();
@@ -184,10 +187,9 @@ export function startOnlineGame(
     state: firstView.state,
     socket,
     onEvents: async (events, nextState) => {
+      const presentationGeneration = receivedMovementGenerations.shift();
       if (!isCurrent()) return;
       const previous = controller.state;
-      cancelMovement();
-      const presentationGeneration = movementGeneration;
       presentationBusy = true;
       guide.dismiss();
       tipEvents.push(...events);
@@ -249,6 +251,7 @@ export function startOnlineGame(
   const handleMessage = (message: ServerMsg): void => {
     if (!isCurrent()) return;
     if (message.type === 'view' || message.type === 'events') cancelMovement();
+    if (message.type === 'view') receivedMovementGenerations.push(movementGeneration);
     if (message.type === 'error') {
       if (message.key === 'online.error.notFound') {
         clearSession(session.code);
@@ -278,6 +281,7 @@ export function startOnlineGame(
     },
   });
 
+  receivedMovementGenerations.push(movementGeneration);
   void controller.handleMessage(firstView).then(() => {
     if (!isCurrent()) return;
     if (controller.state.phase.kind === 'gameOver') {

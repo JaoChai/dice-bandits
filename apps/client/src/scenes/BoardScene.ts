@@ -32,6 +32,7 @@ export default class BoardScene extends Phaser.Scene {
   private ringTween: Phaser.Tweens.Tween | null = null;
   private latestState: GameState | null = null;
   private onlineMovement: ReturnType<typeof createMovementOverlay> | undefined;
+  private latestMovementGeneration: number | undefined;
   private backdropCamera: Phaser.Cameras.Scene2D.Camera | null = null;
 
   /** HUD geometry is read only on redraw/resize, never on an animation frame.
@@ -176,6 +177,10 @@ export default class BoardScene extends Phaser.Scene {
     events: readonly GameEvent[],
     generation: number,
   ): void {
+    // Fence lives on the scene, not the disposable overlay. Ignore stale or
+    // repeated receipts before they can destroy the current presentation.
+    if (generation <= (this.latestMovementGeneration ?? -1)) return;
+    this.latestMovementGeneration = generation;
     this.cancelOnlineMovement();
     if (!this.scene.isActive() || next.phase.kind === 'battle' || next.phase.kind === 'gameOver')
       return;
