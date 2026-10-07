@@ -164,6 +164,8 @@ type LocalWalk = {
   done: boolean;
   started: number;
   ended?: number;
+  resized?: number;
+  resizeEvents: number;
   counts: Array<{ remaining: number; at: number; text: string }>;
   hops: Array<{ at: number; duration: number }>;
   frames: Array<{ at: number; count: string; token: Point; overlap: boolean; clamped: boolean }>;
@@ -197,8 +199,19 @@ async function startGoldWalk(page: Page, lang: 'th' | 'en', speed = 1, reduced =
         options?: { onStep?: (remaining: number, seat: number) => void },
       ): Promise<void>;
     };
-    const trace: LocalWalk = { done: false, started: 0, counts: [], hops: [], frames: [] };
+    const trace: LocalWalk = {
+      done: false,
+      started: 0,
+      resizeEvents: 0,
+      counts: [],
+      hops: [],
+      frames: [],
+    };
     probe.__localWalk = trace;
+    game.scale.on('resize', () => {
+      trace.resizeEvents++;
+      trace.resized = performance.now();
+    });
     const token = scene.tokenObjects.get(scene.latestState.turnSeat)!;
     const add = scene.tweens.add.bind(scene.tweens);
     scene.tweens.add = (config) => {
@@ -349,6 +362,65 @@ for (const lang of ['th', 'en'] as const) {
   }
 }
 
+for (const phase of ['hop', 'pause', 'arrival'] as const) {
+  test(`real resize during ${phase} settles playback and commits endpoint`, async ({
+    page,
+  }, info) => {
+    const fixture = await startGoldWalk(page, 'en', 1, false);
+    await page.locator('[data-action-index="0"]').click();
+    if (phase === 'arrival') {
+      await page.getByTestId('movement-arrival').waitFor({ state: 'visible' });
+    } else {
+      await page.waitForFunction((phase) => {
+        const trace = (window as unknown as LocalProbe).__localWalk;
+        if (!trace.started || trace.done) return false;
+        if (phase === 'pause')
+          return trace.counts.length === 1 && performance.now() - trace.counts[0]!.at < 100;
+        return (
+          trace.hops.length === 2 &&
+          trace.counts.length === 1 &&
+          performance.now() - trace.hops[1]!.at > 40
+        );
+      }, phase);
+    }
+    await expect(page.locator('[data-action-index="0"]')).toBeDisabled();
+    const original = page.viewportSize()!;
+    await page.setViewportSize({ width: original.width + 17, height: original.height - 24 });
+    await page.waitForFunction(() => {
+      const trace = (window as unknown as LocalProbe).__localWalk;
+      return trace.resizeEvents > 0 && trace.done;
+    });
+    const atResize = await page.evaluate(() => (window as unknown as LocalProbe).__localWalk);
+    expect(atResize.ended! - atResize.resized!).toBeLessThan(100);
+    await expect(page.getByTestId('movement-readout')).toHaveCount(0);
+    await expect(page.locator('[data-action-index="0"]')).toBeEnabled();
+    expect(await page.evaluate(() => localStorage.getItem('diceBandits.save'))).toContain(
+      JSON.stringify(fixture.next),
+    );
+    const endpoint = await page.evaluate((seat) => {
+      const scene = (window as unknown as LocalProbe).__m5aGame!.scene.getScene(
+        'BoardScene',
+      ) as unknown as { tokenObjects: Map<number, Point> };
+      const token = scene.tokenObjects.get(seat)!;
+      return { x: token.x, y: token.y };
+    }, fixture.previous.turnSeat);
+    const nextSpace = fixture.next.board.spaces.find(
+      (space) => space.id === fixture.next.players[fixture.previous.turnSeat]!.pos,
+    )!;
+    expect(endpoint.x).toBeCloseTo(nextSpace.x);
+    expect(endpoint.y).toBeCloseTo(nextSpace.y);
+    await page.waitForTimeout(900);
+    const later = await page.evaluate(() => (window as unknown as LocalProbe).__localWalk);
+    expect(later.counts).toEqual(atResize.counts);
+    expect(later.hops).toEqual(atResize.hops);
+    await expect(page.getByTestId('movement-readout')).toHaveCount(0);
+    await info.attach('real-resize.json', {
+      body: JSON.stringify({ phase, atResize, later, endpoint }),
+      contentType: 'application/json',
+    });
+  });
+}
+
 for (const policy of ['speed zero', 'reduced motion']) {
   test(`real human ${policy} reaches the authoritative endpoint without movement waits`, async ({
     page,
@@ -369,8 +441,42 @@ for (const policy of ['speed zero', 'reduced motion']) {
       JSON.stringify(fixture.next),
     );
     await expect(page.locator('[data-action-index="0"]')).toBeEnabled();
+    // Wait for actual Phaser rendered frames, not just resolved callbacks.
+    const frames = await page.evaluate(async () => {
+      const game = (window as unknown as LocalProbe).__m5aGame!;
+      const result: Array<{ count: string; arrival: string; visible: boolean }> = [];
+      for (let frame = 0; frame < 2; frame++) {
+        await new Promise<void>((resolve) => game.events.once('postrender', () => resolve()));
+        const count = document.querySelector<HTMLElement>('[data-testid="movement-remaining"]');
+        const arrival = document.querySelector<HTMLElement>('[data-testid="movement-arrival"]');
+        result.push({
+          count: count?.textContent ?? '',
+          arrival: arrival?.textContent ?? '',
+          visible:
+            !!count &&
+            !!arrival &&
+            count.getBoundingClientRect().width > 0 &&
+            arrival.getBoundingClientRect().width > 0,
+        });
+      }
+      return result;
+    });
+    const gold = fixture.events.find((event) => event.type === 'GoldGained')!.params.amount;
+    expect(
+      frames.every(
+        (frame) =>
+          frame.visible &&
+          frame.count === 'เหลือ 0 ช่อง' &&
+          frame.arrival.includes(`ได้รับ ${gold} ทอง`),
+      ),
+    ).toBe(true);
+    await page.screenshot({ path: info.outputPath(`static-${policy}.png`) });
+    // An unrelated real input supersedes the static card, without a wait.
+    await page.getByTestId('map-toggle').click();
+    await expect(page.getByTestId('movement-readout')).toHaveCount(0);
+    await expect(page.locator('[data-action-index="0"]')).toBeEnabled();
     await info.attach('static-walk.json', {
-      body: JSON.stringify(trace),
+      body: JSON.stringify({ trace, frames }),
       contentType: 'application/json',
     });
   });

@@ -4,19 +4,26 @@ import { onLangChange, t } from '../i18n';
 /** Non-interactive M1 readout in the existing event lane, not over the map.
  * Scene owns time/lifecycle; this view owns no timers, focus or engine state. */
 export function createMovementReadout(root: HTMLElement): {
-  step(remaining: number, seat: number): void;
-  land(spaceId: number, events: readonly GameEvent[]): void;
+  step(remaining: number, seat: number, options?: { static: boolean }): void;
+  land(spaceId: number, events: readonly GameEvent[], options?: { keepCounter: boolean }): void;
   clear(): void;
   destroy(): void;
 } {
   let element: HTMLElement | null = null;
   let seat: number | null = null;
   let destroyed = false;
+  let staticFeedback = false;
   const clear = (): void => {
     element?.remove();
     element = null;
     seat = null;
+    staticFeedback = false;
   };
+  const onInput = (): void => {
+    if (staticFeedback) clear();
+  };
+  root.addEventListener('pointerdown', onInput, true);
+  root.addEventListener('keydown', onInput, true);
   const mount = (): HTMLElement => {
     if (!element) {
       element = document.createElement('div');
@@ -31,7 +38,7 @@ export function createMovementReadout(root: HTMLElement): {
   };
   const unsubscribe = onLangChange(clear);
   return {
-    step(remaining, movingSeat) {
+    step(remaining, movingSeat, options) {
       if (
         destroyed ||
         !Number.isInteger(remaining) ||
@@ -41,13 +48,14 @@ export function createMovementReadout(root: HTMLElement): {
       )
         return;
       seat = movingSeat;
+      staticFeedback = options?.static ?? false;
       const chip = document.createElement('span');
       chip.className = 'movement-remaining';
       chip.dataset.testid = 'movement-remaining';
       chip.textContent = t('movement.remaining', { count: remaining });
       mount().replaceChildren(chip);
     },
-    land(spaceId, events) {
+    land(spaceId, events, options) {
       if (destroyed || seat === null) return;
       const lastMove = events
         .filter((event) => event.type === 'Moved' && event.seat === seat)
@@ -73,12 +81,16 @@ export function createMovementReadout(root: HTMLElement): {
         outcome.textContent = t('movement.gold', { amount });
         card.append(outcome);
       }
-      mount().replaceChildren(card);
+      const counter = options?.keepCounter ? element?.querySelector('.movement-remaining') : null;
+      if (counter) mount().replaceChildren(counter, card);
+      else mount().replaceChildren(card);
     },
     clear,
     destroy() {
       destroyed = true;
       clear();
+      root.removeEventListener('pointerdown', onInput, true);
+      root.removeEventListener('keydown', onInput, true);
       unsubscribe();
     },
   };

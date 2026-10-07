@@ -32,7 +32,7 @@ function fixture(control: 'human' | 'bot' = 'human') {
     const result = step(state, chooseAction(state, actor.seat));
     if (result.events.filter((e) => e.type === 'Moved').length === 5) {
       state.players[result.events.find((e) => e.type === 'Moved')!.seat!]!.control = control;
-      return { previous: state, events: result.events };
+      return { previous: state, next: result.state, events: result.events };
     }
     state = result.state;
   }
@@ -47,15 +47,35 @@ function setup(previous: GameState) {
   const token = { x: source.x, y: source.y, setFlipX: vi.fn(), setPosition: vi.fn() };
   token.setPosition.mockImplementation((x: number, y: number) => Object.assign(token, { x, y }));
   const tweenConfigs: Array<{ duration: number; targets: unknown }> = [];
+  const graphics: Array<{ destroy: ReturnType<typeof vi.fn> }> = [];
+  const resizeHandlers = new Map<string, () => void>();
+  const camera = {
+    width: 1280,
+    height: 720,
+    setBounds: vi.fn(),
+    setScroll: vi.fn(),
+    setZoom: vi.fn(),
+    centerOn: vi.fn(),
+    setVisible: vi.fn(),
+    ignore: vi.fn(),
+  };
   const scene = Object.assign(Object.create(BoardScene.prototype), {
     latestState: previous,
     wholeMap: true,
-    cameras: { main: {} },
+    cameras: { main: camera, add: () => camera },
+    mapImages: [],
+    applyViewports: vi.fn(),
+    drawPaintedMap: vi.fn(),
+    scale: { on: (name: string, cb: () => void) => resizeHandlers.set(name, cb) },
     tokenObjects: new Map([[previous.turnSeat, token]]),
     spacePositions: new Map(previous.board.spaces.map(({ id, x, y }) => [id, { x, y }])),
     scene: { isActive: () => true },
-    game: { canvas: document.querySelector('canvas'), registry: { get: () => undefined } },
-    events: { once: (name: string, cb: () => void) => callbacks.set(name, cb) },
+    game: {
+      canvas: document.querySelector('canvas'),
+      registry: { get: () => undefined },
+      events: { on: vi.fn() },
+    },
+    events: { once: (name: string, cb: () => void) => callbacks.set(name, cb), on: vi.fn() },
     tweens: {
       add: vi.fn((config) => {
         tweenConfigs.push(config);
@@ -77,11 +97,28 @@ function setup(previous: GameState) {
         };
         for (const method of [graphic.setDepth, graphic.lineStyle, graphic.strokeCircle])
           method.mockReturnValue(graphic);
+        graphics.push(graphic);
         return graphic;
       },
     },
   }) as BoardScene;
-  return { scene, token, tweenConfigs, callbacks };
+  // Exercise renderBoard's real lifecycle and signature guard without drawing
+  // the map in jsdom (the browser cases cover the actual endpoint redraw).
+  const commit = (state: GameState) => {
+    const internal = scene as unknown as {
+      renderBoard(state: GameState): void;
+      renderSignature: string;
+    };
+    internal.renderSignature = JSON.stringify([
+      state.config.seed,
+      state.turnSeat,
+      state.phase.kind === 'chooseBranch' ? state.phase.options : null,
+      state.towns.map((town) => [town.spaceId, town.owner, town.value]),
+      state.players.map((player) => [player.pos, player.classId, !!player.prank]),
+    ]);
+    internal.renderBoard(state);
+  };
+  return { scene, token, tweenConfigs, callbacks, graphics, resizeHandlers, commit };
 }
 
 beforeEach(() => {
@@ -187,8 +224,8 @@ describe('real local BoardScene playback', () => {
     async (policy) => {
       if (policy === 'speed zero') window.diceBanditsSpeed = 0;
       else vi.stubGlobal('matchMedia', () => ({ matches: true }));
-      const { previous, events } = fixture();
-      const { scene, token, tweenConfigs } = setup(previous);
+      const { previous, next, events } = fixture();
+      const { scene, token, tweenConfigs, commit } = setup(previous);
       const counts: number[] = [];
       await scene.playEvents(events, { onStep: (count: number) => counts.push(count) });
       expect(counts).toEqual([4, 3, 2, 1, 0]);
@@ -198,6 +235,66 @@ describe('real local BoardScene playback', () => {
         (s) => s.id === events.filter((e) => e.type === 'Moved').at(-1)!.params.to,
       )!;
       expect({ x: token.x, y: token.y }).toEqual({ x: final.x, y: final.y });
+      commit(next);
+      const painted = new Promise<{ count?: string | null; arrival?: string | null }>((resolve) =>
+        requestAnimationFrame(() => {
+          resolve({
+            count: find('movement-remaining')?.textContent,
+            arrival: find('movement-arrival')?.textContent,
+          });
+        }),
+      );
+      await vi.advanceTimersToNextFrame();
+      const frame = await painted;
+      expect(frame.count).toBe('0 spaces left');
+      expect(frame.arrival).toContain(`Arrived at space ${final.id}`);
+      expect(vi.getTimerCount()).toBe(0);
+      // A later view is not the presentation's own authoritative commit.
+      commit(next);
+      expect(find('movement-readout')).toBeNull();
+    },
+  );
+  it.each(['pointerdown', 'keydown'])('clears static feedback on superseding %s', async (type) => {
+    window.diceBanditsSpeed = 0;
+    const { previous, next, events } = fixture();
+    const { scene, commit } = setup(previous);
+    await scene.playEvents(events);
+    commit(next);
+    expect(find('movement-remaining')?.textContent).toBe('0 spaces left');
+    document.querySelector('#roll')!.dispatchEvent(new Event(type, { bubbles: true }));
+    expect(find('movement-readout')).toBeNull();
+  });
+  it.each([100, 350, 2100, 2400])(
+    'real resize handler settles hop/pause/highlight/card at %i ms',
+    async (at) => {
+      const { previous, events } = fixture();
+      const { scene, token, tweenConfigs, graphics, resizeHandlers } = setup(previous);
+      scene.create();
+      Object.assign(scene, { wholeMap: false });
+      const counts: number[] = [];
+      let settled = false;
+      const promise = scene
+        .playEvents(
+          events.filter((e) => e.type === 'Moved'),
+          {
+            onStep: (remaining) => counts.push(remaining),
+          },
+        )
+        .then(() => {
+          settled = true;
+        });
+      await vi.advanceTimersByTimeAsync(at);
+      expect(settled).toBe(false);
+      resizeHandlers.get('resize')!();
+      await promise;
+      expect(settled).toBe(true);
+      expect(find('movement-readout')).toBeNull();
+      expect(graphics.every((graphic) => graphic.destroy.mock.calls.length > 0)).toBe(true);
+      expect((scene as unknown as { cameraMovement?: unknown }).cameraMovement).toBeUndefined();
+      const snapshot = { counts: [...counts], tweens: tweenConfigs.length, x: token.x, y: token.y };
+      await vi.runAllTimersAsync();
+      expect({ counts, tweens: tweenConfigs.length, x: token.x, y: token.y }).toEqual(snapshot);
+      expect(vi.getTimerCount()).toBe(0);
     },
   );
   it('rejects invalid/duplicate steps and never treats a paused fork as an arrival', async () => {

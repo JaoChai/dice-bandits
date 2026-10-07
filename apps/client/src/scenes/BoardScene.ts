@@ -35,6 +35,7 @@ export default class BoardScene extends Phaser.Scene {
   private onlineMovement: ReturnType<typeof createMovementOverlay> | undefined;
   private movementReadout?: ReturnType<typeof createMovementReadout>;
   private localRevision = 0;
+  private staticMovementCommit?: { source: GameState; seat: number; to: number };
   private localWaits = new Set<() => void>();
   private cameraMovement?: Phaser.Tweens.Tween;
   private latestMovementGeneration: number | undefined;
@@ -131,6 +132,7 @@ export default class BoardScene extends Phaser.Scene {
     this.cameras.main.setScroll(0, 0);
     const onState = (state: GameState): void => this.renderBoard(state);
     const onResize = (): void => {
+      this.cancelLocalMovement();
       this.cancelOnlineMovement();
       this.applyViewports();
       if (!this.latestState) return;
@@ -209,12 +211,18 @@ export default class BoardScene extends Phaser.Scene {
 
   /** Settle every hop/pause on superseding state or exit, without a stale continuation. */
   cancelLocalMovement(): void {
+    this.finishLocalMovement(false);
+  }
+
+  /** Static feedback has no clock: preserve it only for its own commit. */
+  private finishLocalMovement(keepReadout: boolean): void {
+    this.staticMovementCommit = undefined;
     this.localRevision = (this.localRevision ?? 0) + 1;
     for (const cancel of this.localWaits ?? []) cancel();
     this.localWaits?.clear();
     this.cameraMovement?.remove();
     this.cameraMovement = undefined;
-    this.movementReadout?.clear();
+    if (!keepReadout) this.movementReadout?.clear();
   }
 
   async playEvents(
@@ -238,6 +246,7 @@ export default class BoardScene extends Phaser.Scene {
         : 'human');
     const plan = planMovement(previous, events, mode);
     let segmentIndex = 0;
+    let staticEndpoint: { seat: number; to: number } | undefined;
     // Cancellation resolves awaited work as well as removing timers/tweens.
     const pause = (ms: number): Promise<void> => {
       if (ms <= 0) return Promise.resolve();
@@ -286,7 +295,7 @@ export default class BoardScene extends Phaser.Scene {
             });
           } else token.setPosition(destination.x, destination.y);
           if (!current()) return;
-          this.movementReadout?.step(segment.remaining, segment.seat);
+          this.movementReadout?.step(segment.remaining, segment.seat, { static: speed === 0 });
           this.applyViewports();
           options?.onStep?.(segment.remaining, segment.seat);
           // One transient outline per actually reached tile, not a predicted route.
@@ -302,7 +311,7 @@ export default class BoardScene extends Phaser.Scene {
             if (segmentIndex === plan.segments.length && plan.landingSpace !== null) {
               await pause((mode === 'human' ? 180 : 0) * speed);
               if (!current()) return;
-              this.movementReadout?.land(plan.landingSpace, events);
+              this.movementReadout?.land(plan.landingSpace, events, { keepCounter: speed === 0 });
               await pause((mode === 'human' ? 650 : 250) * speed);
             }
           } finally {
@@ -317,8 +326,14 @@ export default class BoardScene extends Phaser.Scene {
           await pause(220 * speed);
         }
       }
+      const last = plan.segments.at(-1);
+      if (speed === 0 && last && segmentIndex === plan.segments.length)
+        staticEndpoint = { seat: last.seat, to: last.to };
     } finally {
-      if (current()) this.cancelLocalMovement();
+      if (current()) {
+        this.finishLocalMovement(!!staticEndpoint);
+        if (staticEndpoint) this.staticMovementCommit = { source: previous, ...staticEndpoint };
+      }
     }
   }
 
@@ -373,7 +388,17 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   private renderBoard(state: GameState): void {
-    this.cancelLocalMovement();
+    const pending = this.staticMovementCommit;
+    // Consume this one-shot receipt before redraw. Later views always clear,
+    // even if the endpoint is unchanged. Battle/exit never retain feedback.
+    const ownStaticCommit =
+      !!pending &&
+      pending.source === this.latestState &&
+      state.config.seed === pending.source.config.seed &&
+      state.players.find((player) => player.seat === pending.seat)?.pos === pending.to &&
+      state.phase.kind !== 'battle' &&
+      state.phase.kind !== 'gameOver';
+    this.finishLocalMovement(ownStaticCommit);
     this.cancelOnlineMovement();
     this.latestState = state;
     // BattleScene covers the stage. Rendering the large map beneath it adds
