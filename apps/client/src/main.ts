@@ -51,6 +51,7 @@ function destroyGame(): void {
   diceyGuide = undefined;
   closeSpaceInfo();
   clearForkArrows();
+  (game?.scene.getScene('BoardScene') as BoardScene | undefined)?.cancelOnlineMovement?.();
   game?.destroy(true);
   game = null;
 }
@@ -119,9 +120,18 @@ export function startOnlineGame(
   let previousTipState = firstView.state;
   let tipEvents: GameEvent[] = [];
   let tipsReady = false;
+  let movementGeneration = 0;
+  // OnlineController serializes one onEvents callback per received view. Keep
+  // receipt ownership in the same FIFO; queued work must never renew it.
+  const receivedMovementGenerations: number[] = [];
+  const cancelMovement = (): void => {
+    movementGeneration++;
+    (game?.scene.getScene('BoardScene') as BoardScene | undefined)?.cancelOnlineMovement?.();
+  };
 
   const dispatch = (action: Action): void => {
     if (!isCurrent() || presentationBusy) return;
+    cancelMovement();
     void controller.dispatch(action);
   };
   const renderOnlineHud = (): void => {
@@ -177,7 +187,9 @@ export function startOnlineGame(
     state: firstView.state,
     socket,
     onEvents: async (events, nextState) => {
+      const presentationGeneration = receivedMovementGenerations.shift();
       if (!isCurrent()) return;
+      const previous = controller.state;
       presentationBusy = true;
       guide.dismiss();
       tipEvents.push(...events);
@@ -200,12 +212,9 @@ export function startOnlineGame(
             }
           }
           if (!isCurrent()) return;
-          await Promise.all([
-            scene?.playEvents(events) ?? Promise.resolve(),
-            ownedGame?.scene.isActive('BattleScene')
-              ? (battleScene?.playEvents(events, testHooks.speed) ?? Promise.resolve())
-              : Promise.resolve(),
-          ]);
+          // Battle stays baseline until R2. Board cosmetics run after commit.
+          if (ownedGame?.scene.isActive('BattleScene'))
+            await battleScene?.playEvents(events, testHooks.speed);
         },
         () => {
           if (!isCurrent()) return;
@@ -219,6 +228,8 @@ export function startOnlineGame(
           } else if (ownedGame?.scene.isActive('BattleScene')) {
             scene?.scene.stop('BattleScene');
           }
+          if (presentationGeneration === movementGeneration)
+            scene?.presentOnlineMovement?.(previous, nextState, events, presentationGeneration);
           // OnlineController commits its new legal/view immediately after this
           // promise settles; only that handoff mounts the actionable next HUD.
         },
@@ -239,6 +250,8 @@ export function startOnlineGame(
   };
   const handleMessage = (message: ServerMsg): void => {
     if (!isCurrent()) return;
+    if (message.type === 'view' || message.type === 'events') cancelMovement();
+    if (message.type === 'view') receivedMovementGenerations.push(movementGeneration);
     if (message.type === 'error') {
       if (message.key === 'online.error.notFound') {
         clearSession(session.code);
@@ -254,6 +267,7 @@ export function startOnlineGame(
   };
   const handleStatus = (status: RoomSocketStatus): void => {
     if (!isCurrent()) return;
+    cancelMovement();
     controller.setSocketStatus(status);
     if (app.querySelector('[data-testid="screen-board"]')) renderOnlineHud();
   };
@@ -267,6 +281,7 @@ export function startOnlineGame(
     },
   });
 
+  receivedMovementGenerations.push(movementGeneration);
   void controller.handleMessage(firstView).then(() => {
     if (!isCurrent()) return;
     if (controller.state.phase.kind === 'gameOver') {

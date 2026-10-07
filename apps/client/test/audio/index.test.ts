@@ -96,7 +96,7 @@ describe('audio public API', () => {
     expect(h.fetcher.requests).toEqual([]);
     expect(h.fake.sources.length).toBe(0);
     expect(h.fake.resumeCalls).toBe(0);
-    expect(getAudioSettings()).toEqual({ muted: false, music: 0.5, sfx: 0.8 });
+    expect(getAudioSettings()).toEqual({ muted: false, music: 0.2, sfx: 0.6 });
   });
 
   it('unlocks once on the first pointerdown and starts the desired music', async () => {
@@ -150,7 +150,7 @@ describe('audio public API', () => {
       setAudioSettings({ muted: true });
     }).not.toThrow();
     await flushAudio();
-    expect(getAudioSettings()).toEqual({ muted: true, music: 0.5, sfx: 0.8 });
+    expect(getAudioSettings()).toEqual({ muted: true, music: 0.2, sfx: 0.6 });
   });
 
   it('is a safe no-op everywhere when the context factory throws', async () => {
@@ -187,7 +187,7 @@ describe('audio public API', () => {
     const storage = memoryStorage();
     const h = harness({ storage });
     const updated = setAudioSettings({ muted: true, music: 0.2 });
-    expect(updated).toEqual({ muted: true, music: 0.2, sfx: 0.8 });
+    expect(updated).toEqual({ muted: true, music: 0.2, sfx: 0.6 });
     expect(getAudioSettings()).toEqual(updated);
     expect(storage.getItem('diceBandits.audio')).toBe(JSON.stringify(updated));
     h.fireOnBody('pointerdown');
@@ -394,7 +394,7 @@ describe('context constructor fallback', () => {
         value: originalWebkit,
       });
     }
-    expect(audio.getAudioSettings()).toEqual({ muted: true, music: 0.5, sfx: 0.8 });
+    expect(audio.getAudioSettings()).toEqual({ muted: true, music: 0.2, sfx: 0.6 });
   });
 
   it('contains internal playback failures so no API call or listener ever throws', async () => {

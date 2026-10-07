@@ -10,6 +10,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { OnlineController } from '../src/online/onlineController';
 import { renderHud } from '../src/ui/hud';
 
+const { fakeGame } = vi.hoisted(() => ({ fakeGame: vi.fn() }));
+vi.mock('phaser', () => ({
+  default: {
+    Game: class {
+      constructor() {
+        return fakeGame();
+      }
+    },
+    AUTO: 0,
+    Scale: { FIT: 0, CENTER_BOTH: 0 },
+  },
+}));
+vi.mock('../src/scenes/BootScene', () => ({ default: class {} }));
+vi.mock('../src/scenes/BoardScene', () => ({ default: class {} }));
+vi.mock('../src/scenes/BattleScene', () => ({ default: class {} }));
+
 const initialState = createGame({
   seed: 'online-controller-test',
   rounds: 12,
@@ -91,6 +107,193 @@ function makeController(
   });
   return { controller, socket };
 }
+
+describe('online main movement seam', () => {
+  it.each(['reconnect', 'newer-view'])(
+    'keeps queued authoritative commits but suppresses ghosts superseded by %s',
+    async (invalidation) => {
+      document.body.innerHTML = '<div id="app"></div>';
+      vi.resetModules();
+      const { startOnlineGame } = await import('../src/main');
+      const previous = createGame({
+        seed: 'movement-overlay',
+        rounds: 12,
+        seats: initialState.players.map((player) => ({
+          name: player.name,
+          classId: player.classId,
+          control: player.control,
+          personality: player.personality,
+        })),
+      });
+      const next = step(previous, { type: 'roll' });
+      expect(next.events.filter((event) => event.type === 'Moved')).toHaveLength(5);
+      let battleActive = false;
+      let releaseBattle!: () => void;
+      const board = {
+        presentOnlineMovement: vi.fn(),
+        cancelOnlineMovement: vi.fn(),
+        playEvents: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              releaseBattle = resolve;
+            }),
+        ),
+        scene: { launch: vi.fn(), stop: vi.fn() },
+      };
+      const mounted = {
+        destroy: vi.fn(),
+        registry: { set: vi.fn() },
+        events: { on: vi.fn(), emit: vi.fn() },
+        scene: { getScene: () => board, isActive: () => battleActive },
+      };
+      fakeGame.mockReturnValue(mounted);
+      let handlers!: import('../src/online/socket').RoomSocketHandlers;
+      const socket = {
+        send: vi.fn(),
+        close: vi.fn(),
+        setHandlers: (next: typeof handlers) => {
+          handlers = next;
+        },
+      };
+      const flush = async () => {
+        for (let i = 0; i < 60; i++) await Promise.resolve();
+      };
+      startOnlineGame(
+        socket,
+        { code: 'ABCDE', seat: 0, token: 'test', name: 'Human' },
+        view({ turn: 1, state: previous }),
+      );
+      await flush();
+      board.presentOnlineMovement.mockClear();
+      mounted.registry.set.mockClear();
+      try {
+        // Unchanged battle playback holds the queue before the next view's callback starts.
+        battleActive = true;
+        handlers.onMessage(view({ turn: 2, state: previous }));
+        await flush();
+        expect(board.playEvents).toHaveBeenCalledOnce();
+        handlers.onMessage({ type: 'events', turn: 3, events: next.events });
+        handlers.onMessage(
+          view({ turn: 3, state: next.state, legal: legalActions(next.state, 0) }),
+        );
+        if (invalidation === 'reconnect') {
+          handlers.onStatus('reconnecting');
+          handlers.onStatus('open');
+        } else {
+          handlers.onMessage(
+            view({ turn: 4, state: next.state, legal: legalActions(next.state, 0) }),
+          );
+        }
+        battleActive = false;
+        releaseBattle();
+        await flush();
+        expect(mounted.registry.set.mock.calls).toEqual([
+          ['state', previous],
+          ['state', next.state],
+          ...(invalidation === 'newer-view' ? [['state', next.state]] : []),
+        ]);
+        if (invalidation === 'reconnect') {
+          expect(board.presentOnlineMovement).not.toHaveBeenCalled();
+          // Only a view received after reconnect may schedule movement again.
+          handlers.onMessage({ type: 'events', turn: 4, events: next.events });
+          handlers.onMessage(
+            view({ turn: 4, state: next.state, legal: legalActions(next.state, 0) }),
+          );
+          await flush();
+        }
+        expect(board.presentOnlineMovement).toHaveBeenCalledOnce();
+        expect(board.presentOnlineMovement).toHaveBeenLastCalledWith(
+          next.state,
+          next.state,
+          invalidation === 'reconnect' ? next.events : [],
+          expect.any(Number),
+        );
+        const actions = document.querySelectorAll<HTMLButtonElement>(
+          '[data-action-index], [data-choice]',
+        );
+        expect(actions.length).toBeGreaterThan(0);
+        expect([...actions].every((action) => !action.disabled)).toBe(true);
+      } finally {
+        document.querySelector('#app')!.dispatchEvent(new Event('dice-bandits:menu-exit'));
+      }
+    },
+  );
+  it('commits views and enables legal actions before a delayed board tween; cancels on input/reconnect/exit', async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+    vi.resetModules();
+    const { startOnlineGame } = await import('../src/main');
+    const board = {
+      playEvents: vi.fn(() => new Promise<void>(() => undefined)),
+      presentOnlineMovement: vi.fn(),
+      cancelOnlineMovement: vi.fn(),
+    };
+    const commits: string[] = [];
+    const mounted = {
+      destroy: vi.fn(),
+      registry: { set: vi.fn() },
+      events: { on: vi.fn(), emit: vi.fn(() => commits.push('state')) },
+      scene: { getScene: () => board, isActive: () => false },
+    };
+    fakeGame.mockReturnValue(mounted);
+    let handlers!: import('../src/online/socket').RoomSocketHandlers;
+    const socket = {
+      send: vi.fn(),
+      close: vi.fn(),
+      setHandlers: (next: typeof handlers) => {
+        handlers = next;
+      },
+    };
+    const flush = async () => {
+      for (let i = 0; i < 40; i++) await Promise.resolve();
+    };
+    startOnlineGame(socket, { code: 'ABCDE', seat: 0, token: 'test', name: 'Human' }, view());
+    await flush();
+    vi.useFakeTimers();
+    try {
+      board.presentOnlineMovement.mockImplementation(() => {
+        commits.push('ghost');
+        setTimeout(() => commits.push('tween'), 120);
+      });
+      const next = structuredClone(initialState);
+      next.players[0]!.pos = 6;
+      const events: GameEvent[] = [{ type: 'Moved', seat: 0, params: { to: 6, remaining: 0 } }];
+      handlers.onMessage({ type: 'events', turn: 13, events });
+      handlers.onMessage(view({ turn: 13, state: next }));
+      await flush();
+      expect(board.playEvents).not.toHaveBeenCalled();
+      expect(mounted.registry.set).toHaveBeenLastCalledWith('state', next);
+      expect(commits.slice(-2)).toEqual(['state', 'ghost']);
+      expect(commits).not.toContain('tween');
+      expect(board.presentOnlineMovement).toHaveBeenLastCalledWith(
+        initialState,
+        next,
+        events,
+        expect.any(Number),
+      );
+      const action = document.querySelector<HTMLButtonElement>('[data-testid="action-endTurn"]')!;
+      expect(action.disabled).toBe(false);
+      action.click();
+      expect(socket.send).toHaveBeenCalledOnce();
+      expect(board.cancelOnlineMovement).toHaveBeenCalled();
+      board.cancelOnlineMovement.mockClear();
+      handlers.onStatus('reconnecting');
+      expect(board.cancelOnlineMovement).toHaveBeenCalledOnce();
+      handlers.onMessage(view({ turn: 14, state: next }));
+      await flush();
+      expect(board.presentOnlineMovement).toHaveBeenLastCalledWith(
+        next,
+        next,
+        [],
+        expect.any(Number),
+      );
+      document.querySelector('#app')!.dispatchEvent(new Event('dice-bandits:menu-exit'));
+      expect(mounted.destroy).toHaveBeenCalledWith(true);
+      expect(board.cancelOnlineMovement.mock.calls.length).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('OnlineController', () => {
   it.each([true, false])(

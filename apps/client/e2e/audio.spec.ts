@@ -14,6 +14,35 @@ function watchErrors(page: Page): { consoleErrors: string[]; pageErrors: string[
   return { consoleErrors, pageErrors };
 }
 
+test('fresh sound settings use quieter gains', async ({ page }, info) => {
+  await page.goto('/?seed=e2e-audio-defaults&speed=0');
+  await page.locator('[data-testid="audio-settings"]').click();
+  await expect(page.getByTestId('audio-music-volume')).toHaveValue('20');
+  await expect(page.getByTestId('audio-sfx-volume')).toHaveValue('60');
+  await expect(page.getByTestId('audio-mute')).not.toBeChecked();
+  expect(await page.evaluate(() => localStorage.getItem('diceBandits.audio'))).toBeNull();
+  await page.screenshot({ path: info.outputPath('fresh-audio.png') });
+});
+
+test('existing saved gains and mute survive a reload unchanged', async ({ page }, info) => {
+  await page.goto('/?seed=e2e-audio-saved&speed=0');
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'diceBandits.audio',
+      JSON.stringify({ muted: true, music: 0.5, sfx: 0.8 }),
+    );
+  });
+  await page.reload();
+  await page.getByTestId('audio-settings').click();
+  await expect(page.getByTestId('audio-music-volume')).toHaveValue('50');
+  await expect(page.getByTestId('audio-sfx-volume')).toHaveValue('80');
+  await expect(page.getByTestId('audio-mute')).toBeChecked();
+  expect(
+    JSON.parse((await page.evaluate(() => localStorage.getItem('diceBandits.audio'))) ?? '{}'),
+  ).toEqual({ muted: true, music: 0.5, sfx: 0.8 });
+  await page.screenshot({ path: info.outputPath('saved-audio.png') });
+});
+
 test('sound settings persist across a reload', async ({ page }) => {
   await page.goto('/?seed=e2e-audio-settings&speed=0');
   await page.locator('[data-testid="audio-settings"]').click();

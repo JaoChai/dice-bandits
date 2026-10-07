@@ -6,7 +6,7 @@ import {
   saveAudioSettings,
 } from '../../src/audio/settings';
 
-const defaults = { muted: false, music: 0.5, sfx: 0.8 };
+const defaults = { muted: false, music: 0.2, sfx: 0.6 };
 
 function memoryStorage(): Pick<Storage, 'getItem' | 'setItem'> {
   const values = new Map<string, string>();
@@ -19,6 +19,29 @@ function memoryStorage(): Pick<Storage, 'getItem' | 'setItem'> {
 }
 
 describe('audio settings persistence', () => {
+  it('gives fresh storage quieter defaults without writing a migration', () => {
+    const storage = memoryStorage();
+    expect(loadAudioSettings(storage)).toEqual(defaults);
+    expect(storage.getItem(AUDIO_SETTINGS_KEY)).toBeNull();
+  });
+
+  it('preserves the old saved gains and mute setting exactly', () => {
+    const storage = memoryStorage();
+    const saved = { muted: true, music: 0.5, sfx: 0.8 };
+    storage.setItem(AUDIO_SETTINGS_KEY, JSON.stringify(saved));
+    expect(loadAudioSettings(storage)).toEqual(saved);
+    expect(storage.getItem(AUDIO_SETTINGS_KEY)).toBe(JSON.stringify(saved));
+  });
+
+  it('falls back for missing or non-finite music while preserving valid SFX', () => {
+    for (const saved of ['{"sfx":0.8}', '{"music":1e999,"sfx":0.8}']) {
+      expect(loadAudioSettings({ getItem: () => saved })).toEqual({
+        muted: false,
+        music: 0.2,
+        sfx: 0.8,
+      });
+    }
+  });
   it('returns the defaults when storage is explicitly unavailable', () => {
     expect(AUDIO_SETTINGS_KEY).toBe('diceBandits.audio');
     expect(DEFAULT_AUDIO_SETTINGS).toEqual(defaults);
@@ -42,7 +65,7 @@ describe('audio settings persistence', () => {
     expect(loadAudioSettings({ getItem: () => '{"muted":true,"music":7,"sfx":"x"}' })).toEqual({
       muted: true,
       music: 1,
-      sfx: 0.8,
+      sfx: 0.6,
     });
   });
 
@@ -50,11 +73,11 @@ describe('audio settings persistence', () => {
     expect(loadAudioSettings({ getItem: () => '{"music":0,"sfx":null}' })).toEqual({
       muted: false,
       music: 0,
-      sfx: 0.8,
+      sfx: 0.6,
     });
     expect(loadAudioSettings({ getItem: () => '{"muted":"yes","sfx":-5}' })).toEqual({
       muted: false,
-      music: 0.5,
+      music: 0.2,
       sfx: 0,
     });
   });
