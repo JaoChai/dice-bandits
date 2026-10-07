@@ -285,7 +285,13 @@ describe('BoardScene movement destinations', () => {
       previous.board.spaces.find((space) => space.id === event.params.to)!,
     );
     expect(walks.map(({ x, y, duration }) => ({ x, y, duration }))).toEqual(
-      speed > 0 ? destinations.map(({ x, y }) => ({ x, y, duration: 200 })) : [],
+      speed > 0
+        ? destinations.map(({ x, y }) => ({
+            x,
+            y,
+            duration: previous.players[mover.seat]!.control === 'human' ? 280 : 120,
+          }))
+        : [],
     );
     const endpoint = next.board.spaces.find((space) => space.id === next.players[mover.seat]!.pos)!;
     expect({ x: token.x, y: token.y }).toEqual({ x: endpoint.x, y: endpoint.y });

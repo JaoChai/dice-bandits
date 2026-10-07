@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { GameState, GameEvent } from '@dice-bandits/engine';
-import { coinBurst, dice, dustPuff, shake } from '../fx';
+import { coinBurst, dice, shake } from '../fx';
 import { reducedMotion, motionScale } from '../art/motion';
 import { seatColors, seatTint } from '../art/colors';
 import { createHeroToken, tokenLayout } from './board/tokens';
@@ -13,6 +13,7 @@ import { clearForkArrows, drawForkArrows } from './board/forkArrows';
 import { drawAmbients } from './board/ambient';
 import { bindSpaceTaps } from './board/spaceTaps';
 import { closeSpaceInfo } from '../ui/spaceInfo';
+import { createMovementReadout } from '../ui/movementReadout';
 import { t } from '../i18n';
 import { planMovement } from './board/movementPlan';
 import { createMovementOverlay } from './board/movementOverlay';
@@ -32,6 +33,10 @@ export default class BoardScene extends Phaser.Scene {
   private ringTween: Phaser.Tweens.Tween | null = null;
   private latestState: GameState | null = null;
   private onlineMovement: ReturnType<typeof createMovementOverlay> | undefined;
+  private movementReadout?: ReturnType<typeof createMovementReadout>;
+  private localRevision = 0;
+  private localWaits = new Set<() => void>();
+  private cameraMovement?: Phaser.Tweens.Tween;
   private latestMovementGeneration: number | undefined;
   private backdropCamera: Phaser.Cameras.Scene2D.Camera | null = null;
 
@@ -136,8 +141,17 @@ export default class BoardScene extends Phaser.Scene {
     };
     this.scale.on('resize', onResize);
     this.game.events.on('game-state', onState);
-    this.events.once('destroy', () => this.cancelOnlineMovement());
+    const destroyReadout = (): void => {
+      this.cancelLocalMovement();
+      this.movementReadout?.destroy();
+      this.movementReadout = undefined;
+    };
+    this.events.once('destroy', () => {
+      destroyReadout();
+      this.cancelOnlineMovement();
+    });
     this.events.once('shutdown', () => {
+      destroyReadout();
       this.cancelOnlineMovement();
       this.scale.off('resize', onResize);
       this.events.off('addedtoscene', onAdded);
@@ -193,45 +207,118 @@ export default class BoardScene extends Phaser.Scene {
     this.onlineMovement = undefined;
   }
 
-  async playEvents(events: GameEvent[]): Promise<void> {
-    const speed = window.diceBanditsSpeed;
-    for (const event of events) {
-      const token = event.seat === null ? undefined : this.tokenObjects.get(event.seat);
-      if (event.type === 'DiceRolled' && token) {
-        dice(this, token, speed);
-        await wait(350 * speed);
-      } else if (event.type === 'Moved' && token) {
-        const destination = this.spacePositions.get(Number(event.params.to));
-        if (destination) {
-          const movingLeft = destination.x < token.x;
-          token.setFlipX(movingLeft);
+  /** Settle every hop/pause on superseding state or exit, without a stale continuation. */
+  cancelLocalMovement(): void {
+    this.localRevision = (this.localRevision ?? 0) + 1;
+    for (const cancel of this.localWaits ?? []) cancel();
+    this.localWaits?.clear();
+    this.cameraMovement?.remove();
+    this.cameraMovement = undefined;
+    this.movementReadout?.clear();
+  }
+
+  async playEvents(
+    events: GameEvent[],
+    options?: { mode?: 'human' | 'bot'; onStep?: (remaining: number, seat: number) => void },
+  ): Promise<void> {
+    this.cancelLocalMovement();
+    const revision = this.localRevision;
+    const current = (): boolean => this.localRevision === revision;
+    this.localWaits ??= new Set();
+    const previous = this.latestState;
+    if (!previous) return;
+    const root = this.game.canvas?.closest<HTMLElement>('#app');
+    if (root && !this.movementReadout) this.movementReadout = createMovementReadout(root);
+    const speed = reducedMotion() ? 0 : Math.max(0, motionScale());
+    const seat = events.find((event) => event.type === 'Moved')?.seat;
+    const mode =
+      options?.mode ??
+      (previous.players.find((player) => player.seat === seat)?.control === 'bot'
+        ? 'bot'
+        : 'human');
+    const plan = planMovement(previous, events, mode);
+    let segmentIndex = 0;
+    // Cancellation resolves awaited work as well as removing timers/tweens.
+    const pause = (ms: number): Promise<void> => {
+      if (ms <= 0) return Promise.resolve();
+      return new Promise((resolve) => {
+        const finish = (): void => {
+          window.clearTimeout(timer);
+          this.localWaits.delete(finish);
+          resolve();
+        };
+        const timer = window.setTimeout(finish, ms);
+        this.localWaits.add(finish);
+      });
+    };
+    try {
+      for (const event of events) {
+        if (!current()) return;
+        const token = event.seat === null ? undefined : this.tokenObjects.get(event.seat);
+        if (event.type === 'DiceRolled' && token) {
+          dice(this, token, speed);
+          await pause(350 * speed);
+        } else if (event.type === 'Moved') {
+          const segment = plan.segments[segmentIndex];
+          if (!segment || event.seat !== segment.seat || event.params.to !== segment.to) continue;
+          segmentIndex++;
+          const destination = this.spacePositions.get(segment.to);
+          if (!token || !destination) continue;
+          token.setFlipX(destination.x < token.x);
+          this.panCameraTo(destination.x, destination.y, segment.hopMs * speed);
           if (speed > 0) {
             await new Promise<void>((resolve) => {
-              this.tweens.add({
+              const handle: { tween?: Phaser.Tweens.Tween } = {};
+              const finish = (): void => {
+                handle.tween?.remove();
+                this.localWaits.delete(finish);
+                resolve();
+              };
+              handle.tween = this.tweens.add({
                 targets: token,
                 x: destination.x,
                 y: destination.y,
-                duration: 200 * speed,
+                duration: segment.hopMs * speed,
                 ease: 'Sine.easeInOut',
-                onComplete: () => {
-                  dustPuff(this, destination.x, destination.y, speed);
-                  resolve();
-                },
+                onComplete: finish,
               });
+              this.localWaits.add(finish);
             });
-          } else {
-            token.setPosition(destination.x, destination.y);
+          } else token.setPosition(destination.x, destination.y);
+          if (!current()) return;
+          this.movementReadout?.step(segment.remaining, segment.seat);
+          this.applyViewports();
+          options?.onStep?.(segment.remaining, segment.seat);
+          // One transient outline per actually reached tile, not a predicted route.
+          const ring = speed > 0 ? this.add.graphics().setDepth(19) : undefined;
+          ring?.lineStyle(4, 0xf5c51c, 0.9).strokeCircle(destination.x, destination.y, 34);
+          const removeRing = (): void => {
+            ring?.destroy();
+          };
+          this.localWaits.add(removeRing);
+          try {
+            await pause(segment.holdMs * speed);
+            if (!current()) return;
+            if (segmentIndex === plan.segments.length && plan.landingSpace !== null) {
+              await pause((mode === 'human' ? 180 : 0) * speed);
+              if (!current()) return;
+              this.movementReadout?.land(plan.landingSpace, events);
+              await pause((mode === 'human' ? 650 : 250) * speed);
+            }
+          } finally {
+            this.localWaits.delete(removeRing);
+            removeRing();
           }
-          // The camera tails the mover while walking (spec §7).
-          this.panCameraTo(token.x, token.y);
+        } else if (event.type === 'GoldStolen' && token) {
+          coinBurst(this, token, speed);
+          await pause(360 * speed);
+        } else if (event.type === 'FrenzyStarted') {
+          shake(this, speed);
+          await pause(220 * speed);
         }
-      } else if (event.type === 'GoldStolen' && token) {
-        coinBurst(this, token, speed);
-        await wait(360 * speed);
-      } else if (event.type === 'FrenzyStarted') {
-        shake(this, speed);
-        await wait(220 * speed);
       }
+    } finally {
+      if (current()) this.cancelLocalMovement();
     }
   }
 
@@ -264,9 +351,10 @@ export default class BoardScene extends Phaser.Scene {
     });
   }
 
-  private panCameraTo(x: number, y: number): void {
+  private panCameraTo(x: number, y: number, duration?: number): void {
     const camera = this.cameras.main;
     if (this.wholeMap) return;
+    this.cameraMovement?.remove();
     // Review 7b: Phaser's centerOn is scrollX = x - width*0.5 (zoom is
     // applied about the camera centre). Tween to exactly that — the old
     // width/(2*zoom) formula landed ~71 px off-centre, and the fake
@@ -275,16 +363,17 @@ export default class BoardScene extends Phaser.Scene {
       camera.centerOn(x, y);
       return;
     }
-    this.tweens.add({
+    this.cameraMovement = this.tweens.add({
       targets: camera,
       scrollX: x - camera.width * 0.5,
       scrollY: y - camera.height * 0.5,
-      duration: 200 * motionScale(),
-      ease: 'Sine.easeOut',
+      duration: duration ?? 200 * motionScale(),
+      ease: duration === undefined ? 'Sine.easeOut' : 'Sine.easeInOut',
     });
   }
 
   private renderBoard(state: GameState): void {
+    this.cancelLocalMovement();
     this.cancelOnlineMovement();
     this.latestState = state;
     // BattleScene covers the stage. Rendering the large map beneath it adds
@@ -413,10 +502,4 @@ export default class BoardScene extends Phaser.Scene {
 
   /** Zoom used by the E2E tile-size assertion (spec: ≥ 48 CSS px tiles). */
   static gameplayZoom = gameplayZoom;
-}
-
-function wait(duration: number): Promise<void> {
-  return duration <= 0
-    ? Promise.resolve()
-    : new Promise((resolve) => window.setTimeout(resolve, duration));
 }

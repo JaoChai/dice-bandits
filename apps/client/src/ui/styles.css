@@ -2336,3 +2336,50 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     padding-right: calc(184px + env(safe-area-inset-right, 0px));
   }
 }
+
+/* M1 movement: reuse the non-interactive event lane, leaving the map, right
+   rail and action/dialog lanes untouched. All chrome uses the approved tokens. */
+.movement-readout {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2px 4px;
+  pointer-events: none;
+  color: var(--c-cocoa);
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.game-topline:has(.movement-readout) .event-banner {
+  display: none;
+}
+.movement-remaining {
+  border: 2px solid var(--c-gold);
+  border-radius: var(--t-radius);
+  padding: 2px 12px;
+  background: var(--c-cocoa);
+  color: var(--c-cream);
+  font-weight: 600;
+}
+.movement-arrival {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 12px;
+  padding: 2px 10px;
+  border: 2px solid var(--c-gold);
+  border-radius: var(--t-radius);
+  background: var(--c-cream);
+  box-shadow: var(--t-shadow);
+}
+/* A real blocking dialog/battle always wins; this is never a second dialog. */
+#app:has(.dialog-shade) .movement-readout,
+.battle-mode .movement-readout {
+  display: none;
+}
+#app:has(.dialog-shade) .game-topline:has(.movement-readout) .event-banner {
+  display: flex;
+}
