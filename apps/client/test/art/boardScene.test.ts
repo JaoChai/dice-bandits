@@ -1,4 +1,11 @@
-import { createGame, MAP, type GameState } from '@dice-bandits/engine';
+import {
+  chooseAction,
+  createGame,
+  legalActions,
+  MAP,
+  step,
+  type GameState,
+} from '@dice-bandits/engine';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reducedMotion } from '../../src/art/motion';
 
@@ -212,6 +219,81 @@ beforeEach(() => {
   vi.mocked(reducedMotion).mockReturnValue(false);
   document.querySelectorAll('[data-testid^="fork-arrow-"]').forEach((marker) => marker.remove());
   delete (window as { __phaser_probe__?: unknown }).__phaser_probe__;
+});
+
+/** Rebuild the study route using only legal engine actions, not copied state. */
+function fiveStepWalk() {
+  let state = createGame({
+    seed: 'm6-study-1',
+    rounds: 30,
+    seats: [
+      { name: 'Sir Bram', classId: 'knight', control: 'human', personality: null },
+      { name: 'Mint', classId: 'thief', control: 'bot', personality: 'greedy' },
+    ],
+  });
+  for (let action = 0; action < 1200; action++) {
+    const actor = state.players.find((player) => legalActions(state, player.seat).length > 0)!;
+    const result = step(state, chooseAction(state, actor.seat));
+    const moves = result.events.filter((event) => event.type === 'Moved');
+    if (moves.length === 5) return { previous: state, next: result.state, moves };
+    state = result.state;
+  }
+  throw new Error('No legal five-step walk found');
+}
+
+describe('BoardScene movement destinations', () => {
+  it('indexes every board space independently of occupied token offsets', () => {
+    const { scene } = makeScene();
+    const { previous } = fiveStepWalk();
+    scene.renderBoard(previous);
+    const positions = (
+      scene as unknown as { spacePositions: Map<number, { x: number; y: number }> }
+    ).spacePositions;
+    expect([...positions]).toEqual(previous.board.spaces.map(({ id, x, y }) => [id, { x, y }]));
+  });
+
+  it.each([1, 0])('plays five empty destinations in order at speed %s', async (speed) => {
+    window.diceBanditsSpeed = speed;
+    const { scene } = makeScene();
+    const { previous, next, moves } = fiveStepWalk();
+    expect(moves.map((event) => event.params.to)).toEqual([6, 7, 8, 9, 10]);
+    expect(
+      moves.every((event) => !previous.players.some((player) => player.pos === event.params.to)),
+    ).toBe(true);
+    scene.renderBoard(previous);
+    const mover = previous.players[moves[0]!.seat!]!;
+    const source = previous.board.spaces.find((space) => space.id === mover.pos)!;
+    const token = { x: source.x, y: source.y, setFlipX: vi.fn(), setPosition: vi.fn() };
+    token.setPosition.mockImplementation((x: number, y: number) => Object.assign(token, { x, y }));
+    const live = scene as unknown as {
+      tokenObjects: Map<number, typeof token>;
+      playEvents: InstanceType<typeof BoardScene>['playEvents'];
+    };
+    live.tokenObjects.set(mover.seat, token);
+    scene.tweens.add.mockClear();
+    scene.tweens.add.mockImplementation((config) => {
+      if (config.targets === token) {
+        Object.assign(token, { x: config.x, y: config.y });
+        config.onComplete();
+      }
+    });
+    await live.playEvents(moves);
+    const walks = scene.tweens.add.mock.calls
+      .map(([config]) => config)
+      .filter((config) => config.targets === token);
+    const destinations = moves.map((event) =>
+      previous.board.spaces.find((space) => space.id === event.params.to)!,
+    );
+    expect(walks.map(({ x, y, duration }) => ({ x, y, duration }))).toEqual(
+      speed > 0 ? destinations.map(({ x, y }) => ({ x, y, duration: 200 })) : [],
+    );
+    const endpoint = next.board.spaces.find((space) => space.id === next.players[mover.seat]!.pos)!;
+    expect({ x: token.x, y: token.y }).toEqual({ x: endpoint.x, y: endpoint.y });
+    if (speed === 0) {
+      expect(scene.tweens.add).not.toHaveBeenCalled();
+      expect(token.setPosition.mock.calls).toEqual(destinations.map(({ x, y }) => [x, y]));
+    }
+  });
 });
 
 describe('BoardScene layering', () => {

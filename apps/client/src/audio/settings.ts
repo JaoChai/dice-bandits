@@ -8,8 +8,8 @@ export const AUDIO_SETTINGS_KEY = 'diceBandits.audio';
 
 export const DEFAULT_AUDIO_SETTINGS: Readonly<AudioSettings> = {
   muted: false,
-  music: 0.5,
-  sfx: 0.8,
+  music: 0.2,
+  sfx: 0.6,
 };
 
 function volume(value: unknown, fallback: number): number {

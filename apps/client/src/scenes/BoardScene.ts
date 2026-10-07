@@ -295,6 +295,10 @@ export default class BoardScene extends Phaser.Scene {
 
     // Layer 3: town buildings by value tier, then space tiles.
     const spaceById = new Map(state.board.spaces.map((space) => [space.id, space]));
+    // Movement destinations include empty spaces; shared-token offsets below
+    // belong only to token placement, never to this authoritative lookup.
+    for (const space of state.board.spaces)
+      this.spacePositions.set(space.id, { x: space.x, y: space.y });
     drawBuildings(this, state.towns, (spaceId) => {
       const at = spaceById.get(spaceId);
       return at ? { x: at.x, y: at.y } : undefined;
@@ -309,7 +313,6 @@ export default class BoardScene extends Phaser.Scene {
     for (const [playerIndex, player] of state.players.entries()) {
       const space = state.board.spaces.find((candidate) => candidate.id === player.pos);
       if (!space) continue;
-      this.spacePositions.set(player.pos, { x: space.x, y: space.y });
       const x = space.x + offsets[playerIndex]!.x;
       const y = space.y + offsets[playerIndex]!.y;
       const token = createHeroToken(this, player.classId, x, y);
