@@ -39,24 +39,42 @@ async function start(page: Page, state = saved(), options = mode): Promise<void>
   await page.waitForFunction(() => window.__db?.art.boardReady);
   await installTrace(page);
 }
-async function installTrace(page: Page): Promise<void> {
-  await page.evaluate(() => {
+async function installTrace(page: Page, online = false): Promise<void> {
+  await page.evaluate((online) => {
     const probe = window as ProbeWindow;
     probe.__diceTrace = [];
     probe.__diceStages = [];
     const board = probe.__m5aGame.scene.getScene('BoardScene') as Phaser.Scene & {
       playEvents(events: GameEvent[]): Promise<void>;
+      presentOnlineMovement(
+        previous: GameState,
+        next: GameState,
+        events: readonly GameEvent[],
+        generation: number,
+      ): void;
     };
-    const play = board.playEvents.bind(board);
-    board.playEvents = (events) => {
+    const record = (events: readonly GameEvent[]) => {
       probe.__diceTrace.push({
         at: performance.now(),
         stage:
           document.querySelector<HTMLElement>('[data-testid="dice-roll"]')?.dataset.stage ?? null,
-        events: structuredClone(events),
+        events: structuredClone([...events]),
       });
-      return play(events);
     };
+    if (online) {
+      // Online movement now starts after the authoritative view commit, detached.
+      const present = board.presentOnlineMovement.bind(board);
+      board.presentOnlineMovement = (previous, next, events, generation) => {
+        record(events);
+        return present(previous, next, events, generation);
+      };
+    } else {
+      const play = board.playEvents.bind(board);
+      board.playEvents = (events) => {
+        record(events);
+        return play(events);
+      };
+    }
     let last = '';
     new MutationObserver(() => {
       const stage =
@@ -71,7 +89,7 @@ async function installTrace(page: Page): Promise<void> {
       attributes: true,
       attributeFilter: ['data-stage'],
     });
-  });
+  }, online);
 }
 async function trace(page: Page) {
   return page.evaluate(() => ({
@@ -252,7 +270,7 @@ test('real online roll at normal speed has static badge and no added dice wait',
     await expect(guest.getByTestId('screen-lobby')).toBeVisible();
     await page.getByTestId('lobby-start').click();
     await page.waitForFunction(() => window.__db?.art.boardReady);
-    await installTrace(page);
+    await installTrace(page, true);
     await page.getByTestId('action-roll').click();
     await expect(page.getByTestId('last-roll-chip')).toBeVisible();
     await expect(page.getByTestId('dice-roll')).toHaveAttribute('data-stage', 'result');
