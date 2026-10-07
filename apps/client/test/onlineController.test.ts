@@ -10,6 +10,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { OnlineController } from '../src/online/onlineController';
 import { renderHud } from '../src/ui/hud';
 
+const { fakeGame } = vi.hoisted(() => ({ fakeGame: vi.fn() }));
+vi.mock('phaser', () => ({
+  default: {
+    Game: class {
+      constructor() {
+        return fakeGame();
+      }
+    },
+    AUTO: 0,
+    Scale: { FIT: 0, CENTER_BOTH: 0 },
+  },
+}));
+vi.mock('../src/scenes/BootScene', () => ({ default: class {} }));
+vi.mock('../src/scenes/BoardScene', () => ({ default: class {} }));
+vi.mock('../src/scenes/BattleScene', () => ({ default: class {} }));
+
 const initialState = createGame({
   seed: 'online-controller-test',
   rounds: 12,
@@ -91,6 +107,83 @@ function makeController(
   });
   return { controller, socket };
 }
+
+describe('online main movement seam', () => {
+  it('commits views and enables legal actions before a delayed board tween; cancels on input/reconnect/exit', async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+    const { startOnlineGame } = await import('../src/main');
+    const board = {
+      playEvents: vi.fn(() => new Promise<void>(() => undefined)),
+      presentOnlineMovement: vi.fn(),
+      cancelOnlineMovement: vi.fn(),
+    };
+    const commits: string[] = [];
+    const mounted = {
+      destroy: vi.fn(),
+      registry: { set: vi.fn() },
+      events: { on: vi.fn(), emit: vi.fn(() => commits.push('state')) },
+      scene: { getScene: () => board, isActive: () => false },
+    };
+    fakeGame.mockReturnValue(mounted);
+    let handlers!: import('../src/online/socket').RoomSocketHandlers;
+    const socket = {
+      send: vi.fn(),
+      close: vi.fn(),
+      setHandlers: (next: typeof handlers) => {
+        handlers = next;
+      },
+    };
+    const flush = async () => {
+      for (let i = 0; i < 40; i++) await Promise.resolve();
+    };
+    startOnlineGame(socket, { code: 'ABCDE', seat: 0, token: 'test', name: 'Human' }, view());
+    await flush();
+    vi.useFakeTimers();
+    try {
+      board.presentOnlineMovement.mockImplementation(() => {
+        commits.push('ghost');
+        setTimeout(() => commits.push('tween'), 120);
+      });
+      const next = structuredClone(initialState);
+      next.players[0]!.pos = 6;
+      const events: GameEvent[] = [{ type: 'Moved', seat: 0, params: { to: 6, remaining: 0 } }];
+      handlers.onMessage({ type: 'events', turn: 13, events });
+      handlers.onMessage(view({ turn: 13, state: next }));
+      await flush();
+      expect(board.playEvents).not.toHaveBeenCalled();
+      expect(mounted.registry.set).toHaveBeenLastCalledWith('state', next);
+      expect(commits.slice(-2)).toEqual(['state', 'ghost']);
+      expect(commits).not.toContain('tween');
+      expect(board.presentOnlineMovement).toHaveBeenLastCalledWith(
+        initialState,
+        next,
+        events,
+        expect.any(Number),
+      );
+      const action = document.querySelector<HTMLButtonElement>('[data-testid="action-endTurn"]')!;
+      expect(action.disabled).toBe(false);
+      action.click();
+      expect(socket.send).toHaveBeenCalledOnce();
+      expect(board.cancelOnlineMovement).toHaveBeenCalled();
+      board.cancelOnlineMovement.mockClear();
+      handlers.onStatus('reconnecting');
+      expect(board.cancelOnlineMovement).toHaveBeenCalledOnce();
+      handlers.onMessage(view({ turn: 14, state: next }));
+      await flush();
+      expect(board.presentOnlineMovement).toHaveBeenLastCalledWith(
+        next,
+        next,
+        [],
+        expect.any(Number),
+      );
+      document.querySelector('#app')!.dispatchEvent(new Event('dice-bandits:menu-exit'));
+      expect(mounted.destroy).toHaveBeenCalledWith(true);
+      expect(board.cancelOnlineMovement.mock.calls.length).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('OnlineController', () => {
   it.each([true, false])(

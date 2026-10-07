@@ -14,6 +14,8 @@ import { drawAmbients } from './board/ambient';
 import { bindSpaceTaps } from './board/spaceTaps';
 import { closeSpaceInfo } from '../ui/spaceInfo';
 import { t } from '../i18n';
+import { planMovement } from './board/movementPlan';
+import { createMovementOverlay } from './board/movementOverlay';
 
 /**
  * M5a board: the authored 3200×1800 map drawn once in map pixels (painted
@@ -29,6 +31,7 @@ export default class BoardScene extends Phaser.Scene {
   private wholeMap = false;
   private ringTween: Phaser.Tweens.Tween | null = null;
   private latestState: GameState | null = null;
+  private onlineMovement: ReturnType<typeof createMovementOverlay> | undefined;
   private backdropCamera: Phaser.Cameras.Scene2D.Camera | null = null;
 
   /** HUD geometry is read only on redraw/resize, never on an animation frame.
@@ -122,6 +125,7 @@ export default class BoardScene extends Phaser.Scene {
     this.cameras.main.setScroll(0, 0);
     const onState = (state: GameState): void => this.renderBoard(state);
     const onResize = (): void => {
+      this.cancelOnlineMovement();
       this.applyViewports();
       if (!this.latestState) return;
       for (const image of this.mapImages) image.destroy();
@@ -131,7 +135,9 @@ export default class BoardScene extends Phaser.Scene {
     };
     this.scale.on('resize', onResize);
     this.game.events.on('game-state', onState);
+    this.events.once('destroy', () => this.cancelOnlineMovement());
     this.events.once('shutdown', () => {
+      this.cancelOnlineMovement();
       this.scale.off('resize', onResize);
       this.events.off('addedtoscene', onAdded);
       this.tweens.killTweensOf(gameplayCamera);
@@ -160,6 +166,26 @@ export default class BoardScene extends Phaser.Scene {
    */
   static validate(board: GameState['board']): boolean {
     return validate(board);
+  }
+
+  /** Called only after the authoritative registry/view commit. Never await
+   * this cosmetic layer or pan the camera away from a newly actionable seat. */
+  presentOnlineMovement(
+    previous: GameState,
+    next: GameState,
+    events: readonly GameEvent[],
+    generation: number,
+  ): void {
+    this.cancelOnlineMovement();
+    if (!this.scene.isActive() || next.phase.kind === 'battle' || next.phase.kind === 'gameOver')
+      return;
+    this.onlineMovement = createMovementOverlay(this);
+    this.onlineMovement.play(planMovement(previous, events, 'online'), generation);
+  }
+
+  cancelOnlineMovement(): void {
+    this.onlineMovement?.destroy();
+    this.onlineMovement = undefined;
   }
 
   async playEvents(events: GameEvent[]): Promise<void> {
@@ -254,6 +280,7 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   private renderBoard(state: GameState): void {
+    this.cancelOnlineMovement();
     this.latestState = state;
     // BattleScene covers the stage. Rendering the large map beneath it adds
     // an invisible software-GL pass to every battle frame and DOM interaction.
