@@ -304,6 +304,8 @@ for (const language of ['th', 'en']) {
         }
         for (let action = 0; action < 80; action++) {
           const state = (await snapshot(host)).controller;
+          // A finished room cannot supply the empty handoff; try the next room.
+          if (state.phase.kind === 'gameOver') break;
           if (state.turnSeat === 0 && state.phase.kind === 'endOfTurn') {
             const next = step(state, { type: 'endTurn' });
             reached = next.events.length === 0 && next.state.turnSeat === 1;
@@ -320,12 +322,15 @@ for (const language of ['th', 'en']) {
           await expect
             .poll(
               async () =>
+                (await host.evaluate(() => window.__db!.getState().phase.kind === 'gameOver')) ||
                 (await Promise.all(buttons.map((button) => button.count()))).some(Boolean),
               {
                 intervals: [10, 25, 50],
               },
             )
             .toBe(true);
+          // The final view can arrive while the action-availability poll runs.
+          if (await host.evaluate(() => window.__db!.getState().phase.kind === 'gameOver')) break;
           const actor = (await buttons[0]!.count()) ? 0 : 1;
           const page = pages[actor]!;
           const received = frames[actor]!.filter((message) => message.type === 'view').length;
