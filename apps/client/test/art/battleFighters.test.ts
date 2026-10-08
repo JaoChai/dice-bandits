@@ -161,19 +161,18 @@ describe('cartoon battle fighters (Task 8)', () => {
     expect(sprites[1]!.setFlipX).toHaveBeenCalledWith(true);
   });
 
-  it('renders both fighters 280 px tall via one uniform scale per atlas aspect', () => {
+  it('renders both fighters at the viewport height via one uniform scale per atlas aspect', () => {
     const { scene, sprites } = fightersScene([ART.heroes.thief, ART.monsters.mushroomBonk]);
     drawFighters(
       scene as unknown as Phaser.Scene,
       battlePhaseState('mushroomBonk'),
       battleLayout(1280, 720),
     );
-    // One uniform scale per fighter from the idle cell's real pixel height
-    // (reviewer item 1): the fake thief idle cell is 280 px tall → scale 1;
-    // a 274 px cell would get 280/274. Widths keep the cell's own aspect
-    // instead of a forced 210×280 box.
+    // The hero's absent atlas preserves its scale-1 fallback. The 280px
+    // monster idle cell uses viewport height / 280, preserving its aspect
+    // instead of a forced-width box.
     expect(sprites[0]!.setScale).toHaveBeenCalledWith(1);
-    expect(sprites[1]!.setScale).toHaveBeenCalledWith(1);
+    expect(sprites[1]!.setScale).toHaveBeenCalledWith(battleLayout().fighterHeight / 280);
     expect(sprites[0]!.setDisplaySize).not.toHaveBeenCalled();
     expect(sprites[1]!.setDisplaySize).not.toHaveBeenCalled();
   });
@@ -244,7 +243,7 @@ describe('cartoon battle fighters (Task 8)', () => {
       battlePhaseState('mushroomBonk'),
       battleLayout(1280, 720),
     );
-    const base = 280 / 274;
+    const base = battleLayout().fighterHeight / 274;
     const idle = tweens.find((spec) => typeof spec.scaleY === 'number');
     expect(idle, 'idle breathe tween mounted').toBeDefined();
     expect(idle!.scaleY).toBeCloseTo(base * 1.03, 5);

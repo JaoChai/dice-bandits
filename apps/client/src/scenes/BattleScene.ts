@@ -4,12 +4,7 @@ import { t, onLangChange } from '../i18n';
 import { drawBackdrop } from './battle/backdrop';
 import { drawDicePools, drawFighters, type BattleFighters } from './battle/fighters';
 import { playHit } from './battle/effects';
-import {
-  BATTLE_EXCHANGE_Y,
-  BATTLE_FIGHTER_HEIGHT,
-  BATTLE_GROUND_Y,
-  battleLayout,
-} from './battle/layout';
+import { battleLayout } from './battle/layout';
 
 export default class BattleScene extends Phaser.Scene {
   private layout = battleLayout();
@@ -51,7 +46,7 @@ export default class BattleScene extends Phaser.Scene {
         const side = event.params.side === 'b' ? 'b' : 'a';
         const pos = this.layout[side === 'a' ? 'left' : 'right'];
         const card = this.add
-          .text(pos.x, BATTLE_GROUND_Y - BATTLE_FIGHTER_HEIGHT - 24, '?', {
+          .text(pos.x, this.layout.groundY - this.layout.fighterHeight - 24, '?', {
             fontFamily: 'Chakra Petch',
             fontSize: '24px',
             color: '#ffd477',
@@ -139,7 +134,7 @@ export default class BattleScene extends Phaser.Scene {
     this.exchangeLabel = this.add
       .text(
         view.width / 2,
-        BATTLE_EXCHANGE_Y,
+        this.layout.exchangeY,
         t('battle.exchange', { exchange: battle.exchange }),
         {
           fontFamily: 'Chakra Petch',

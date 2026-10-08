@@ -7,7 +7,7 @@ import { ART } from '../../art/manifest';
 import { reducedMotion } from '../../art/motion';
 import { t } from '../../i18n';
 
-/** Chest height for hit fx, from the 720p puppet (upper half of the body). */
+/** Legacy 720p offset retained for callers; playback uses viewport coordinates. */
 export const HIT_TORSO_Y = BATTLE_FIGHTER_HEIGHT / 2;
 
 type Side = 'a' | 'b';
@@ -66,10 +66,10 @@ export async function playHit(
   for (const { side, amount } of damageTargets(event, leftId, rightId)) {
     const pos = layout[side === 'a' ? 'left' : 'right'];
     const target = fighters[side];
-    const slash = effect(scene, 'slash', pos.x, pos.y - HIT_TORSO_Y);
+    const slash = effect(scene, 'slash', pos.x, pos.y - layout.fighterHeight / 2);
     await pause(scene, 90 * speed);
     slash?.destroy();
-    const spark = effect(scene, 'spark', pos.x, pos.y - HIT_TORSO_Y + 2);
+    const spark = effect(scene, 'spark', pos.x, pos.y - layout.fighterHeight / 2 + 2);
     playMotion(scene, target, 'hurt');
     if (!reducedMotion()) {
       target.setTint(0xffffff);
@@ -77,7 +77,7 @@ export async function playHit(
       scene.cameras.main.shake(110 * speed, 0.003);
     }
     const number = scene.add
-      .text(pos.x, pos.y - BATTLE_FIGHTER_HEIGHT - 36, t('battle.damage', { value: amount }), {
+      .text(pos.x, pos.y - layout.fighterHeight - 36, t('battle.damage', { value: amount }), {
         fontFamily: 'Chakra Petch',
         fontSize: '20px',
         color: '#fff4dc',

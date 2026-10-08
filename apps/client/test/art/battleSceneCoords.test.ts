@@ -135,5 +135,5 @@ it('derives the secret card banner from the fighter height, not 180', async () =
   const secret = created.find((entry) => entry.kind === '?');
   expect(secret, 'secret card banner rendered').toBeDefined();
   expect(secret!.x).toBe(layout.left.x);
-  expect(secret!.y).toBe(GROUND - BATTLE_FIGHTER_HEIGHT - 24);
+  expect(secret!.y).toBe(174); // 528px feet − 330px fighter − 24px banner gap
 });
