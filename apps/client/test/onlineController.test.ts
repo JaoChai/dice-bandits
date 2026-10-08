@@ -127,24 +127,40 @@ describe('online main movement seam', () => {
       });
       const next = step(previous, { type: 'roll' });
       expect(next.events.filter((event) => event.type === 'Moved')).toHaveLength(5);
+      const battlePrevious = battleStateWithSeatZeroPicking();
+      const pick = legalActions(battlePrevious, 0).find((action) => action.type === 'battlePick')!;
+      const battleNext = step(battlePrevious, pick);
+      expect(battleNext.state.phase.kind).toBe('battle');
       let battleActive = false;
       let releaseBattle!: () => void;
-      const board = {
-        presentOnlineMovement: vi.fn(),
-        cancelOnlineMovement: vi.fn(),
+      let playback!: {
+        onBeat: (beat: import('../src/scenes/battle/presentation').BattleBeat) => void;
+        onCancel: () => void;
+      };
+      const battle = {
         playEvents: vi.fn(
-          () =>
+          (_events, _speed, options) =>
             new Promise<void>((resolve) => {
+              playback = options;
               releaseBattle = resolve;
             }),
         ),
+        cancelBattlePresentation: vi.fn(),
+      };
+      const board = {
+        presentOnlineMovement: vi.fn(),
+        cancelOnlineMovement: vi.fn(),
+        playEvents: vi.fn(),
         scene: { launch: vi.fn(), stop: vi.fn() },
       };
       const mounted = {
         destroy: vi.fn(),
         registry: { set: vi.fn() },
         events: { on: vi.fn(), emit: vi.fn() },
-        scene: { getScene: () => board, isActive: () => battleActive },
+        scene: {
+          getScene: (name: string) => (name === 'BattleScene' ? battle : board),
+          isActive: () => battleActive,
+        },
       };
       fakeGame.mockReturnValue(mounted);
       let handlers!: import('../src/online/socket').RoomSocketHandlers;
@@ -167,11 +183,8 @@ describe('online main movement seam', () => {
       board.presentOnlineMovement.mockClear();
       mounted.registry.set.mockClear();
       try {
-        // Unchanged battle playback holds the queue before the next view's callback starts.
-        battleActive = true;
+        // Queue views in receipt order, without an awaited presentation barrier.
         handlers.onMessage(view({ turn: 2, state: previous }));
-        await flush();
-        expect(board.playEvents).toHaveBeenCalledOnce();
         handlers.onMessage({ type: 'events', turn: 3, events: next.events });
         handlers.onMessage(
           view({ turn: 3, state: next.state, legal: legalActions(next.state, 0) }),
@@ -184,9 +197,8 @@ describe('online main movement seam', () => {
             view({ turn: 4, state: next.state, legal: legalActions(next.state, 0) }),
           );
         }
-        battleActive = false;
-        releaseBattle();
         await flush();
+        expect(board.playEvents).not.toHaveBeenCalled();
         expect(mounted.registry.set.mock.calls).toEqual([
           ['state', previous],
           ['state', next.state],
@@ -213,6 +225,64 @@ describe('online main movement seam', () => {
         );
         expect(actions.length).toBeGreaterThan(0);
         expect([...actions].every((action) => !action.disabled)).toBe(true);
+
+        // A real battle view commits while its cosmetic playback is unresolved.
+        battleActive = true;
+        handlers.onMessage(
+          view({ turn: 5, state: battlePrevious, legal: legalActions(battlePrevious, 0) }),
+        );
+        await flush();
+        handlers.onMessage({ type: 'events', turn: 6, events: battleNext.events });
+        handlers.onMessage(
+          view({ turn: 6, state: battleNext.state, legal: legalActions(battleNext.state, 0) }),
+        );
+        await flush();
+        expect(mounted.registry.set).toHaveBeenLastCalledWith('state', battleNext.state);
+        expect(battle.playEvents).toHaveBeenLastCalledWith(
+          battleNext.events,
+          expect.any(Number),
+          expect.objectContaining({ mode: 'online' }),
+        );
+        const pendingPlayback = playback;
+        const releasePending = releaseBattle;
+        const finalHp = () =>
+          [...document.querySelectorAll('.battle-hp-value')].map((el) => el.textContent);
+        const battleState = battleNext.state;
+        if (battleState.phase.kind !== 'battle') throw new Error('expected unresolved battle');
+        const expectedHp = [battleState.phase.battle.a, battleState.phase.battle.b].map(
+          (fighter) => `${fighter.hp}/${fighter.stats.maxHp}`,
+        );
+        expect(finalHp()).toEqual(expectedHp);
+        const cancelledBefore = battle.cancelBattlePresentation.mock.calls.length;
+        if (invalidation === 'reconnect') {
+          handlers.onStatus('reconnecting');
+          handlers.onStatus('open');
+        } else {
+          handlers.onMessage(
+            view({ turn: 7, state: battleNext.state, legal: legalActions(battleNext.state, 0) }),
+          );
+          await flush();
+          expect(mounted.registry.set).toHaveBeenLastCalledWith('state', battleNext.state);
+        }
+        expect(battle.cancelBattlePresentation.mock.calls.length).toBeGreaterThan(cancelledBefore);
+        // Hostile late callbacks must not overwrite reconciled HP or add a stale readout.
+        pendingPlayback.onBeat({
+          kind: 'result',
+          duration: 0,
+          targets: [{ side: 'a', amount: 1, fromHp: 1, toHp: 0 }],
+          result: 'nextHalf',
+        });
+        expect(finalHp()).toEqual(expectedHp);
+        expect(document.querySelector('[data-testid="battle-readout"]')).toBeNull();
+        pendingPlayback.onCancel();
+        releasePending();
+        await flush();
+        expect(finalHp()).toEqual(expectedHp);
+        expect(document.querySelector('[data-testid="battle-readout"]')).toBeNull();
+        const legalButtons = document.querySelectorAll<HTMLButtonElement>(
+          '[data-action-index], [data-choice]',
+        );
+        expect([...legalButtons].every((action) => !action.disabled)).toBe(true);
       } finally {
         document.querySelector('#app')!.dispatchEvent(new Event('dice-bandits:menu-exit'));
       }

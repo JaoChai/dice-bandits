@@ -245,8 +245,14 @@ export function startOnlineGame(
                   previous,
                   next: nextState,
                   mode: 'online',
-                  onBeat: (beat) => readout.showBeat(beat),
-                  onCancel: () => readout.reset(nextState),
+                  onBeat: (beat) => {
+                    if (isCurrent() && presentationGeneration === movementGeneration)
+                      readout.showBeat(beat);
+                  },
+                  onCancel: () => {
+                    if (isCurrent() && presentationGeneration === movementGeneration)
+                      readout.reset(nextState);
+                  },
                 })
                 .then(() => {
                   if (

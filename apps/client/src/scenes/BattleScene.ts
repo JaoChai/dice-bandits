@@ -65,13 +65,19 @@ export default class BattleScene extends Phaser.Scene {
       this.cancelBattlePresentation();
       const revision = this.presentationRevision;
       const staticOnly = speed <= 0 || reducedMotion();
+      // Reserve two 30-FPS frames from the 600ms cosmetic budget. Phaser
+      // timers settle on frames; seven independently rounded waits overshoot.
+      const cosmeticScale = options.mode === 'human' ? 1 : 0.9;
       const beats = planBattle(
         options.previous,
         options.next,
         events,
         options.mode,
         staticOnly,
-      ).map((beat) => ({ ...beat, duration: beat.duration * Math.min(1, Math.max(0, speed)) }));
+      ).map((beat) => ({
+        ...beat,
+        duration: beat.duration * Math.min(1, Math.max(0, speed)) * cosmeticScale,
+      }));
       if (!beats.length) {
         options.onCancel?.();
         return;
@@ -94,8 +100,10 @@ export default class BattleScene extends Phaser.Scene {
         cleanup();
         options.onCancel?.();
       };
+      let deadline = performance.now();
       try {
         for (const beat of beats) {
+          deadline += beat.duration;
           if (revision !== this.presentationRevision) break;
           options.onBeat?.(beat);
           effects?.showBeat(
@@ -106,7 +114,11 @@ export default class BattleScene extends Phaser.Scene {
           if (beat.duration > 0)
             await new Promise<void>((resolve) => {
               finishWait = resolve;
-              timer = this.time.delayedCall(beat.duration, () => {
+              const wait =
+                options.mode === 'human'
+                  ? beat.duration
+                  : Math.max(0, deadline - performance.now());
+              timer = this.time.delayedCall(wait, () => {
                 timer = undefined;
                 finishWait = undefined;
                 resolve();
