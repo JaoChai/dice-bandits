@@ -1,7 +1,9 @@
 import { createGame, type Action, type GameState } from '@dice-bandits/engine';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setLang, t } from '../src/i18n';
+import * as battleUi from '../src/ui/battleUi';
 import { renderBattleUi } from '../src/ui/battleUi';
+import type { BattleBeat } from '../src/scenes/battle/presentation';
 
 function battleState(): GameState {
   const state = createGame({
@@ -77,7 +79,173 @@ function render(state = battleState(), awaitingView = false) {
   return { root, dispatch };
 }
 
-afterEach(() => setLang('en'));
+afterEach(() => {
+  setLang('en');
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+const beat = (kind: BattleBeat['kind'], duration = 350): BattleBeat => ({
+  kind,
+  duration,
+  result: kind === 'result' ? 'nextHalf' : null,
+  targets:
+    kind === 'damage' || kind === 'drain' || duration === 0
+      ? [{ side: 'a', amount: 7, fromHp: 38, toHp: 31 }]
+      : [],
+  outcome: 'hit',
+  attacker: 'b',
+});
+
+// A premature HP commit, missing aria updates, uncancelled rAF or reading
+// pending picks instead of revealed events must fail these real DOM assertions.
+describe('battle presented HP and readout', () => {
+  it('holds both text and meter until drain, including an authoritative HUD rerender', () => {
+    const previous = battleState();
+    const next = structuredClone(previous);
+    if (next.phase.kind !== 'battle') throw new Error('battle');
+    next.phase.battle.a.hp = 31;
+    const { root } = render(previous);
+    const readout = battleUi.createBattleReadout(root);
+    readout.reset(previous);
+    readout.showBeat(beat('reveal'));
+    renderBattleUi(root, next, actions, 0, vi.fn(), () => 'pick', true, true);
+    readout.showBeat(beat('damage', 500));
+    expect(root.querySelector('[data-testid="hp-left"]')?.textContent).toBe('38/48');
+    expect(root.querySelector('.left [role="meter"]')?.getAttribute('aria-valuenow')).toBe('38');
+    expect(root.querySelector('[data-testid="battle-readout"]')?.textContent).toContain('7');
+    readout.destroy();
+  });
+
+  it('interpolates the number, aria meter and fill together then reaches exact next HP', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(performance, 'now').mockReturnValue(1000);
+    vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => {
+      frames.push(fn);
+      return frames.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const { root } = render();
+    const readout = battleUi.createBattleReadout(root);
+    readout.reset(battleState());
+    readout.showBeat(beat('drain'));
+    expect(frames).toHaveLength(1);
+    frames.shift()!(1175);
+    expect(root.querySelector('[data-testid="hp-left"]')?.textContent).toBe('35/48');
+    expect(root.querySelector('.left [role="meter"]')?.getAttribute('aria-valuenow')).toBe('35');
+    frames.shift()!(1350);
+    expect(root.querySelector('[data-testid="hp-left"]')?.textContent).toBe('31/48');
+    expect(root.querySelector<HTMLElement>('.left .battle-hp-track span')?.style.width).toBe(
+      `${(31 / 48) * 100}%`,
+    );
+    readout.destroy();
+  });
+
+  it('finishes a drain exactly at the result boundary even if the last frame has not fired', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(performance, 'now').mockReturnValue(1000);
+    vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => {
+      frames.push(fn);
+      return frames.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const { root } = render();
+    const readout = battleUi.createBattleReadout(root);
+    readout.reset(battleState());
+    readout.showBeat(beat('drain'));
+    frames.shift()!(1300);
+    readout.showBeat(beat('result'));
+    expect(root.querySelector('[data-testid="hp-left"]')?.textContent).toBe('31/48');
+    expect(root.querySelector('.left [role="meter"]')?.getAttribute('aria-valuenow')).toBe('31');
+    readout.destroy();
+  });
+
+  it('resets synchronously to final HP and fences stale animation callbacks', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => {
+      frames.push(fn);
+      return frames.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const previous = battleState();
+    const next = structuredClone(previous);
+    if (next.phase.kind !== 'battle') throw new Error('battle');
+    next.phase.battle.a.hp = 31;
+    const { root } = render(previous);
+    const readout = battleUi.createBattleReadout(root);
+    readout.reset(previous);
+    readout.showBeat(beat('drain'));
+    readout.reset(next);
+    expect(frames).toHaveLength(1);
+    frames[0]!(99999);
+    expect(root.querySelector('[data-testid="hp-left"]')?.textContent).toBe('31/48');
+    expect(root.querySelector('[data-testid="battle-readout"]')).toBeNull();
+    expect(previous.phase.kind === 'battle' && previous.phase.battle.a.hp).toBe(38);
+    readout.destroy();
+  });
+
+  it('shows a static consequence without scheduling frames and renders winner by name', () => {
+    const raf = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', raf);
+    const { root } = render();
+    const readout = battleUi.createBattleReadout(root);
+    readout.reset(battleState());
+    readout.showBeat({ ...beat('result', 0), result: 'loss', winner: 'b' });
+    expect(root.querySelector('[data-testid="hp-left"]')?.textContent).toBe('31/48');
+    expect(root.querySelector('[data-testid="battle-readout"]')?.textContent).toContain('Rival');
+    expect(raf).not.toHaveBeenCalled();
+    readout.destroy();
+  });
+
+  it('never exposes a pending secret and reveals only event-provided secret identifiers', () => {
+    const state = battleState();
+    if (state.phase.kind !== 'battle') throw new Error('battle');
+    state.phase.battle.pending.attack = 'secret';
+    const { root } = render(state);
+    const readout = battleUi.createBattleReadout(root);
+    readout.reset(state);
+    readout.showBeat(beat('reveal'));
+    expect(root.querySelector('[data-testid="battle-readout"]')?.textContent).not.toContain(
+      t('secret.bulwark'),
+    );
+    readout.showBeat({ ...beat('reveal'), revealed: [{ side: 'a', secretId: 'bulwark' }] });
+    expect(root.querySelector('[data-testid="battle-readout"]')?.textContent).toContain(
+      t('secret.bulwark'),
+    );
+    readout.destroy();
+  });
+
+  it('uses explicit miss text, not a zero damage hit or a premature victory', () => {
+    const { root } = render();
+    const readout = battleUi.createBattleReadout(root);
+    readout.reset(battleState());
+    readout.showBeat({ ...beat('damage'), outcome: 'miss', targets: [] });
+    expect(root.querySelector('[data-testid="battle-readout"]')?.textContent).toBe(
+      t('battle.outcome.miss'),
+    );
+    readout.showBeat(beat('result'));
+    expect(root.querySelector('[data-testid="battle-readout"]')?.textContent).toBe(
+      t('battle.result.nextHalf'),
+    );
+    readout.destroy();
+  });
+
+  it('clears transient readout on pass screen and releases its lifecycle on destroy', () => {
+    const { root } = render();
+    const readout = battleUi.createBattleReadout(root);
+    readout.reset(battleState());
+    readout.showBeat(beat('anticipation'));
+    const state = battleState();
+    if (state.phase.kind !== 'battle') throw new Error('battle');
+    state.phase.battle.pending.attack = 'attack';
+    renderBattleUi(root, state, actions, 1, vi.fn(), () => 'pick', true, false);
+    expect(root.querySelector('[data-testid="pass-screen"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="battle-readout"]')).toBeNull();
+    readout.destroy();
+    readout.showBeat(beat('damage'));
+    expect(root.querySelector('[data-testid="battle-readout"]')).toBeNull();
+  });
+});
 
 describe('renderBattleUi', () => {
   it('marks the board stage as the contained battle panel only during battle', () => {

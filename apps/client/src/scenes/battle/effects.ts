@@ -5,7 +5,115 @@ import { BATTLE_FIGHTER_HEIGHT } from './layout';
 import { playMotion } from './fighters';
 import { ART } from '../../art/manifest';
 import { reducedMotion } from '../../art/motion';
+import type { BattleBeat } from './presentation';
 import { t } from '../../i18n';
+
+/** One generation of cosmetic effects. No waits inside: the scene's seven
+ * beats are the only clock, including simultaneous counter/mutual hits. */
+export function createBattleEffects(
+  scene: Phaser.Scene,
+  source: BattleFighters,
+  layout: BattleLayout,
+  detached = false,
+): { showBeat(beat: BattleBeat): void; destroy(): void } {
+  const sprites: BattleFighters = detached
+    ? (Object.fromEntries(
+        (['a', 'b'] as const).map((side) => {
+          const fighter = source[side];
+          return [
+            side,
+            scene.add
+              .sprite(fighter.x, fighter.y, fighter.texture.key, fighter.frame.name)
+              .setOrigin(0.5, 1)
+              .setScale(fighter.scaleX, fighter.scaleY)
+              .setFlipX(fighter.flipX)
+              .setAlpha(0.65)
+              .setDepth(10)
+              .setName(`battle-effect-ghost-${side}`),
+          ];
+        }),
+      ) as BattleFighters)
+    : source;
+  const objects: Phaser.GameObjects.GameObject[] = [];
+  const tweens: Phaser.Tweens.Tween[] = [];
+  const bases = {
+    a: { x: sprites.a.x, scale: sprites.a.scaleX },
+    b: { x: sprites.b.x, scale: sprites.b.scaleX },
+  };
+  for (const sprite of Object.values(sprites)) scene.tweens.killTweensOf(sprite);
+  const pose = (side: Side, frame: string): void => {
+    if (sprites[side].texture.has(frame)) sprites[side].setFrame(frame);
+  };
+  const clearObjects = (): void => {
+    for (const object of objects.splice(0)) object.destroy();
+  };
+  return {
+    showBeat(beat) {
+      clearObjects();
+      if (beat.duration <= 0) return;
+      const attacker = beat.attacker;
+      if ((beat.kind === 'anticipation' || beat.kind === 'lunge') && attacker) {
+        pose(attacker, 'attack');
+        if (beat.kind === 'lunge')
+          tweens.push(
+            scene.tweens.add({
+              targets: sprites[attacker],
+              x: bases[attacker].x + (attacker === 'a' ? 1 : -1) * layout.fighterHeight * 0.2,
+              duration: beat.duration / 2,
+              yoyo: true,
+              ease: 'Sine.easeInOut',
+            }),
+          );
+      }
+      if (beat.kind === 'impact' || beat.kind === 'damage' || beat.kind === 'drain') {
+        for (const target of beat.targets) {
+          if (target.amount <= 0) continue;
+          const pos = layout[target.side === 'a' ? 'left' : 'right'];
+          pose(target.side, 'hurt');
+          if (beat.kind === 'impact') {
+            const spark = effect(scene, 'spark', pos.x, pos.y - layout.fighterHeight / 2);
+            if (spark) objects.push(spark.setName('battle-effect-impact'));
+            if (!detached && !reducedMotion()) {
+              scene.cameras.main.flash(beat.duration, 255, 235, 225);
+              scene.cameras.main.shake(beat.duration, 0.003);
+            }
+          } else if (beat.kind === 'damage') {
+            const number = scene.add
+              .text(
+                pos.x,
+                pos.y - layout.fighterHeight - 36,
+                t('battle.damage', { value: target.amount }),
+                {
+                  fontFamily: 'Mitr, sans-serif',
+                  fontSize: '24px',
+                  color: '#fff4dc',
+                  stroke: '#5c3317',
+                  strokeThickness: 4,
+                },
+              )
+              .setOrigin(0.5)
+              .setDepth(14)
+              .setName('battle-effect-damage');
+            objects.push(number);
+          }
+        }
+      }
+      if (beat.kind === 'result')
+        for (const side of ['a', 'b'] as const) pose(side, side === beat.winner ? 'happy' : 'idle');
+    },
+    destroy() {
+      for (const tween of tweens) tween.remove();
+      clearObjects();
+      if (detached) for (const sprite of Object.values(sprites)) sprite.destroy();
+      else
+        for (const side of ['a', 'b'] as const) {
+          sprites[side].setX(bases[side].x).setScale(bases[side].scale).clearTint();
+          pose(side, 'idle');
+          if (!reducedMotion()) playMotion(scene, sprites[side], 'idle');
+        }
+    },
+  };
+}
 
 /** Legacy 720p offset retained for callers; playback uses viewport coordinates. */
 export const HIT_TORSO_Y = BATTLE_FIGHTER_HEIGHT / 2;
