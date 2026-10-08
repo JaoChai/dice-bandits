@@ -1,4 +1,13 @@
-import { createGame, type Combatant, type GameEvent, type GameState } from '@dice-bandits/engine';
+import {
+  battleActorSeat,
+  createGame,
+  legalActions,
+  startBattle,
+  step,
+  type Combatant,
+  type GameEvent,
+  type GameState,
+} from '@dice-bandits/engine';
 import { describe, expect, it } from 'vitest';
 import { planBattle, type BattleBeat } from '../../src/scenes/battle/presentation';
 
@@ -73,6 +82,58 @@ function beat(plan: BattleBeat[], kind: BattleBeat['kind']) {
   const found = plan.find((value) => value.kind === kind);
   expect(found, `missing ${kind} beat`).toBeDefined();
   return found!;
+}
+
+// Real engine transitions catch raw-event HP replay, not a duplicated perk formula.
+function engineBattle(
+  seed: string,
+  perks: GameState['players'][number]['perks'],
+  monster = true,
+  initialHp = 500,
+) {
+  let state = createGame({
+    seed,
+    rounds: 12,
+    seats: [
+      { name: 'A', classId: 'knight', control: 'human', personality: null },
+      { name: 'B', classId: 'knight', control: 'human', personality: null },
+    ],
+  });
+  for (const player of state.players) {
+    player.stats = { maxHp: 500, atk: 20, def: 4, spd: 12, mag: 5 };
+    player.hp = 500;
+    player.perks = [...perks];
+  }
+  state.players[0]!.hp = initialHp;
+  state = startBattle(state, {
+    context: monster ? 'monster' : 'pvp',
+    spaceId: 1,
+    opponent: {
+      kind: monster ? 'monster' : 'player',
+      seat: monster ? null : 1,
+      monsterId: monster ? 'jellyBun' : null,
+      level: 1,
+      hp: 500,
+      stats: { maxHp: 500, atk: 20, def: 4, spd: 6, mag: 5 },
+      secretUsed: false,
+      buffs: { ironSkin: false, poison: false, halveNext: false },
+    },
+  }).state;
+  const transitions: Array<{ previous: GameState; next: GameState; events: GameEvent[] }> = [];
+  for (let picks = 0; picks < 12 && state.phase.kind === 'battle'; picks++) {
+    const seat = battleActorSeat(state);
+    if (seat === null) throw new Error('engine fixture must offer a player pick');
+    const action = legalActions(state, seat).find(
+      (value) =>
+        value.type === 'battlePick' && (value.pick === 'attack' || value.pick === 'defend'),
+    );
+    if (!action) throw new Error('engine fixture must offer attack or defend');
+    const resolved = step(state, action);
+    transitions.push({ previous: state, next: resolved.state, events: resolved.events });
+    state = resolved.state;
+  }
+  if (state.phase.kind === 'battle') throw new Error('engine fixture must end within six halves');
+  return transitions;
 }
 
 // Mutations caught: a-always-attacks, swapped recipients, HP-delta-as-damage,
@@ -460,6 +521,132 @@ describe('pure battle presentation', () => {
       result: 'draw',
       targets: [{ side: 'a', amount: 0, fromHp: 30, toHp: 35 }],
     });
+  });
+
+  it('ends an engine thickSkin draw at 461 HP, not the raw-event replay of 456', () => {
+    const transitions = engineBattle('review-thick-skin', ['thickSkin']);
+    const { previous, next, events } = transitions.at(-1)!;
+    expect(events).toContainEqual(event('BattleEnded', { result: 'draw' }));
+    expect(next.players[0]!.hp).toBe(461);
+    const animated = planBattle(previous, next, events, 'human', false);
+    expect(beat(animated, 'drain').targets).toContainEqual({
+      side: 'a',
+      amount: 30,
+      fromHp: 486,
+      toHp: 461,
+    });
+    expect(beat(animated, 'result').result).toBe('draw');
+    expect(planBattle(previous, next, events, 'human', true)[0]!.targets).toContainEqual({
+      side: 'a',
+      amount: 30,
+      fromHp: 486,
+      toHp: 461,
+    });
+  });
+
+  it.each(['review-thick-skin', 'battle-end-2', 'battle-end-3'])(
+    'reconciles non-KO engine battles for both sides and modes across perks (%s)',
+    (seed) => {
+      for (const perks of [[], ['thickSkin']] as GameState['players'][number]['perks'][]) {
+        for (const monster of [true, false]) {
+          const transitions = engineBattle(seed, perks, monster);
+          for (const { previous, next, events } of transitions) {
+            const ended = events.find((value) => value.type === 'BattleEnded');
+            if (ended) {
+              expect(ended.params.result).toBe('draw');
+              expect(events.some((value) => value.type === 'PlayerKO')).toBe(false);
+            }
+            for (const reduced of [false, true]) {
+              const plan = planBattle(previous, next, events, 'human', reduced);
+              if (!plan.length) continue; // unresolved first PvP pick
+              const targets = beat(plan, reduced ? 'result' : 'drain').targets;
+              for (const side of ['a', 'b'] as const) {
+                const fighter = battle(previous)[side];
+                const authoritativeHp =
+                  next.phase.kind === 'battle'
+                    ? next.phase.battle[side].hp
+                    : fighter.kind === 'player'
+                      ? next.players.find((value) => value.seat === fighter.seat)!.hp
+                      : fighter.hp -
+                        Number(
+                          events.find((value) => value.type === 'DamageDealt')!.params.toAttacker,
+                        ); // no monster mitigation in this final attacking half
+                const target = targets.find((value) => value.side === side);
+                if (fighter.hp !== authoritativeHp) {
+                  expect(target, `${side}, reduced=${reduced}, ended=${!!ended}`).toBeDefined();
+                  expect(target!.toHp).toBe(authoritativeHp);
+                }
+                if (target) expect(target.toHp).toBe(authoritativeHp);
+              }
+            }
+          }
+        }
+      }
+    },
+  );
+
+  it('preserves engine combat KO zero separately from static respawn HP', () => {
+    const { previous, next, events } = engineBattle(
+      'review-thick-skin',
+      ['thickSkin'],
+      true,
+      20,
+    ).at(-1)!;
+    expect(events).toContainEqual(event('BattleEnded', { result: 'bWin' }));
+    expect(events.some((value) => value.type === 'PlayerKO' && value.seat === 0)).toBe(true);
+    expect(next.players[0]!.hp).toBe(500);
+    expect(
+      beat(planBattle(previous, next, events, 'human', false), 'drain').targets,
+    ).toContainEqual({
+      side: 'a',
+      amount: 30,
+      fromHp: 6,
+      toHp: 0,
+    });
+    expect(planBattle(previous, next, events, 'human', true)[0]!.targets).toContainEqual({
+      side: 'a',
+      amount: 30,
+      fromHp: 6,
+      toHp: 500,
+    });
+  });
+
+  it.each(['a', 'b'] as const)(
+    'reconciles a non-KO post-battle HP/maxHp adjustment on side %s without inventing damage',
+    (side) => {
+      const previous = fixture(false);
+      const next = after(previous);
+      next.phase = { kind: 'awaitRoll' };
+      const seat = side === 'a' ? 0 : 1;
+      next.players[seat]!.hp = 35;
+      next.players[seat]!.stats.maxHp = 32;
+      next.players[1 - seat]!.hp = side === 'a' ? 23 : 30;
+      const events = [hit(0, 1), event('BattleEnded', { result: 'draw' })];
+      const expected = { side, amount: side === 'a' ? 0 : 7, fromHp: 30, toHp: 32 };
+      const animated = planBattle(previous, next, events, 'human', false);
+      expect(beat(animated, 'drain').targets).toContainEqual(expected);
+      expect(beat(animated, 'damage').targets).toHaveLength(1);
+      expect(beat(animated, 'damage').targets[0]!.amount).toBe(7);
+      expect(planBattle(previous, next, events, 'human', true)[0]!.targets).toContainEqual(
+        expected,
+      );
+    },
+  );
+
+  it('reconciles an animated end-only draw without adding a fictitious damage hit', () => {
+    const previous = fixture(false);
+    const next = after(previous);
+    next.phase = { kind: 'awaitRoll' };
+    next.players[0]!.hp = 35;
+    const plan = planBattle(
+      previous,
+      next,
+      [event('BattleEnded', { result: 'draw' })],
+      'human',
+      false,
+    );
+    expect(beat(plan, 'damage').targets).toEqual([]);
+    expect(beat(plan, 'drain').targets).toEqual([{ side: 'a', amount: 0, fromHp: 30, toHp: 35 }]);
   });
 
   it('is deterministic, never mutates frozen input, and returns detached targets', () => {

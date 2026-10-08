@@ -154,11 +154,12 @@ export function planBattle(
               : null;
   const winner: BattleBeat['winner'] = ended === 'aWin' ? 'a' : ended === 'bWin' ? 'b' : null;
   const target = (side: Side, final: boolean): BattleBeat['targets'][number] => {
-    // An ended battle has no next combatant. Replay event amounts for the combat
-    // drain (including KO), not the already-respawned player HP in next.players.
+    // Only a combat KO stays at zero during animation; static playback uses
+    // respawn HP. All non-KO player endpoints use next.players after battle end.
     const fighter = after?.[side];
+    const combatKo = winner !== null && winner !== side && presented[side] === 0;
     const player =
-      final && !fighter && battle[side].kind === 'player'
+      !fighter && battle[side].kind === 'player' && (final || !combatKo)
         ? next.players.find((value) => value.seat === battle[side].seat)
         : undefined;
     return {
@@ -173,8 +174,10 @@ export function planBattle(
     };
   };
   const damageSides = SIDES.filter((side) => amounts[side] > 0);
-  // Healing carries amount=0 ONLY in drain/static reconciliation, never a hit.
-  const drainSides = SIDES.filter((side) => amounts[side] > 0 || healed.has(side));
+  // HP-only reconciliation carries amount=0 in drain/static, never as a hit.
+  const drainSides = SIDES.filter(
+    (side) => amounts[side] > 0 || healed.has(side) || fromHp[side] !== target(side, false).toHp,
+  );
   if (reduced) {
     const finalTargets = SIDES.map((side) => target(side, true)).filter(
       (value) => value.amount > 0 || healed.has(value.side) || value.fromHp !== value.toHp,
