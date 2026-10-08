@@ -11,7 +11,7 @@ import { t } from '../../i18n';
 export const HIT_TORSO_Y = BATTLE_FIGHTER_HEIGHT / 2;
 
 type Side = 'a' | 'b';
-type DamageEvent = {
+export type DamageEvent = {
   attacker: string | number;
   defender: string | number;
   toAttacker: number;
