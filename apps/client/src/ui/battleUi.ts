@@ -139,6 +139,13 @@ export function createBattleReadout(root: HTMLElement): {
       element.dataset.beat = beat.kind;
       element.textContent = text(beat);
       if (beat.kind === 'drain' || beat.duration === 0) {
+        // A level-up can change the denominator without changing HP. Apply
+        // both at the consequence boundary, never during reveal/damage.
+        for (const side of ['a', 'b'] as const) {
+          const fighter = fighters[side];
+          const maximum = beat.maxHp?.[side];
+          if (fighter && maximum !== undefined) fighter.maxHp = maximum;
+        }
         const owned = revision;
         const start = performance.now();
         const apply = (progress: number): void => {

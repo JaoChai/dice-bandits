@@ -12,6 +12,8 @@ export type BattleBeat = {
   outcome?: 'hit' | 'miss' | 'blocked' | 'countered' | 'mutual' | null;
   revealed?: Array<{ side: Side; secretId: string }>;
   winner?: Side | null;
+  /** Changed display maxima, reconciled with HP at drain/static result only. */
+  maxHp?: Partial<Record<Side, number>>;
 };
 
 const SIDES = ['a', 'b'] as const;
@@ -153,7 +155,7 @@ export function planBattle(
               ? 'nextHalf'
               : null;
   const winner: BattleBeat['winner'] = ended === 'aWin' ? 'a' : ended === 'bWin' ? 'b' : null;
-  const target = (side: Side, final: boolean): BattleBeat['targets'][number] => {
+  const endpoint = (side: Side, final: boolean): { hp: number; maxHp: number } => {
     // Only a combat KO stays at zero during animation; static playback uses
     // respawn HP. All non-KO player endpoints use next.players after battle end.
     const fighter = after?.[side];
@@ -163,16 +165,26 @@ export function planBattle(
         ? next.players.find((value) => value.seat === battle[side].seat)
         : undefined;
     return {
-      side,
-      amount: amounts[side],
-      fromHp: fromHp[side],
-      toHp: fighter
+      hp: fighter
         ? clampHp(fighter.hp, fighter.stats.maxHp)
         : player
           ? clampHp(player.hp, player.stats.maxHp)
           : presented[side],
+      maxHp: fighter?.stats.maxHp ?? player?.stats.maxHp ?? battle[side].stats.maxHp,
     };
   };
+  const target = (side: Side, final: boolean): BattleBeat['targets'][number] => ({
+    side,
+    amount: amounts[side],
+    fromHp: fromHp[side],
+    toHp: endpoint(side, final).hp,
+  });
+  const maxHp = Object.fromEntries(
+    SIDES.map((side) => [side, endpoint(side, reduced).maxHp] as const).filter(
+      ([side, maximum]) => maximum !== battle[side].stats.maxHp,
+    ),
+  );
+  const maxChange = Object.keys(maxHp).length > 0 ? { maxHp } : {};
   const damageSides = SIDES.filter((side) => amounts[side] > 0);
   // HP-only reconciliation carries amount=0 in drain/static, never as a hit.
   const drainSides = SIDES.filter(
@@ -187,6 +199,7 @@ export function planBattle(
         kind: 'result',
         duration: 0,
         targets: finalTargets,
+        ...maxChange,
         attacker,
         outcome,
         revealed,
@@ -204,6 +217,7 @@ export function planBattle(
         : kind === 'drain'
           ? drainSides.map((side) => target(side, false))
           : [],
+    ...(kind === 'drain' ? maxChange : {}),
     result: kind === 'result' ? result : null,
     ...(kind === 'reveal' && revealed.length > 0 ? { revealed } : {}),
     ...(kind === 'anticipation' || kind === 'lunge' || kind === 'impact' ? { attacker } : {}),

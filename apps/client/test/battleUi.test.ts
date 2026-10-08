@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setLang, t } from '../src/i18n';
 import * as battleUi from '../src/ui/battleUi';
 import { renderBattleUi } from '../src/ui/battleUi';
-import type { BattleBeat } from '../src/scenes/battle/presentation';
+import { planBattle, type BattleBeat } from '../src/scenes/battle/presentation';
 
 function battleState(): GameState {
   const state = createGame({
@@ -100,6 +100,120 @@ const beat = (kind: BattleBeat['kind'], duration = 350): BattleBeat => ({
 // A premature HP commit, missing aria updates, uncancelled rAF or reading
 // pending picks instead of revealed events must fail these real DOM assertions.
 describe('battle presented HP and readout', () => {
+  // Reverting post-battle max reconciliation must clamp 54 back to 48 here.
+  for (const reduced of [false, true]) {
+    it(`reconciles winning level-up text, aria and fill to 54/54 (${reduced ? 'static' : 'animated'})`, () => {
+      const previous = battleState();
+      if (previous.phase.kind !== 'battle') throw new Error('battle');
+      previous.phase.battle.a.hp = 46;
+      previous.players[0]!.hp = 46;
+      const next = structuredClone(previous);
+      next.phase = { kind: 'awaitRoll' };
+      next.players[0]!.hp = 54;
+      next.players[0]!.stats.maxHp = 54;
+      const snapshot = structuredClone({ previous, next });
+      const plan = planBattle(
+        previous,
+        next,
+        [
+          {
+            type: 'DamageDealt',
+            seat: 0,
+            params: { attacker: 0, defender: 1, toDefender: 12, toAttacker: 0 },
+          },
+          { type: 'LevelUp', seat: 0, params: { level: 2 } },
+          { type: 'BattleEnded', seat: 0, params: { result: 'aWin' } },
+        ],
+        'human',
+        reduced,
+      );
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => {
+        frames.push(fn);
+        return frames.length;
+      });
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+      const { root } = render(previous);
+      const readout = battleUi.createBattleReadout(root);
+      readout.reset(previous);
+      for (const entry of plan) {
+        readout.showBeat(entry);
+        if (entry.kind === 'damage') {
+          expect(root.querySelector('[data-testid="hp-left"]')?.textContent).toBe('46/48');
+        }
+      }
+      expect(root.querySelector('[data-testid="hp-left"]')?.textContent).toBe('54/54');
+      const meter = root.querySelector('.left [role="meter"]')!;
+      expect(meter.getAttribute('aria-valuenow')).toBe('54');
+      expect(meter.getAttribute('aria-valuemax')).toBe('54');
+      expect(meter.querySelector<HTMLElement>('span')?.style.width).toBe('100%');
+      // Animated KO stays zero; static playback uses the authoritative respawn.
+      expect(root.querySelector('.right [role="meter"]')?.getAttribute('aria-valuenow')).toBe(
+        reduced ? String(next.players[1]!.hp) : '0',
+      );
+      readout.reset(next);
+      for (const callback of frames) callback(99999);
+      expect(root.querySelector('[data-testid="hp-left"]')?.textContent).toBe('54/54');
+      expect({ previous, next }).toEqual(snapshot);
+      readout.destroy();
+    });
+
+    for (const side of ['a', 'b'] as const) {
+      it(`reconciles a max-only ended change on side ${side} (${reduced ? 'static' : 'animated'})`, () => {
+        const previous = battleState();
+        if (previous.phase.kind !== 'battle') throw new Error('battle');
+        previous.players[0]!.hp = previous.phase.battle.a.hp;
+        previous.players[1]!.hp = previous.phase.battle.b.hp;
+        const next = structuredClone(previous);
+        next.phase = { kind: 'awaitRoll' };
+        const seat = side === 'a' ? 0 : 1;
+        next.players[seat]!.stats.maxHp += 6;
+        const { root } = render(previous);
+        const readout = battleUi.createBattleReadout(root);
+        readout.reset(previous);
+        for (const entry of planBattle(
+          previous,
+          next,
+          [{ type: 'BattleEnded', seat: 0, params: { result: 'draw' } }],
+          'human',
+          reduced,
+        ))
+          readout.showBeat(entry);
+        const meter = root.querySelector(`.${side === 'a' ? 'left' : 'right'} [role="meter"]`)!;
+        const player = next.players[seat]!;
+        expect(meter.getAttribute('aria-valuemax')).toBe(String(player.stats.maxHp));
+        expect(meter.getAttribute('aria-valuenow')).toBe(String(player.hp));
+        expect(meter.querySelector<HTMLElement>('span')?.style.width).toBe(
+          `${(player.hp / player.stats.maxHp) * 100}%`,
+        );
+        readout.destroy();
+      });
+    }
+  }
+
+  // Literal user-facing names catch t(key)'s raw-key fallback, unlike t-vs-t assertions.
+  for (const [lang, names] of [
+    ['en', ['Bulwark', 'Pickpocket', 'Firestorm', 'Sanctuary']],
+    ['th', ['กำแพงเหล็ก', 'ล้วงกระเป๋า', 'พายุเพลิง', 'แดนศักดิ์สิทธิ์']],
+  ] as const) {
+    for (const [index, secretId] of ['bulwark', 'pickpocket', 'firestorm', 'sanctuary'].entries()) {
+      it(`renders the public ${secretId} reveal in ${lang} without leaking it before reveal`, () => {
+        setLang(lang);
+        const { root } = render();
+        const readout = battleUi.createBattleReadout(root);
+        readout.reset(battleState());
+        readout.showBeat(beat('reveal'));
+        expect(root.textContent).not.toContain(names[index]);
+        readout.showBeat({ ...beat('reveal'), revealed: [{ side: 'a', secretId }] });
+        expect(root.querySelector('[data-testid="battle-readout"]')?.textContent).toContain(
+          names[index],
+        );
+        expect(root.textContent).not.toContain('secret.');
+        readout.destroy();
+      });
+    }
+  }
+
   it('holds both text and meter until drain, including an authoritative HUD rerender', () => {
     const previous = battleState();
     const next = structuredClone(previous);
