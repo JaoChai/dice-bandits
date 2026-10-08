@@ -5,6 +5,11 @@ import { poseFor, puppetTweens, type Motion } from '../../art/puppet';
 import { puppetOptions } from '../../art/motion';
 import type { BattleLayout } from './layout';
 
+// The town guardian borrows existing art until a dedicated atlas is available.
+const MONSTER_ART_ALIASES: Readonly<Record<string, keyof typeof ART.monsters>> = {
+  townGuardian: 'penguinKnight',
+};
+
 /** Cartoon atlas + pose for a combatant; falls back to a flat colour key. */
 export function fighterAtlas(
   state: GameState,
@@ -12,7 +17,7 @@ export function fighterAtlas(
 ): string {
   if (fighter.kind === 'player')
     return ART.heroes[state.players[fighter.seat!]?.classId ?? 'knight'];
-  const monsterId = fighter.monsterId ?? '';
+  const monsterId = MONSTER_ART_ALIASES[fighter.monsterId ?? ''] ?? fighter.monsterId ?? '';
   return monsterId in ART.monsters
     ? ART.monsters[monsterId as keyof typeof ART.monsters]
     : ART.icons;
