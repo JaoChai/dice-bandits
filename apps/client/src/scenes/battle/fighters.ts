@@ -209,7 +209,11 @@ export function drawFighters(
     setBaseScale(sprite, scale);
     if (!textured) console.warn('[art] fallback', atlas);
     else playMotion(scene, sprite, 'idle');
-    if (combatant.secretUsed) {
+    // secretUsed is set at pick time, before the other human chooses. Only
+    // show public usage: suppress this side's still-unrevealed pending secret.
+    const pendingPick =
+      side === fighters.attackerSide ? fighters.pending.attack : fighters.pending.defense;
+    if (combatant.secretUsed && pendingPick !== 'secret') {
       scene.add
         .text(pos.x, pos.y - layout.fighterHeight - 24, '★', {
           fontFamily: 'Mitr, Chakra Petch, sans-serif',
