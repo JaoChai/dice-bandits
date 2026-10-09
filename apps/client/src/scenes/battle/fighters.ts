@@ -4,7 +4,11 @@ import { ART } from '../../art/manifest';
 import { poseFor, puppetTweens, type Motion } from '../../art/puppet';
 import { puppetOptions } from '../../art/motion';
 import type { BattleLayout } from './layout';
-import { BATTLE_FIGHTER_HEIGHT } from './layout';
+
+// The town guardian borrows existing art until a dedicated atlas is available.
+const MONSTER_ART_ALIASES: Readonly<Record<string, keyof typeof ART.monsters>> = {
+  townGuardian: 'penguinKnight',
+};
 
 /** Cartoon atlas + pose for a combatant; falls back to a flat colour key. */
 export function fighterAtlas(
@@ -13,7 +17,7 @@ export function fighterAtlas(
 ): string {
   if (fighter.kind === 'player')
     return ART.heroes[state.players[fighter.seat!]?.classId ?? 'knight'];
-  const monsterId = fighter.monsterId ?? '';
+  const monsterId = MONSTER_ART_ALIASES[fighter.monsterId ?? ''] ?? fighter.monsterId ?? '';
   return monsterId in ART.monsters
     ? ART.monsters[monsterId as keyof typeof ART.monsters]
     : ART.icons;
@@ -187,12 +191,12 @@ export function drawFighters(
     const pos = side === 'a' ? layout.left : layout.right;
     const probe = texture as Phaser.Textures.Texture | undefined;
     // One uniform scale per atlas: the pose cell's own aspect sets the width
-    // (plan Task 8; reviewer item 1). 280 px target height ÷ the idle frame's
+    // (plan Task 8; reviewer item 1). Viewport target height ÷ the idle frame's
     // real pixel height; without frame data fall back to scale 1.
     const idleHeight = textured
-      ? (frameHeight(probe, 'idle') ?? BATTLE_FIGHTER_HEIGHT)
-      : BATTLE_FIGHTER_HEIGHT;
-    const scale = BATTLE_FIGHTER_HEIGHT / idleHeight;
+      ? (frameHeight(probe, 'idle') ?? layout.fighterHeight)
+      : layout.fighterHeight;
+    const scale = layout.fighterHeight / idleHeight;
     const sprite = scene.add
       .sprite(pos.x, pos.y, atlas, textured ? 'idle' : undefined)
       .setOrigin(0.5, 1)
@@ -205,9 +209,13 @@ export function drawFighters(
     setBaseScale(sprite, scale);
     if (!textured) console.warn('[art] fallback', atlas);
     else playMotion(scene, sprite, 'idle');
-    if (combatant.secretUsed) {
+    // secretUsed is set at pick time, before the other human chooses. Only
+    // show public usage: suppress this side's still-unrevealed pending secret.
+    const pendingPick =
+      side === fighters.attackerSide ? fighters.pending.attack : fighters.pending.defense;
+    if (combatant.secretUsed && pendingPick !== 'secret') {
       scene.add
-        .text(pos.x, pos.y - BATTLE_FIGHTER_HEIGHT - 24, '★', {
+        .text(pos.x, pos.y - layout.fighterHeight - 24, '★', {
           fontFamily: 'Mitr, Chakra Petch, sans-serif',
           fontSize: '28px',
           color: '#F5C51C',

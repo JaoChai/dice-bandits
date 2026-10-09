@@ -30,12 +30,15 @@ import { clearForkArrows } from './scenes/board/forkArrows';
 import { closeSpaceInfo } from './ui/spaceInfo';
 import { createDiceyGuide } from './ui/diceyTip';
 import { createDiceRoll, readRollResult } from './ui/diceRoll';
+import { createBattleReadout } from './ui/battleUi';
+import { crossesBattleBoundary, planBattle } from './scenes/battle/presentation';
 import { reducedMotion } from './art/motion';
 
 const app = getMount();
 initAudio();
 let game: Phaser.Game | null = null;
 let diceyGuide: ReturnType<typeof createDiceyGuide> | undefined;
+let battleReadout: ReturnType<typeof createBattleReadout> | undefined;
 let diceRoll: ReturnType<typeof createDiceRoll> | undefined;
 let sessionGeneration = 0;
 let unbindGameLanguage: (() => void) | undefined;
@@ -45,6 +48,9 @@ function destroyGame(): void {
   sessionGeneration++;
   unbindGameLanguage?.();
   unbindGameLanguage = undefined;
+  (game?.scene.getScene('BattleScene') as BattleScene | undefined)?.cancelBattlePresentation?.();
+  battleReadout?.destroy();
+  battleReadout = undefined;
   diceRoll?.destroy();
   diceRoll = undefined;
   diceyGuide?.destroy();
@@ -115,6 +121,8 @@ export function startOnlineGame(
   diceyGuide = guide;
   const rollView = createDiceRoll(app);
   diceRoll = rollView;
+  const readout = createBattleReadout(app);
+  battleReadout = readout;
   let displayedState = firstView.state;
   let presentationBusy = false;
   let previousTipState = firstView.state;
@@ -126,6 +134,8 @@ export function startOnlineGame(
   const receivedMovementGenerations: number[] = [];
   const cancelMovement = (): void => {
     movementGeneration++;
+    (game?.scene.getScene('BattleScene') as BattleScene | undefined)?.cancelBattlePresentation?.();
+    readout.reset(controller.state);
     (game?.scene.getScene('BoardScene') as BoardScene | undefined)?.cancelOnlineMovement?.();
   };
 
@@ -212,9 +222,7 @@ export function startOnlineGame(
             }
           }
           if (!isCurrent()) return;
-          // Battle stays baseline until R2. Board cosmetics run after commit.
-          if (ownedGame?.scene.isActive('BattleScene'))
-            await battleScene?.playEvents(events, testHooks.speed);
+          // All online battle cosmetics run after commit, never in this await.
         },
         () => {
           if (!isCurrent()) return;
@@ -228,8 +236,42 @@ export function startOnlineGame(
           } else if (ownedGame?.scene.isActive('BattleScene')) {
             scene?.scene.stop('BattleScene');
           }
-          if (presentationGeneration === movementGeneration)
+          if (presentationGeneration === movementGeneration) {
             scene?.presentOnlineMovement?.(previous, nextState, events, presentationGeneration);
+            // Bot chains can replace both fighters in one authoritative view.
+            // Clear old side a/b ownership before rendering the new battle HUD.
+            readout.reset(
+              crossesBattleBoundary(previous, nextState, events) ? nextState : previous,
+            );
+            if (nextState.phase.kind === 'battle' && ownedGame?.scene.isActive('BattleScene')) {
+              void battleScene
+                ?.playEvents(events, testHooks.speed, {
+                  previous,
+                  next: nextState,
+                  mode: 'online',
+                  onBeat: (beat) => {
+                    if (isCurrent() && presentationGeneration === movementGeneration)
+                      readout.showBeat(beat);
+                  },
+                  onCancel: () => {
+                    if (isCurrent() && presentationGeneration === movementGeneration)
+                      readout.reset(nextState);
+                  },
+                })
+                .then(() => {
+                  if (
+                    isCurrent() &&
+                    presentationGeneration === movementGeneration &&
+                    testHooks.speed > 0 &&
+                    !reducedMotion()
+                  )
+                    readout.reset(nextState);
+                });
+            } else {
+              for (const beat of planBattle(previous, nextState, events, 'online', true))
+                readout.showBeat(beat);
+            }
+          }
           // OnlineController commits its new legal/view immediately after this
           // promise settles; only that handoff mounts the actionable next HUD.
         },
@@ -392,6 +434,8 @@ function startGame(state: GameState): void {
   diceyGuide = guide;
   const rollView = createDiceRoll(app);
   diceRoll = rollView;
+  const readout = createBattleReadout(app);
+  battleReadout = readout;
   let displayedState = state;
   let presentationBusy = false;
   const isLocalHuman = (seat: number): boolean => displayedState.players[seat]?.control === 'human';
@@ -406,6 +450,7 @@ function startGame(state: GameState): void {
       presentationBusy = true;
       guide.dismiss();
       renderLocalHud();
+      readout.reset(displayedState);
       onGameEvents(events, nextState);
       const ownedGame = game;
       const scene = ownedGame?.scene.getScene('BoardScene') as BoardScene | undefined;
@@ -426,7 +471,21 @@ function startGame(state: GameState): void {
           await Promise.all([
             scene?.playEvents(events) ?? Promise.resolve(),
             ownedGame?.scene.isActive('BattleScene')
-              ? (battleScene?.playEvents(events, testHooks.speed) ?? Promise.resolve())
+              ? (battleScene?.playEvents(events, testHooks.speed, {
+                  previous: displayedState,
+                  next: nextState,
+                  mode:
+                    displayedState.phase.kind === 'battle' &&
+                    (['a', 'b'] as const).some((side) => {
+                      if (displayedState.phase.kind !== 'battle') return false;
+                      const seat = displayedState.phase.battle[side].seat;
+                      return seat !== null && displayedState.players[seat]?.control === 'human';
+                    })
+                      ? 'human'
+                      : 'bot',
+                  onBeat: (beat) => readout.showBeat(beat),
+                  onCancel: () => readout.reset(nextState),
+                }) ?? Promise.resolve())
               : Promise.resolve(),
           ]);
         },
@@ -435,6 +494,9 @@ function startGame(state: GameState): void {
           if (!isCurrent()) return;
           const previous = displayedState;
           displayedState = nextState;
+          // Static results remain legible until the next real action. Animated
+          // completion releases held HP before mounting the next legal tray.
+          if (testHooks.speed > 0 && !reducedMotion()) readout.reset(nextState);
           presentationBusy = false;
           renderLocalHud();
           guide.update({ prev: previous, next: nextState, events, isLocalHuman });

@@ -78,6 +78,79 @@ for (const lang of ['th', 'en'] as const) {
         await page.evaluate(() => document.fonts.ready);
       });
 
+      // Fixed-height sprites at the old ground line must fail real canvas/DOM geometry.
+      test('viewport fighters clear HP, commands and controls, including long TH names', async ({
+        page,
+      }, info) => {
+        const longName = lang === 'th' ? 'ก'.repeat(18) : 'W'.repeat(18);
+        await page.locator('.battle-hp-card strong').evaluateAll((elements, name) => {
+          elements.forEach((element) => {
+            element.textContent = name;
+          });
+        }, longName);
+        for (const side of ['left', 'right']) {
+          await assertInside(page, `.battle-hp-card.${side} strong`, `.battle-hp-card.${side}`);
+          await assertNoEllipsis(page, `.battle-hp-card.${side}`);
+        }
+        const fighters = await page.evaluate(async () => {
+          const game = (window as unknown as Window & { __m5aGame: Phaser.Game }).__m5aGame;
+          await new Promise<void>((resolve) => game.events.once('postrender', resolve));
+          const scene = game.scene.getScene('BattleScene');
+          const canvas = game.canvas.getBoundingClientRect();
+          const camera = scene.cameras.main;
+          return scene.children
+            .getChildren()
+            .filter((child) => child.type === 'Sprite')
+            .map((child) => {
+              const sprite = child as Phaser.GameObjects.Sprite;
+              const bounds = sprite.getBounds();
+              const tl = camera.getViewMatrix().transformPoint(bounds.left, bounds.top);
+              const br = camera.getViewMatrix().transformPoint(bounds.right, bounds.bottom);
+              return {
+                left: canvas.left + (tl.x / game.canvas.width) * canvas.width,
+                top: canvas.top + (tl.y / game.canvas.height) * canvas.height,
+                right: canvas.left + (br.x / game.canvas.width) * canvas.width,
+                bottom: canvas.top + (br.y / game.canvas.height) * canvas.height,
+                height: (sprite.displayHeight / game.canvas.height) * canvas.height,
+                logicalWidth: camera.width,
+                logicalHeight: camera.height,
+              };
+            });
+        });
+        expect(fighters).toHaveLength(2);
+        const obstacles = [
+          '.battle-hp-card.left',
+          '.battle-hp-card.right',
+          '.action-tray',
+          ...controls
+            .filter((control) => control !== 'world-chip')
+            .map((control) => `[data-testid="${control}"]`),
+        ];
+        for (const fighter of fighters) {
+          const target = viewport.height > 480 ? 330 : 180;
+          expect.soft(fighter.height).toBeGreaterThanOrEqual(target - 12);
+          expect.soft(fighter.height).toBeLessThanOrEqual(target + 12);
+          for (const selector of obstacles) {
+            expect
+              .soft(
+                overlap(fighter, await domRect(page, selector)),
+                `fighter intersects ${selector}`,
+              )
+              .toBe(0);
+          }
+          expect(fighter.left).toBeGreaterThanOrEqual(0);
+          expect(fighter.top).toBeGreaterThanOrEqual(0);
+          expect(fighter.right).toBeLessThanOrEqual(viewport.width);
+          expect(fighter.bottom).toBeLessThanOrEqual(viewport.height);
+        }
+        console.log(`Fighters ${name}: ${JSON.stringify(fighters)}`);
+        await info.attach('fighter-geometry', {
+          body: JSON.stringify(fighters, null, 2),
+          contentType: 'application/json',
+        });
+        await page.screenshot({ path: info.outputPath(`fighters-${lang}.png`) });
+      });
+
       // Moving HP back into the controls' lane must fail, even when the
       // pointer-events:none HUD leaves the hidden buttons clickable.
       test('HP cards clear visible battle controls', async ({ page }, info) => {
@@ -219,6 +292,36 @@ for (const lang of ['th', 'en'] as const) {
         const tray = await domRect(page, '.action-tray');
         const ribbon = await domRect(page, '[data-testid="turn-ribbon"]');
         const measurements = [];
+        const fighters = await page.evaluate(() => {
+          const game = (window as unknown as Window & { __m5aGame: Phaser.Game }).__m5aGame;
+          const scene = game.scene.getScene('BattleScene');
+          const canvas = game.canvas.getBoundingClientRect();
+          return scene.children
+            .getChildren()
+            .filter((child) => child.type === 'Sprite')
+            .map((child) => {
+              const bounds = (child as Phaser.GameObjects.Sprite).getBounds();
+              const tl = scene.cameras.main.getViewMatrix().transformPoint(bounds.left, bounds.top);
+              const br = scene.cameras.main
+                .getViewMatrix()
+                .transformPoint(bounds.right, bounds.bottom);
+              return {
+                left: canvas.left + (tl.x / game.canvas.width) * canvas.width,
+                top: canvas.top + (tl.y / game.canvas.height) * canvas.height,
+                right: canvas.left + (br.x / game.canvas.width) * canvas.width,
+                bottom: canvas.top + (br.y / game.canvas.height) * canvas.height,
+              };
+            });
+        });
+        expect(fighters).toHaveLength(2);
+        for (const [fighter, bounds] of fighters.entries()) {
+          for (const [seat, rect] of rects.entries()) {
+            measurements.push({
+              pair: `fighter ${fighter} / seat ${seat}`,
+              overlap: overlap(bounds, rect),
+            });
+          }
+        }
         for (const side of ['left', 'right']) {
           const hp = await domRect(page, `.battle-hp-card.${side}`);
           for (const [seat, rect] of rects.entries()) {

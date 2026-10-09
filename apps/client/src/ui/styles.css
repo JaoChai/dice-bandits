@@ -1237,10 +1237,15 @@ h1 {
 .battle-mode .seat-card:has([data-testid^='seat-takeover-']) {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) auto;
-  width: 215px;
+  width: 150px;
   min-height: 0;
-  gap: 2px;
-  padding: 4px;
+  gap: 1px;
+  padding: 2px;
+}
+.battle-mode .seat-details .seat-status {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .battle-mode .seat-portrait {
   width: 24px;
@@ -1269,7 +1274,7 @@ h1 {
 }
 .battle-mode .seat-card.corner-bl,
 .battle-mode .seat-card.corner-br {
-  bottom: 80px;
+  bottom: max(4px, env(safe-area-inset-bottom));
 }
 /* Battle: controls and the centred turn ribbon share the top strip;
    the corner HP cards have a separate row below the 44px controls. */

@@ -1,0 +1,1598 @@
+{
+  "before": {
+    "type": "view",
+    "turn": 53,
+    "state": {
+      "version": 1,
+      "config": {
+        "seed": "",
+        "seats": [
+          {
+            "name": "Alice",
+            "classId": "knight",
+            "control": "human",
+            "personality": null
+          },
+          {
+            "name": "Bob",
+            "classId": "mage",
+            "control": "human",
+            "personality": null
+          },
+          {
+            "name": "Bot 3",
+            "classId": "thief",
+            "control": "bot",
+            "personality": "greedy"
+          },
+          {
+            "name": "Bot 4",
+            "classId": "cleric",
+            "control": "bot",
+            "personality": "vengeful"
+          }
+        ],
+        "rounds": 12
+      },
+      "rng": [0, 0, 0, 0],
+      "round": 3,
+      "turnSeat": 1,
+      "worldRule": "slipperyRoads",
+      "board": {
+        "spaces": [
+          {
+            "id": 0,
+            "kind": "castle",
+            "region": "meadow",
+            "next": [1],
+            "x": 470,
+            "y": 1150
+          },
+          {
+            "id": 1,
+            "kind": "town",
+            "region": "meadow",
+            "next": [2],
+            "x": 500,
+            "y": 1332
+          },
+          {
+            "id": 2,
+            "kind": "chest",
+            "region": "meadow",
+            "next": [3],
+            "x": 637,
+            "y": 1453
+          },
+          {
+            "id": 3,
+            "kind": "event",
+            "region": "meadow",
+            "next": [4],
+            "x": 822,
+            "y": 1470
+          },
+          {
+            "id": 4,
+            "kind": "chest",
+            "region": "meadow",
+            "next": [5],
+            "x": 1009,
+            "y": 1470
+          },
+          {
+            "id": 5,
+            "kind": "shop",
+            "region": "meadow",
+            "next": [6],
+            "x": 1196,
+            "y": 1470
+          },
+          {
+            "id": 6,
+            "kind": "trap",
+            "region": "meadow",
+            "next": [7],
+            "x": 1383,
+            "y": 1470
+          },
+          {
+            "id": 7,
+            "kind": "monster",
+            "region": "meadow",
+            "next": [8],
+            "x": 1570,
+            "y": 1470
+          },
+          {
+            "id": 8,
+            "kind": "town",
+            "region": "meadow",
+            "next": [9],
+            "x": 1757,
+            "y": 1470
+          },
+          {
+            "id": 9,
+            "kind": "event",
+            "region": "desert",
+            "next": [10],
+            "x": 1943,
+            "y": 1470
+          },
+          {
+            "id": 10,
+            "kind": "trap",
+            "region": "desert",
+            "next": [11, 34],
+            "x": 2130,
+            "y": 1470
+          },
+          {
+            "id": 11,
+            "kind": "event",
+            "region": "desert",
+            "next": [12],
+            "x": 2345,
+            "y": 1534
+          },
+          {
+            "id": 12,
+            "kind": "chest",
+            "region": "desert",
+            "next": [13],
+            "x": 2540,
+            "y": 1550
+          },
+          {
+            "id": 13,
+            "kind": "shop",
+            "region": "desert",
+            "next": [14],
+            "x": 2685,
+            "y": 1428
+          },
+          {
+            "id": 14,
+            "kind": "town",
+            "region": "desert",
+            "next": [15],
+            "x": 2730,
+            "y": 1211
+          },
+          {
+            "id": 15,
+            "kind": "chest",
+            "region": "desert",
+            "next": [16],
+            "x": 2730,
+            "y": 1024
+          },
+          {
+            "id": 16,
+            "kind": "monster",
+            "region": "desert",
+            "next": [17],
+            "x": 2730,
+            "y": 837
+          },
+          {
+            "id": 17,
+            "kind": "monster",
+            "region": "desert",
+            "next": [18],
+            "x": 2730,
+            "y": 650
+          },
+          {
+            "id": 18,
+            "kind": "trap",
+            "region": "snow",
+            "next": [19],
+            "x": 2700,
+            "y": 468
+          },
+          {
+            "id": 19,
+            "kind": "event",
+            "region": "snow",
+            "next": [20, 37],
+            "x": 2563,
+            "y": 347
+          },
+          {
+            "id": 20,
+            "kind": "chest",
+            "region": "snow",
+            "next": [21],
+            "x": 2379,
+            "y": 260
+          },
+          {
+            "id": 21,
+            "kind": "trap",
+            "region": "snow",
+            "next": [22],
+            "x": 2193,
+            "y": 240
+          },
+          {
+            "id": 22,
+            "kind": "shop",
+            "region": "snow",
+            "next": [23],
+            "x": 2005,
+            "y": 280
+          },
+          {
+            "id": 23,
+            "kind": "town",
+            "region": "snow",
+            "next": [24],
+            "x": 1817,
+            "y": 330
+          },
+          {
+            "id": 24,
+            "kind": "monster",
+            "region": "snow",
+            "next": [25],
+            "x": 1630,
+            "y": 330
+          },
+          {
+            "id": 25,
+            "kind": "chest",
+            "region": "snow",
+            "next": [26],
+            "x": 1443,
+            "y": 330
+          },
+          {
+            "id": 26,
+            "kind": "monster",
+            "region": "snow",
+            "next": [27],
+            "x": 1257,
+            "y": 330
+          },
+          {
+            "id": 27,
+            "kind": "chest",
+            "region": "volcano",
+            "next": [28],
+            "x": 1070,
+            "y": 330
+          },
+          {
+            "id": 28,
+            "kind": "town",
+            "region": "volcano",
+            "next": [29],
+            "x": 883,
+            "y": 330
+          },
+          {
+            "id": 29,
+            "kind": "town",
+            "region": "volcano",
+            "next": [30],
+            "x": 696,
+            "y": 332
+          },
+          {
+            "id": 30,
+            "kind": "shop",
+            "region": "volcano",
+            "next": [31],
+            "x": 535,
+            "y": 418
+          },
+          {
+            "id": 31,
+            "kind": "event",
+            "region": "volcano",
+            "next": [32],
+            "x": 470,
+            "y": 589
+          },
+          {
+            "id": 32,
+            "kind": "monster",
+            "region": "volcano",
+            "next": [33],
+            "x": 470,
+            "y": 776
+          },
+          {
+            "id": 33,
+            "kind": "chest",
+            "region": "volcano",
+            "next": [0],
+            "x": 470,
+            "y": 963
+          },
+          {
+            "id": 34,
+            "kind": "event",
+            "region": "desert",
+            "next": [35],
+            "x": 2289,
+            "y": 1406
+          },
+          {
+            "id": 35,
+            "kind": "town",
+            "region": "desert",
+            "next": [36],
+            "x": 2468,
+            "y": 1385
+          },
+          {
+            "id": 36,
+            "kind": "monster",
+            "region": "desert",
+            "next": [14],
+            "x": 2645,
+            "y": 1336
+          },
+          {
+            "id": 37,
+            "kind": "town",
+            "region": "snow",
+            "next": [38],
+            "x": 2376,
+            "y": 400
+          },
+          {
+            "id": 38,
+            "kind": "monster",
+            "region": "snow",
+            "next": [39],
+            "x": 2189,
+            "y": 420
+          },
+          {
+            "id": 39,
+            "kind": "trap",
+            "region": "snow",
+            "next": [23],
+            "x": 2003,
+            "y": 380
+          }
+        ],
+        "castleId": 0
+      },
+      "towns": [
+        {
+          "spaceId": 1,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 8,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 14,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 23,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 28,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 29,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 35,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 37,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        }
+      ],
+      "traps": {},
+      "players": [
+        {
+          "seat": 0,
+          "name": "Alice",
+          "classId": "knight",
+          "control": "human",
+          "personality": null,
+          "gold": 386,
+          "level": 2,
+          "xp": 25,
+          "hp": 54,
+          "stats": {
+            "maxHp": 54,
+            "atk": 14,
+            "def": 14,
+            "spd": 7,
+            "mag": 4
+          },
+          "pos": 9,
+          "items": [],
+          "weapon": null,
+          "armor": null,
+          "skipTurns": 0,
+          "rollCap": null,
+          "forcedRoll": null,
+          "skipNextFight": false,
+          "bonusDice": 0,
+          "prank": null,
+          "banditCards": [],
+          "grudges": [],
+          "perks": ["grudgeHolder"]
+        },
+        {
+          "seat": 1,
+          "name": "Bob",
+          "classId": "mage",
+          "control": "human",
+          "personality": null,
+          "gold": 81,
+          "level": 1,
+          "xp": 0,
+          "hp": 32,
+          "stats": {
+            "maxHp": 34,
+            "atk": 6,
+            "def": 6,
+            "spd": 9,
+            "mag": 8
+          },
+          "pos": 7,
+          "items": [],
+          "weapon": null,
+          "armor": null,
+          "skipTurns": 0,
+          "rollCap": null,
+          "forcedRoll": null,
+          "skipNextFight": false,
+          "bonusDice": 0,
+          "prank": null,
+          "banditCards": ["pickpocketFar", "cursedLegs"],
+          "grudges": [],
+          "perks": []
+        },
+        {
+          "seat": 2,
+          "name": "Bot 3",
+          "classId": "thief",
+          "control": "bot",
+          "personality": "greedy",
+          "gold": 276,
+          "level": 1,
+          "xp": 0,
+          "hp": 38,
+          "stats": {
+            "maxHp": 38,
+            "atk": 11,
+            "def": 7,
+            "spd": 13,
+            "mag": 5
+          },
+          "pos": 0,
+          "items": [],
+          "weapon": null,
+          "armor": null,
+          "skipTurns": 0,
+          "rollCap": null,
+          "forcedRoll": null,
+          "skipNextFight": false,
+          "bonusDice": 0,
+          "prank": {
+            "alias": "prank.alias.10",
+            "untilRound": 4
+          },
+          "banditCards": [],
+          "grudges": [null, null, null, 1],
+          "perks": []
+        },
+        {
+          "seat": 3,
+          "name": "Bot 4",
+          "classId": "cleric",
+          "control": "bot",
+          "personality": "vengeful",
+          "gold": 45,
+          "level": 1,
+          "xp": 0,
+          "hp": 26,
+          "stats": {
+            "maxHp": 50,
+            "atk": 12,
+            "def": 9,
+            "spd": 8,
+            "mag": 13
+          },
+          "pos": 5,
+          "items": ["trapCard", "trapCard", "trapCard", "trapCard", "trapCard", "trapCard"],
+          "weapon": null,
+          "armor": null,
+          "skipTurns": 0,
+          "rollCap": null,
+          "forcedRoll": null,
+          "skipNextFight": false,
+          "bonusDice": 0,
+          "prank": null,
+          "banditCards": [],
+          "grudges": [],
+          "perks": []
+        }
+      ],
+      "phase": {
+        "kind": "battle",
+        "battle": {
+          "context": "monster",
+          "spaceId": 7,
+          "a": {
+            "kind": "player",
+            "seat": 1,
+            "monsterId": null,
+            "level": 1,
+            "hp": 32,
+            "stats": {
+              "maxHp": 34,
+              "atk": 6,
+              "def": 6,
+              "spd": 9,
+              "mag": 8
+            },
+            "secretUsed": false,
+            "buffs": {
+              "ironSkin": false,
+              "poison": false,
+              "halveNext": false
+            }
+          },
+          "b": {
+            "kind": "monster",
+            "seat": null,
+            "monsterId": "mushroomBonk",
+            "level": 1,
+            "hp": 1,
+            "stats": {
+              "maxHp": 14,
+              "atk": 4,
+              "def": 2,
+              "spd": 3,
+              "mag": 2
+            },
+            "secretUsed": false,
+            "buffs": {
+              "ironSkin": false,
+              "poison": false,
+              "halveNext": false
+            }
+          },
+          "exchange": 3,
+          "attackerSide": "b",
+          "half": 2,
+          "pending": {
+            "attack": null,
+            "defense": null
+          }
+        }
+      },
+      "bounty": null,
+      "stats": {
+        "robbedGold": [0, 0, 0, 0],
+        "townFlips": {},
+        "kos": [0, 0, 1, 0]
+      }
+    },
+    "you": 0,
+    "legal": [],
+    "seats": [
+      {
+        "seat": 0,
+        "name": "Alice",
+        "classId": "knight",
+        "kind": "human",
+        "controller": "player",
+        "connected": true
+      },
+      {
+        "seat": 1,
+        "name": "Bob",
+        "classId": "mage",
+        "kind": "human",
+        "controller": "player",
+        "connected": true
+      },
+      {
+        "seat": 2,
+        "name": "Bot 3",
+        "classId": "thief",
+        "kind": "bot",
+        "controller": "bot",
+        "connected": false
+      },
+      {
+        "seat": 3,
+        "name": "Bot 4",
+        "classId": "cleric",
+        "kind": "bot",
+        "controller": "bot",
+        "connected": false
+      }
+    ],
+    "opponentPicked": true
+  },
+  "events": [
+    {
+      "type": "events",
+      "turn": 63,
+      "events": [
+        {
+          "type": "BattlePick",
+          "seat": 1,
+          "params": {
+            "side": "a",
+            "pick": "defend",
+            "role": "defense"
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": null,
+          "params": {
+            "side": "b",
+            "pick": "strike",
+            "role": "attack"
+          }
+        },
+        {
+          "type": "DamageDealt",
+          "seat": null,
+          "params": {
+            "attacker": "mushroomBonk",
+            "defender": 1,
+            "toAttacker": 0,
+            "toDefender": 3,
+            "exchange": 3,
+            "half": 2
+          }
+        },
+        {
+          "type": "BattleEnded",
+          "seat": null,
+          "params": {
+            "result": "draw"
+          }
+        },
+        {
+          "type": "DiceRolled",
+          "seat": 2,
+          "params": {
+            "value": 1,
+            "dice": 1,
+            "sides": 6
+          }
+        },
+        {
+          "type": "Moved",
+          "seat": 2,
+          "params": {
+            "to": 1,
+            "remaining": 0
+          }
+        },
+        {
+          "type": "BattleStarted",
+          "seat": 2,
+          "params": {
+            "context": "town",
+            "spaceId": 1,
+            "first": "a",
+            "opponent": "jellyBun"
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": 2,
+          "params": {
+            "side": "a",
+            "pick": "secret",
+            "role": "attack"
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": null,
+          "params": {
+            "side": "b",
+            "pick": "counter",
+            "role": "defense"
+          }
+        },
+        {
+          "type": "SecretUsed",
+          "seat": 2,
+          "params": {
+            "side": "a",
+            "secret": "pickpocket",
+            "stolen": 0
+          }
+        },
+        {
+          "type": "DamageDealt",
+          "seat": 2,
+          "params": {
+            "attacker": 2,
+            "defender": "jellyBun",
+            "toAttacker": 0,
+            "toDefender": 10,
+            "exchange": 1,
+            "half": 1
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": 2,
+          "params": {
+            "side": "a",
+            "pick": "defend",
+            "role": "defense"
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": null,
+          "params": {
+            "side": "b",
+            "pick": "attack",
+            "role": "attack"
+          }
+        },
+        {
+          "type": "DamageDealt",
+          "seat": null,
+          "params": {
+            "attacker": "jellyBun",
+            "defender": 2,
+            "toAttacker": 0,
+            "toDefender": 1,
+            "exchange": 1,
+            "half": 2
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": 2,
+          "params": {
+            "side": "a",
+            "pick": "defend",
+            "role": "defense"
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": null,
+          "params": {
+            "side": "b",
+            "pick": "attack",
+            "role": "attack"
+          }
+        },
+        {
+          "type": "DamageDealt",
+          "seat": null,
+          "params": {
+            "attacker": "jellyBun",
+            "defender": 2,
+            "toAttacker": 0,
+            "toDefender": 1,
+            "exchange": 2,
+            "half": 1
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": 2,
+          "params": {
+            "side": "a",
+            "pick": "strike",
+            "role": "attack"
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": null,
+          "params": {
+            "side": "b",
+            "pick": "counter",
+            "role": "defense"
+          }
+        },
+        {
+          "type": "DamageDealt",
+          "seat": 2,
+          "params": {
+            "attacker": 2,
+            "defender": "jellyBun",
+            "toAttacker": 14,
+            "toDefender": 0,
+            "exchange": 2,
+            "half": 2
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": 2,
+          "params": {
+            "side": "a",
+            "pick": "strike",
+            "role": "attack"
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": null,
+          "params": {
+            "side": "b",
+            "pick": "counter",
+            "role": "defense"
+          }
+        },
+        {
+          "type": "DamageDealt",
+          "seat": 2,
+          "params": {
+            "attacker": 2,
+            "defender": "jellyBun",
+            "toAttacker": 15,
+            "toDefender": 0,
+            "exchange": 3,
+            "half": 1
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": 2,
+          "params": {
+            "side": "a",
+            "pick": "defend",
+            "role": "defense"
+          }
+        },
+        {
+          "type": "BattlePick",
+          "seat": null,
+          "params": {
+            "side": "b",
+            "pick": "strike",
+            "role": "attack"
+          }
+        },
+        {
+          "type": "DamageDealt",
+          "seat": null,
+          "params": {
+            "attacker": "jellyBun",
+            "defender": 2,
+            "toAttacker": 0,
+            "toDefender": 1,
+            "exchange": 3,
+            "half": 2
+          }
+        },
+        {
+          "type": "BattleEnded",
+          "seat": null,
+          "params": {
+            "result": "draw"
+          }
+        },
+        {
+          "type": "DiceRolled",
+          "seat": 3,
+          "params": {
+            "value": 5,
+            "dice": 1,
+            "sides": 6
+          }
+        },
+        {
+          "type": "Moved",
+          "seat": 3,
+          "params": {
+            "to": 6,
+            "remaining": 5
+          }
+        },
+        {
+          "type": "Moved",
+          "seat": 3,
+          "params": {
+            "to": 7,
+            "remaining": 4
+          }
+        },
+        {
+          "type": "DuelAccepted",
+          "seat": 3,
+          "params": {
+            "target": 1
+          }
+        },
+        {
+          "type": "BattleStarted",
+          "seat": 3,
+          "params": {
+            "context": "pvp",
+            "spaceId": 7,
+            "first": "b",
+            "opponent": ""
+          }
+        }
+      ]
+    }
+  ],
+  "after": {
+    "type": "view",
+    "turn": 63,
+    "state": {
+      "version": 1,
+      "config": {
+        "seed": "",
+        "seats": [
+          {
+            "name": "Alice",
+            "classId": "knight",
+            "control": "human",
+            "personality": null
+          },
+          {
+            "name": "Bob",
+            "classId": "mage",
+            "control": "human",
+            "personality": null
+          },
+          {
+            "name": "Bot 3",
+            "classId": "thief",
+            "control": "bot",
+            "personality": "greedy"
+          },
+          {
+            "name": "Bot 4",
+            "classId": "cleric",
+            "control": "bot",
+            "personality": "vengeful"
+          }
+        ],
+        "rounds": 12
+      },
+      "rng": [0, 0, 0, 0],
+      "round": 3,
+      "turnSeat": 3,
+      "worldRule": "slipperyRoads",
+      "board": {
+        "spaces": [
+          {
+            "id": 0,
+            "kind": "castle",
+            "region": "meadow",
+            "next": [1],
+            "x": 470,
+            "y": 1150
+          },
+          {
+            "id": 1,
+            "kind": "town",
+            "region": "meadow",
+            "next": [2],
+            "x": 500,
+            "y": 1332
+          },
+          {
+            "id": 2,
+            "kind": "chest",
+            "region": "meadow",
+            "next": [3],
+            "x": 637,
+            "y": 1453
+          },
+          {
+            "id": 3,
+            "kind": "event",
+            "region": "meadow",
+            "next": [4],
+            "x": 822,
+            "y": 1470
+          },
+          {
+            "id": 4,
+            "kind": "chest",
+            "region": "meadow",
+            "next": [5],
+            "x": 1009,
+            "y": 1470
+          },
+          {
+            "id": 5,
+            "kind": "shop",
+            "region": "meadow",
+            "next": [6],
+            "x": 1196,
+            "y": 1470
+          },
+          {
+            "id": 6,
+            "kind": "trap",
+            "region": "meadow",
+            "next": [7],
+            "x": 1383,
+            "y": 1470
+          },
+          {
+            "id": 7,
+            "kind": "monster",
+            "region": "meadow",
+            "next": [8],
+            "x": 1570,
+            "y": 1470
+          },
+          {
+            "id": 8,
+            "kind": "town",
+            "region": "meadow",
+            "next": [9],
+            "x": 1757,
+            "y": 1470
+          },
+          {
+            "id": 9,
+            "kind": "event",
+            "region": "desert",
+            "next": [10],
+            "x": 1943,
+            "y": 1470
+          },
+          {
+            "id": 10,
+            "kind": "trap",
+            "region": "desert",
+            "next": [11, 34],
+            "x": 2130,
+            "y": 1470
+          },
+          {
+            "id": 11,
+            "kind": "event",
+            "region": "desert",
+            "next": [12],
+            "x": 2345,
+            "y": 1534
+          },
+          {
+            "id": 12,
+            "kind": "chest",
+            "region": "desert",
+            "next": [13],
+            "x": 2540,
+            "y": 1550
+          },
+          {
+            "id": 13,
+            "kind": "shop",
+            "region": "desert",
+            "next": [14],
+            "x": 2685,
+            "y": 1428
+          },
+          {
+            "id": 14,
+            "kind": "town",
+            "region": "desert",
+            "next": [15],
+            "x": 2730,
+            "y": 1211
+          },
+          {
+            "id": 15,
+            "kind": "chest",
+            "region": "desert",
+            "next": [16],
+            "x": 2730,
+            "y": 1024
+          },
+          {
+            "id": 16,
+            "kind": "monster",
+            "region": "desert",
+            "next": [17],
+            "x": 2730,
+            "y": 837
+          },
+          {
+            "id": 17,
+            "kind": "monster",
+            "region": "desert",
+            "next": [18],
+            "x": 2730,
+            "y": 650
+          },
+          {
+            "id": 18,
+            "kind": "trap",
+            "region": "snow",
+            "next": [19],
+            "x": 2700,
+            "y": 468
+          },
+          {
+            "id": 19,
+            "kind": "event",
+            "region": "snow",
+            "next": [20, 37],
+            "x": 2563,
+            "y": 347
+          },
+          {
+            "id": 20,
+            "kind": "chest",
+            "region": "snow",
+            "next": [21],
+            "x": 2379,
+            "y": 260
+          },
+          {
+            "id": 21,
+            "kind": "trap",
+            "region": "snow",
+            "next": [22],
+            "x": 2193,
+            "y": 240
+          },
+          {
+            "id": 22,
+            "kind": "shop",
+            "region": "snow",
+            "next": [23],
+            "x": 2005,
+            "y": 280
+          },
+          {
+            "id": 23,
+            "kind": "town",
+            "region": "snow",
+            "next": [24],
+            "x": 1817,
+            "y": 330
+          },
+          {
+            "id": 24,
+            "kind": "monster",
+            "region": "snow",
+            "next": [25],
+            "x": 1630,
+            "y": 330
+          },
+          {
+            "id": 25,
+            "kind": "chest",
+            "region": "snow",
+            "next": [26],
+            "x": 1443,
+            "y": 330
+          },
+          {
+            "id": 26,
+            "kind": "monster",
+            "region": "snow",
+            "next": [27],
+            "x": 1257,
+            "y": 330
+          },
+          {
+            "id": 27,
+            "kind": "chest",
+            "region": "volcano",
+            "next": [28],
+            "x": 1070,
+            "y": 330
+          },
+          {
+            "id": 28,
+            "kind": "town",
+            "region": "volcano",
+            "next": [29],
+            "x": 883,
+            "y": 330
+          },
+          {
+            "id": 29,
+            "kind": "town",
+            "region": "volcano",
+            "next": [30],
+            "x": 696,
+            "y": 332
+          },
+          {
+            "id": 30,
+            "kind": "shop",
+            "region": "volcano",
+            "next": [31],
+            "x": 535,
+            "y": 418
+          },
+          {
+            "id": 31,
+            "kind": "event",
+            "region": "volcano",
+            "next": [32],
+            "x": 470,
+            "y": 589
+          },
+          {
+            "id": 32,
+            "kind": "monster",
+            "region": "volcano",
+            "next": [33],
+            "x": 470,
+            "y": 776
+          },
+          {
+            "id": 33,
+            "kind": "chest",
+            "region": "volcano",
+            "next": [0],
+            "x": 470,
+            "y": 963
+          },
+          {
+            "id": 34,
+            "kind": "event",
+            "region": "desert",
+            "next": [35],
+            "x": 2289,
+            "y": 1406
+          },
+          {
+            "id": 35,
+            "kind": "town",
+            "region": "desert",
+            "next": [36],
+            "x": 2468,
+            "y": 1385
+          },
+          {
+            "id": 36,
+            "kind": "monster",
+            "region": "desert",
+            "next": [14],
+            "x": 2645,
+            "y": 1336
+          },
+          {
+            "id": 37,
+            "kind": "town",
+            "region": "snow",
+            "next": [38],
+            "x": 2376,
+            "y": 400
+          },
+          {
+            "id": 38,
+            "kind": "monster",
+            "region": "snow",
+            "next": [39],
+            "x": 2189,
+            "y": 420
+          },
+          {
+            "id": 39,
+            "kind": "trap",
+            "region": "snow",
+            "next": [23],
+            "x": 2003,
+            "y": 380
+          }
+        ],
+        "castleId": 0
+      },
+      "towns": [
+        {
+          "spaceId": 1,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 8,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 14,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 23,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 28,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 29,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 35,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        },
+        {
+          "spaceId": 37,
+          "owner": null,
+          "value": 200,
+          "guardianLevel": 1
+        }
+      ],
+      "traps": {},
+      "players": [
+        {
+          "seat": 0,
+          "name": "Alice",
+          "classId": "knight",
+          "control": "human",
+          "personality": null,
+          "gold": 386,
+          "level": 2,
+          "xp": 25,
+          "hp": 54,
+          "stats": {
+            "maxHp": 54,
+            "atk": 14,
+            "def": 14,
+            "spd": 7,
+            "mag": 4
+          },
+          "pos": 9,
+          "items": [],
+          "weapon": null,
+          "armor": null,
+          "skipTurns": 0,
+          "rollCap": null,
+          "forcedRoll": null,
+          "skipNextFight": false,
+          "bonusDice": 0,
+          "prank": null,
+          "banditCards": [],
+          "grudges": [],
+          "perks": ["grudgeHolder"]
+        },
+        {
+          "seat": 1,
+          "name": "Bob",
+          "classId": "mage",
+          "control": "human",
+          "personality": null,
+          "gold": 81,
+          "level": 1,
+          "xp": 0,
+          "hp": 29,
+          "stats": {
+            "maxHp": 34,
+            "atk": 6,
+            "def": 6,
+            "spd": 9,
+            "mag": 8
+          },
+          "pos": 7,
+          "items": [],
+          "weapon": null,
+          "armor": null,
+          "skipTurns": 0,
+          "rollCap": null,
+          "forcedRoll": null,
+          "skipNextFight": false,
+          "bonusDice": 0,
+          "prank": null,
+          "banditCards": ["pickpocketFar", "cursedLegs"],
+          "grudges": [],
+          "perks": []
+        },
+        {
+          "seat": 2,
+          "name": "Bot 3",
+          "classId": "thief",
+          "control": "bot",
+          "personality": "greedy",
+          "gold": 276,
+          "level": 1,
+          "xp": 0,
+          "hp": 6,
+          "stats": {
+            "maxHp": 38,
+            "atk": 11,
+            "def": 7,
+            "spd": 13,
+            "mag": 5
+          },
+          "pos": 1,
+          "items": [],
+          "weapon": null,
+          "armor": null,
+          "skipTurns": 0,
+          "rollCap": null,
+          "forcedRoll": null,
+          "skipNextFight": false,
+          "bonusDice": 0,
+          "prank": {
+            "alias": "prank.alias.10",
+            "untilRound": 4
+          },
+          "banditCards": [],
+          "grudges": [null, null, null, 1],
+          "perks": []
+        },
+        {
+          "seat": 3,
+          "name": "Bot 4",
+          "classId": "cleric",
+          "control": "bot",
+          "personality": "vengeful",
+          "gold": 45,
+          "level": 1,
+          "xp": 0,
+          "hp": 26,
+          "stats": {
+            "maxHp": 50,
+            "atk": 12,
+            "def": 9,
+            "spd": 8,
+            "mag": 13
+          },
+          "pos": 7,
+          "items": ["trapCard", "trapCard", "trapCard", "trapCard", "trapCard", "trapCard"],
+          "weapon": null,
+          "armor": null,
+          "skipTurns": 0,
+          "rollCap": null,
+          "forcedRoll": null,
+          "skipNextFight": false,
+          "bonusDice": 0,
+          "prank": null,
+          "banditCards": [],
+          "grudges": [],
+          "perks": []
+        }
+      ],
+      "phase": {
+        "kind": "battle",
+        "battle": {
+          "context": "pvp",
+          "spaceId": 7,
+          "a": {
+            "kind": "player",
+            "seat": 3,
+            "monsterId": null,
+            "level": 1,
+            "hp": 26,
+            "stats": {
+              "maxHp": 50,
+              "atk": 12,
+              "def": 9,
+              "spd": 8,
+              "mag": 13
+            },
+            "secretUsed": false,
+            "buffs": {
+              "ironSkin": false,
+              "poison": false,
+              "halveNext": false
+            }
+          },
+          "b": {
+            "kind": "player",
+            "seat": 1,
+            "monsterId": null,
+            "level": 1,
+            "hp": 29,
+            "stats": {
+              "maxHp": 34,
+              "atk": 6,
+              "def": 6,
+              "spd": 9,
+              "mag": 8
+            },
+            "secretUsed": false,
+            "buffs": {
+              "ironSkin": false,
+              "poison": false,
+              "halveNext": false
+            }
+          },
+          "exchange": 1,
+          "attackerSide": "b",
+          "half": 1,
+          "pending": {
+            "attack": null,
+            "defense": null
+          }
+        }
+      },
+      "bounty": null,
+      "stats": {
+        "robbedGold": [0, 0, 0, 0],
+        "townFlips": {},
+        "kos": [0, 0, 1, 0]
+      }
+    },
+    "you": 0,
+    "legal": [],
+    "seats": [
+      {
+        "seat": 0,
+        "name": "Alice",
+        "classId": "knight",
+        "kind": "human",
+        "controller": "player",
+        "connected": true
+      },
+      {
+        "seat": 1,
+        "name": "Bob",
+        "classId": "mage",
+        "kind": "human",
+        "controller": "player",
+        "connected": true
+      },
+      {
+        "seat": 2,
+        "name": "Bot 3",
+        "classId": "thief",
+        "kind": "bot",
+        "controller": "bot",
+        "connected": false
+      },
+      {
+        "seat": 3,
+        "name": "Bot 4",
+        "classId": "cleric",
+        "kind": "bot",
+        "controller": "bot",
+        "connected": false
+      }
+    ],
+    "opponentPicked": false
+  }
+}

@@ -26,6 +26,25 @@ function observedEventTypes(): Set<string> {
 }
 
 describe('i18n', () => {
+  // Removing any public secret translation must fail in its own locale,
+  // even if a different locale still has that key.
+  for (const lang of ['en', 'th'] as const) {
+    it(`translates every engine class secret in ${lang}`, () => {
+      setLang(lang);
+      try {
+        const dictionary: Record<string, string> = lang === 'en' ? en : th;
+        for (const { secret } of Object.values(data.CLASSES)) {
+          const key = `secret.${secret}`;
+          expect(dictionary[key], `Missing ${lang} translation: ${key}`).toBeDefined();
+          expect(dictionary[key]?.trim().length).toBeGreaterThan(0);
+          expect(t(key)).not.toBe(key);
+        }
+      } finally {
+        setLang('en');
+      }
+    });
+  }
+
   it('has matching non-empty Thai and English translations', () => {
     expect(Object.keys(th).sort()).toEqual(Object.keys(en).sort());
     expect(Object.values(th).every((value) => value.trim().length > 0)).toBe(true);

@@ -13,9 +13,12 @@ export function createMovementOverlay(scene: Phaser.Scene): {
   let generation: number | null = null;
   let revision = 0;
   let tween: Phaser.Tweens.Tween | undefined;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
   const ghosts = new Map<number, Phaser.GameObjects.Image>();
   const clear = (): void => {
     revision++;
+    clearTimeout(deadline);
+    deadline = undefined;
     tween?.remove();
     tween = undefined;
     for (const ghost of ghosts.values()) ghost.destroy();
@@ -34,6 +37,23 @@ export function createMovementOverlay(scene: Phaser.Scene): {
       if (!state) return;
       const spaces = new Map(state.board.spaces.map((space) => [space.id, space]));
       const ownedRevision = revision;
+      // Phaser smooths long frame gaps down to 33ms. Tween durations alone
+      // cannot bound wall-clock lifetime; this cosmetic view must expire even
+      // when scene updates stall. Cancellation owns both clocks.
+      deadline = setTimeout(() => {
+        if (revision !== ownedRevision || generation !== nextGeneration) return;
+        // Finish only existing cosmetic ghosts at their authored endpoints.
+        // Never move (or hide) authoritative tokens or create skipped ghosts.
+        for (const segment of plan.segments) {
+          const ghost = ghosts.get(segment.seat);
+          const destination = spaces.get(segment.to);
+          if (ghost && destination) {
+            ghost.x = destination.x;
+            ghost.y = destination.y;
+          }
+        }
+        clear();
+      }, 600);
       const advance = (index: number): void => {
         if (revision !== ownedRevision || generation !== nextGeneration) return;
         const segment = plan.segments[index];

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type Phaser from 'phaser';
 import { playCoinBurst, playHit } from '../../src/scenes/battle/effects';
-import { BATTLE_FIGHTER_HEIGHT } from '../../src/scenes/battle/layout';
+import { battleLayout } from '../../src/scenes/battle/layout';
 
 /**
  * Task 8 reviewer item 3 RED: playHit must drive the cartoon puppet poses —
@@ -113,14 +113,7 @@ const FIGHTERS = () => {
   return { a: attacker, b: target };
 };
 
-const LAYOUT = {
-  left: { x: 340, y: 660 },
-  right: { x: 940, y: 660 },
-  hpLeft: { x: 40, y: 36, width: 420, height: 96 },
-  hpRight: { x: 820, y: 36, width: 420, height: 96 },
-  dice: { x: 300, y: 678, width: 680, height: 42 },
-  cards: { x: 540, y: 430, width: 180, height: 240 },
-};
+const LAYOUT = battleLayout();
 
 const EVENT = { attacker: 0, defender: 'jellyBun', toAttacker: 0, toDefender: 7 };
 
@@ -166,59 +159,67 @@ describe('playHit drives the cartoon puppet poses (reviewer item 3)', () => {
     expect(tweens.length).toBeGreaterThan(0);
   });
 
-  it('places hit fx and damage numbers from the fighter height, not 640x360 constants', async () => {
-    const { scene, sprites, frames, tweens, delayed, textObjects } = hitScene([
-      'art:hero-knight',
-      'art:monster-jellyBun',
-    ]);
-    const fighters = FIGHTERS();
-    const running = playHit(
-      scene as unknown as Phaser.Scene,
-      fighters as never,
-      LAYOUT as never,
-      EVENT,
-      0,
-      'jellyBun',
-      1,
-    );
-    await Promise.resolve();
-    await settle(running, tweens, delayed);
-    expect(frames).toEqual([
-      { key: 'art:icons', pose: 'sword' },
-      { key: 'art:icons', pose: 'star' },
-    ]);
-    for (const image of sprites) {
-      expect(image.setDisplaySize).toHaveBeenCalledWith(48, 48);
-      expect(image.setDepth).toHaveBeenCalledWith(12);
-      expect(image.destroy).toHaveBeenCalledOnce();
-    }
-    const ground = LAYOUT.left.y;
-    // Round 2, reviewer item 2: hit fx must land in the fighter's UPPER half
-    // (between pos.y-H and pos.y-H/2), the damage number above the head
-    // (y < pos.y-H) — the old offsets (H/4, H/2+8) hit shin / mid-body.
-    const fxY = (y: number): number => ground - y;
-    // Band [H/2 - 4, H]: chest .. head (spark sits 2 px below chest).
-    expect(fxY(sprites[0]!.y)).toBeGreaterThanOrEqual(BATTLE_FIGHTER_HEIGHT / 2 - 4);
-    expect(fxY(sprites[0]!.y)).toBeLessThanOrEqual(BATTLE_FIGHTER_HEIGHT);
-    expect(fxY(sprites[1]!.y)).toBeGreaterThanOrEqual(BATTLE_FIGHTER_HEIGHT / 2 - 4);
-    expect(fxY(sprites[1]!.y)).toBeLessThanOrEqual(BATTLE_FIGHTER_HEIGHT);
-    expect(textObjects[0]!.y).toBeLessThan(ground - BATTLE_FIGHTER_HEIGHT);
-    // ...and they stay derived from the fighter height, not magic numbers.
-    expect(sprites[0]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 2);
-    expect(sprites[1]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT / 2 + 2);
-    expect(textObjects[0]!.y).toBe(ground - BATTLE_FIGHTER_HEIGHT - 36);
-  });
+  it.each([
+    { width: 1280, height: 720 },
+    { width: (915 * 720) / 412, height: 720 },
+    { width: (932 * 720) / 388, height: 720 },
+  ])(
+    'places hit fx and damage numbers at the viewport fighter ($width × $height)',
+    async ({ width, height }) => {
+      const layout = battleLayout(width, height);
+      const { scene, sprites, frames, tweens, delayed, textObjects } = hitScene([
+        'art:hero-knight',
+        'art:monster-jellyBun',
+      ]);
+      const fighters = FIGHTERS();
+      const running = playHit(
+        scene as unknown as Phaser.Scene,
+        fighters as never,
+        layout,
+        EVENT,
+        0,
+        'jellyBun',
+        1,
+      );
+      await Promise.resolve();
+      await settle(running, tweens, delayed);
+      expect(frames).toEqual([
+        { key: 'art:icons', pose: 'sword' },
+        { key: 'art:icons', pose: 'star' },
+      ]);
+      for (const image of sprites) {
+        expect(image.setDisplaySize).toHaveBeenCalledWith(48, 48);
+        expect(image.setDepth).toHaveBeenCalledWith(12);
+        expect(image.destroy).toHaveBeenCalledOnce();
+      }
+      const ground = layout.left.y;
+      const heightPx = layout.fighterHeight;
+      // Preserve chest/head and above-head constraints, now relative to this viewport.
+      const fxY = (y: number): number => ground - y;
+      expect(fxY(sprites[0]!.y)).toBeGreaterThanOrEqual(heightPx / 2 - 4);
+      expect(fxY(sprites[0]!.y)).toBeLessThanOrEqual(heightPx);
+      expect(fxY(sprites[1]!.y)).toBeGreaterThanOrEqual(heightPx / 2 - 4);
+      expect(fxY(sprites[1]!.y)).toBeLessThanOrEqual(heightPx);
+      expect(textObjects[0]!.y).toBeLessThan(ground - heightPx);
+      // Independent approved anchors: feet 528; wide stage 320, desktop 330.
+      const expectedHeight = width > 1280 ? 320 : 330;
+      expect(sprites[0]!.y).toBe(528 - expectedHeight / 2);
+      expect(sprites[1]!.y).toBe(528 - expectedHeight / 2 + 2);
+      expect(textObjects[0]!.y).toBe(528 - expectedHeight - 36);
+      expect(sprites[0]!.x).toBeCloseTo((width * 47) / 64);
+    },
+  );
 
   it('fans five cartoon coins and destroys each after its tween', async () => {
     const { scene, sprites, frames, tweens } = hitScene([]);
     const running = playCoinBurst(scene as unknown as Phaser.Scene, LAYOUT, 'b', 1);
     expect(frames).toEqual(Array.from({ length: 5 }, () => ({ key: 'art:icons', pose: 'coin' })));
     expect(sprites.map(({ x, y }) => ({ x, y }))).toEqual([
-      { x: 904, y: 605 },
-      { x: 922, y: 605 },
-      { x: 940, y: 605 },
-      { x: 958, y: 605 },
-      { x: 976, y: 605 },
+      { x: 904, y: 473 },
+      { x: 922, y: 473 },
+      { x: 940, y: 473 },
+      { x: 958, y: 473 },
+      { x: 976, y: 473 },
     ]);
     expect(tweens).toHaveLength(5);
     for (const [index, tween] of tweens.entries()) {
