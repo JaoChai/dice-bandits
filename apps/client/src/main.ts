@@ -31,7 +31,7 @@ import { closeSpaceInfo } from './ui/spaceInfo';
 import { createDiceyGuide } from './ui/diceyTip';
 import { createDiceRoll, readRollResult } from './ui/diceRoll';
 import { createBattleReadout } from './ui/battleUi';
-import { planBattle } from './scenes/battle/presentation';
+import { crossesBattleBoundary, planBattle } from './scenes/battle/presentation';
 import { reducedMotion } from './art/motion';
 
 const app = getMount();
@@ -238,7 +238,11 @@ export function startOnlineGame(
           }
           if (presentationGeneration === movementGeneration) {
             scene?.presentOnlineMovement?.(previous, nextState, events, presentationGeneration);
-            readout.reset(previous);
+            // Bot chains can replace both fighters in one authoritative view.
+            // Clear old side a/b ownership before rendering the new battle HUD.
+            readout.reset(
+              crossesBattleBoundary(previous, nextState, events) ? nextState : previous,
+            );
             if (nextState.phase.kind === 'battle' && ownedGame?.scene.isActive('BattleScene')) {
               void battleScene
                 ?.playEvents(events, testHooks.speed, {

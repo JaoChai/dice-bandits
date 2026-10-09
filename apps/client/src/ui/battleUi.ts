@@ -2,12 +2,16 @@ import { type Action, type GameState } from '@dice-bandits/engine';
 import { onLangChange, t } from '../i18n';
 import { CARD_ICON, portraitStyle, iconStyle } from './artFrames';
 import { needsPassScreen, type BattleSide } from './passDevice';
+import { battleIdentity } from '../scenes/battle/presentation';
 
 const readyPasses = new Set<string>();
 
 type BattleBeat = import('../scenes/battle/presentation').BattleBeat;
 type PresentedFighter = { hp: number; maxHp: number; name: string; seat: number | null };
-const readouts = new WeakMap<HTMLElement, { refresh(): void; reset(state: GameState): void }>();
+const readouts = new WeakMap<
+  HTMLElement,
+  { refresh(state?: GameState): void; reset(state: GameState): void }
+>();
 
 /** Cosmetic HP only. This view never changes controller state or legal actions.
  * The scene owns beat waits; this view owns and fences its one drain frame. */
@@ -23,14 +27,20 @@ export function createBattleReadout(root: HTMLElement): {
   let frame: number | undefined;
   let finishDrain: (() => void) | undefined;
   let revision = 0;
+  let identity: string | null = null;
   const stop = (): void => {
     revision++;
     if (frame !== undefined) cancelAnimationFrame(frame);
     frame = undefined;
     finishDrain = undefined;
   };
-  const refresh = (): void => {
-    if (!active || destroyed) return;
+  const refresh = (state?: GameState): void => {
+    if (destroyed) return;
+    if (state && identity !== battleIdentity(state)) {
+      reset(state);
+      return;
+    }
+    if (!active) return;
     for (const side of ['a', 'b'] as const) {
       const fighter = fighters[side];
       if (!fighter) continue;
@@ -47,6 +57,7 @@ export function createBattleReadout(root: HTMLElement): {
   };
   const reset = (state: GameState): void => {
     stop();
+    identity = battleIdentity(state);
     element?.remove();
     element = null;
     if (state.phase.kind === 'battle') {
@@ -241,7 +252,7 @@ export function renderBattleUi(
     needsPassScreen(state, side) &&
     !readyPasses.has(passKey);
   if (passNeeded) readouts.get(root)?.reset(state);
-  else readouts.get(root)?.refresh();
+  else readouts.get(root)?.refresh(state);
   const shownActions = passNeeded ? [] : actions;
   const pickerActions = humanPicker
     ? shownActions.filter((action) => action.type === 'battlePick' || action.type === 'useItem')

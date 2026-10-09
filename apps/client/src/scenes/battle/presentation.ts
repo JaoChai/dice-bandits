@@ -36,6 +36,32 @@ const positive = (value: string | number | undefined): number => {
 };
 const clampHp = (hp: number, maxHp: number): number => Math.max(0, Math.min(maxHp, hp));
 
+/** Ordered fighter ownership, not the reusable presentation sides a/b. */
+export function battleIdentity(state: GameState): string | null {
+  if (state.phase.kind !== 'battle') return null;
+  const battle = state.phase.battle;
+  return JSON.stringify([
+    battle.context,
+    battle.spaceId,
+    ...SIDES.map((side) => {
+      const fighter = battle[side];
+      return [fighter.kind, fighter.seat, fighter.monsterId];
+    }),
+  ]);
+}
+
+/** Coalesced bot batches lack per-battle snapshots. Old beats cannot own a new HUD. */
+export function crossesBattleBoundary(
+  previous: GameState,
+  next: GameState,
+  events: readonly GameEvent[],
+): boolean {
+  return (
+    events.some((event) => event.type === 'BattleStarted') ||
+    (next.phase.kind === 'battle' && battleIdentity(previous) !== battleIdentity(next))
+  );
+}
+
 /**
  * Pure event-to-presentation adapter. Pending picks are deliberately never read.
  * `win`/`loss` are side a's perspective; consumers use the winner's name.
@@ -48,6 +74,7 @@ export function planBattle(
   mode: 'human' | 'bot' | 'online',
   reduced: boolean,
 ): BattleBeat[] {
+  if (crossesBattleBoundary(previous, next, events)) return [];
   const before = previous.phase.kind === 'battle' ? previous.phase.battle : null;
   const after = next.phase.kind === 'battle' ? next.phase.battle : null;
   const battle = before ?? after;
@@ -95,7 +122,13 @@ export function planBattle(
         addDamage(target.side, target.amount);
     } else if (event.type === 'SecretUsed') {
       const side = params.side;
-      if ((side !== 'a' && side !== 'b') || typeof params.secret !== 'string' || !params.secret)
+      if (
+        (side !== 'a' && side !== 'b') ||
+        typeof params.secret !== 'string' ||
+        !params.secret ||
+        battle[side].kind !== 'player' ||
+        battle[side].seat !== event.seat
+      )
         continue;
       resolved = hasConsequence = true;
       revealed.push({ side, secretId: params.secret });
