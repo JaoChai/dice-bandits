@@ -284,15 +284,21 @@ for (const lang of ['th', 'en'] as const) {
       await page.locator('[data-action-index="0"]').click();
       await expect(page.getByTestId('movement-remaining')).toBeVisible();
       await page.screenshot({ path: info.outputPath('mid-walk.png') });
-      await expect(page.getByTestId('movement-arrival')).toBeVisible();
       const gold = fixture.events.find((event) => event.type === 'GoldGained')!.params.amount;
-      await expect(page.getByTestId('movement-arrival')).toContainText(
-        lang === 'th' ? `ได้รับ ${gold} ทอง` : `${gold} gold gained`,
-      );
-      const geometry = await page.evaluate(() => {
-        const readout = document
-          .querySelector('[data-testid="movement-readout"]')!
-          .getBoundingClientRect();
+      const goldText = lang === 'th' ? `ได้รับ ${gold} ทอง` : `${gold} gold gained`;
+      // Sample the human arrival's visibility, text and geometry in one browser task.
+      const geometryHandle = await page.waitForFunction((expectedGold) => {
+        const card = document.querySelector<HTMLElement>('[data-testid="movement-readout"]');
+        const arrival = card?.querySelector<HTMLElement>('[data-testid="movement-arrival"]');
+        if (
+          !card ||
+          !arrival ||
+          arrival.getBoundingClientRect().width === 0 ||
+          getComputedStyle(arrival).visibility !== 'visible' ||
+          !arrival.textContent?.includes(expectedGold)
+        )
+          return false;
+        const readout = card.getBoundingClientRect();
         const controls = [
           ...document.querySelectorAll<HTMLElement>(
             '.game-topline button, .action-tray, .game-dialog',
@@ -319,11 +325,16 @@ for (const lang of ['th', 'en'] as const) {
         return {
           controls,
           text,
+          goldText: arrival.textContent,
           width: innerWidth,
           height: innerHeight,
           overflow: document.documentElement.scrollWidth > innerWidth,
         };
-      });
+      }, goldText);
+      const geometry = await geometryHandle.jsonValue();
+      await geometryHandle.dispose();
+      if (!geometry) throw new Error('No visible human arrival geometry');
+      expect(geometry.goldText).toContain(goldText);
       expect(geometry.controls.every((control) => !control.overlaps)).toBe(true);
       expect(geometry.text.every((text) => !text.clipped && text.size >= 14)).toBe(true);
       expect(geometry.overflow).toBe(false);
