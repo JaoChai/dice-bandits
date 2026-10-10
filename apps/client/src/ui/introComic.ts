@@ -14,8 +14,15 @@ export function shouldShowIntroComic(): boolean {
 }
 
 /** Title-only view. No game controller, route, save or music state is changed. */
-export function openIntroComic({ onClose }: { onClose: () => void }): void {
+export function openIntroComic({
+  onClose,
+  onPracticeOffer,
+}: {
+  onClose: () => void;
+  onPracticeOffer?: () => void;
+}): void {
   if (document.querySelector('[data-testid="intro-comic"]')) return;
+  const firstVisit = shouldShowIntroComic();
   shownThisPage = true;
   const previousFocus = document.activeElement;
   const app = document.querySelector<HTMLElement>('#app');
@@ -107,7 +114,7 @@ export function openIntroComic({ onClose }: { onClose: () => void }): void {
     updateText();
   }
 
-  function close(): void {
+  function close(completed = false): void {
     if (closed) return;
     closed = true;
     try {
@@ -123,11 +130,12 @@ export function openIntroComic({ onClose }: { onClose: () => void }): void {
     if (app) app.inert = wasInert;
     if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
     onClose();
+    if (firstVisit && completed) onPracticeOffer?.();
   }
 
   function advance(delta: number, sound = false): void {
     if (delta > 0 && panel === 3) {
-      close();
+      close(true);
       return;
     }
     const next = Math.max(0, Math.min(3, panel + delta));
@@ -175,12 +183,12 @@ export function openIntroComic({ onClose }: { onClose: () => void }): void {
   controls.addEventListener('click', (event) => {
     const button = (event.target as Element).closest<HTMLButtonElement>('button');
     if (!button || button.disabled) return;
-    if (button.dataset.testid === 'intro-done') close();
+    if (button.dataset.testid === 'intro-done') close(true);
     else advance(button.dataset.testid === 'intro-back' ? -1 : 1);
   });
   // Existing audio listener supplies click SFX for native button clicks.
   art.addEventListener('click', () => advance(1));
-  skip.addEventListener('click', close);
+  skip.addEventListener('click', () => close());
   const unsubscribe = onLangChange(updateText);
   document.addEventListener('keydown', onKey, true);
   document.addEventListener('focusin', onFocus);

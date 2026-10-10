@@ -181,6 +181,73 @@ describe('fixed bot pacing', () => {
   });
 });
 
+describe('optional persistence', () => {
+  it('preserves save bytes through construction, human and bot actions when disabled', async () => {
+    const sentinel = '{"existing":"game","bytes":"  unchanged  "}';
+    localStorage.setItem('diceBandits.save', sentinel);
+    const actors: number[] = [];
+    const controller = new GameController({
+      state: createGame(config),
+      speed: 0,
+      persist: false,
+      onEvents: async (_events, state) => {
+        actors.push(state.turnSeat);
+        expect(localStorage.getItem('diceBandits.save')).toBe(sentinel);
+      },
+    });
+    expect(localStorage.getItem('diceBandits.save')).toBe(sentinel);
+    for (let actions = 0; !actors.includes(1) && actions < 20; actions++) {
+      const { seat } = controller.pendingHumanSides()[0]!;
+      await controller.dispatch(legalActions(controller.state, seat)[0]!);
+    }
+    expect(actors.length).toBeGreaterThan(1);
+    expect(actors).toContain(1);
+    expect(localStorage.getItem('diceBandits.save')).toBe(sentinel);
+  });
+
+  it('does not save on either human or bot error paths when disabled', async () => {
+    const sentinel = 'existing save bytes';
+    localStorage.setItem('diceBandits.save', sentinel);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let botFailed = false;
+    const controller = new GameController({
+      state: createGame(config),
+      speed: 0,
+      persist: false,
+      onEvents: async (events) => {
+        if (!botFailed && events.some((event) => event.seat === 1)) {
+          botFailed = true;
+          throw new Error('bot presentation failed');
+        }
+      },
+    });
+    const initial = structuredClone(controller.state);
+    await controller.dispatch({ type: 'endTurn' });
+    expect(controller.state).toEqual(initial);
+    expect(localStorage.getItem('diceBandits.save')).toBe(sentinel);
+    for (let actions = 0; !botFailed && actions < 20; actions++) {
+      const { seat } = controller.pendingHumanSides()[0]!;
+      await controller.dispatch(legalActions(controller.state, seat)[0]!);
+    }
+    expect(botFailed).toBe(true);
+    expect(localStorage.getItem('diceBandits.save')).toBe(sentinel);
+  });
+
+  it.each([undefined, true])('saves by default and with persist=%s', async (persist) => {
+    const controller = new GameController({
+      state: createGame(config),
+      speed: 0,
+      persist,
+      onEvents: async (_events, state) => {
+        expect(loadGame()).toEqual(state);
+      },
+    });
+    expect(loadGame()).toEqual(controller.state);
+    await controller.dispatch({ type: 'roll' });
+    expect(loadGame()).toEqual(controller.state);
+  });
+});
+
 describe('GameController', () => {
   it('does not process a second human action while the first event animation is pending', async () => {
     const state = createGame({ ...config, seed: 'review-m4a' });
