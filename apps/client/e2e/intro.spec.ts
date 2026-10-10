@@ -62,6 +62,11 @@ for (const lang of ['en', 'th'] as const) {
     }
     await page.getByTestId('intro-done').click();
     await expect(page.getByTestId('intro-comic')).toHaveCount(0);
+    // Only completing the first-visit story offers the real practice invitation.
+    await expect(page.getByTestId('practice-begin')).toBeVisible();
+    await expect(page.getByTestId('practice-begin')).toBeFocused();
+    await page.getByTestId('practice-back').click();
+    await expect(page.getByTestId('title-practice')).toBeFocused();
     expect(await page.evaluate(() => localStorage.getItem('dice-bandits:intro-seen'))).toBe('1');
     await page.reload();
     await expect(page.getByTestId('screen-title')).toBeVisible();
@@ -69,6 +74,12 @@ for (const lang of ['en', 'th'] as const) {
     await page.getByTestId('title-story').click();
     await expect(page.getByTestId('intro-caption')).toHaveText(captions[lang][0]!);
     await page.getByTestId('intro-skip').click();
+    await expect(page.getByTestId('practice-dialog')).toHaveCount(0);
+    await page.getByTestId('title-story').click();
+    for (let panel = 0; panel < 3; panel++) await page.getByTestId('intro-next').click();
+    await page.getByTestId('intro-done').click();
+    await expect(page.getByTestId('practice-dialog')).toHaveCount(0);
+    await expect(page.getByTestId('title-story')).toBeFocused();
     expect(errors).toEqual([]);
   });
 }
@@ -88,6 +99,7 @@ test('skip persists across reload and keyboard focus is trapped and restored', a
   await page.keyboard.press('Enter');
   await expect(dialog).toHaveCount(0);
   await expect(page.getByTestId('title-story')).toBeFocused();
+  await expect(page.getByTestId('practice-dialog')).toHaveCount(0);
   await page.reload();
   await expect(page.getByTestId('screen-title')).toBeVisible();
   await expect(dialog).toHaveCount(0);
