@@ -2725,6 +2725,21 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     padding: 14px;
     gap: 12px;
   }
+  .practice-coach:lang(en) .practice-coach-card {
+    padding-block: 8px;
+  }
+  .practice-coach:lang(en) .practice-coach-card p {
+    margin-block: 4px;
+  }
+  .practice-coach:lang(en) .practice-coach-card h1 {
+    margin-block: 4px;
+  }
+  .practice-coach:lang(en) .practice-note {
+    padding-top: 6px;
+  }
+  .practice-coach:lang(en) .practice-hint span {
+    display: none;
+  }
   .practice-root:lang(en) .game-shell:not(.battle-mode) .game-topline {
     flex-wrap: wrap;
   }
@@ -2787,21 +2802,6 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   }
 }
 @media (max-height: 400px) {
-  .practice-coach:lang(en) .practice-coach-card {
-    padding-block: 8px;
-  }
-  .practice-coach:lang(en) .practice-coach-card p {
-    margin-block: 4px;
-  }
-  .practice-coach:lang(en) .practice-coach-card h1 {
-    margin-block: 4px;
-  }
-  .practice-coach:lang(en) .practice-note {
-    padding-top: 6px;
-  }
-  .practice-coach:lang(en) .practice-hint span {
-    display: none;
-  }
   .practice-invitation {
     padding-block: 14px;
   }
