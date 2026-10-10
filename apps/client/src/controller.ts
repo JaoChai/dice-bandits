@@ -11,6 +11,8 @@ import { saveGame } from './save';
 type Side = 'a' | 'b';
 type ActingSide = { seat: number; side?: Side };
 
+const BOT_ACTION_DELAY_MS = 100;
+
 export class GameController {
   private currentState: GameState;
   private readonly speed: number;
@@ -99,7 +101,7 @@ export class GameController {
         if (!actor) break;
         const legal = legalActions(this.currentState, actor.seat);
         if (!legal.length) break;
-        await delay(randomDelay() * this.speed);
+        await delay(BOT_ACTION_DELAY_MS * this.speed);
         const currentActor = this.actingSides().find(
           ({ seat }) => this.currentState.players[seat]?.control === 'bot',
         );
@@ -138,10 +140,6 @@ function pendingBattleSide(state: GameState): Side {
     : battle.attackerSide === 'a'
       ? 'b'
       : 'a';
-}
-
-function randomDelay(): number {
-  return 400 + Math.random() * 500;
 }
 
 function delay(milliseconds: number): Promise<void> {
