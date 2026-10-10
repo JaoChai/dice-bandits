@@ -124,7 +124,10 @@ export function showTitle(
   }
 }
 
-export function showSetup(onStart: (config: GameConfig) => void): void {
+export function showSetup(
+  onStart: (config: GameConfig) => void,
+  onBack: () => void = () => showTitle(() => showSetup(onStart)),
+): void {
   const root = document.querySelector<HTMLElement>('#app');
   if (!root) throw new Error('Missing #app mount element');
   let error = false;
@@ -137,9 +140,7 @@ export function showSetup(onStart: (config: GameConfig) => void): void {
       .join('');
     root.innerHTML = `<main class="screen setup-screen card" data-testid="screen-setup"><header><button class="text-button" data-action="back">← ${t('setup.back')}</button>${languageToggle()}</header><h1>${t('setup.title')}</h1><p>${t('setup.instructions')}</p><form id="setup-form"><div class="seat-list">${seatRows}</div><p class="error" role="alert">${error ? t('setup.invalid') : ''}</p><button class="primary" type="submit">${t('setup.start')}</button></form></main>`;
     bindLanguageToggle(root, render);
-    root
-      .querySelector('[data-action="back"]')
-      ?.addEventListener('click', () => showTitle(() => showSetup(onStart)));
+    root.querySelector('[data-action="back"]')?.addEventListener('click', onBack);
     root.querySelectorAll<HTMLElement>('.seat-row').forEach((row) => {
       const index = Number(row.dataset.seat);
       row

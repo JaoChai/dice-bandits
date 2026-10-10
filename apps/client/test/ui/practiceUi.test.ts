@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createGame } from '@dice-bandits/engine';
 import { setLang } from '../../src/i18n';
-import { showTitle } from '../../src/ui/screens';
+import { showSetup, showTitle } from '../../src/ui/screens';
 import { openIntroComic } from '../../src/ui/introComic';
 import { createPractice, type PracticeSession } from '../../src/tutor/practice';
 import { TUTORIAL_SCRIPT } from '../../src/tutor/script';
@@ -69,6 +69,51 @@ describe('practice entry and comic', () => {
     root.querySelector<HTMLButtonElement>('[data-action="new"]')!.click();
     click('online-create');
     expect([newGames, online, practice]).toEqual([1, 1, 1]);
+  });
+
+  // Catches setup Back dropping the owning title's practice/Continue context.
+  it('keeps practice and Continue available after repeated New game/setup/Back navigation', () => {
+    const state = createGame(TUTORIAL_SCRIPT.config);
+    const sentinel = ` ${JSON.stringify({ version: 2, state })}\n`;
+    localStorage.setItem('diceBandits.save', sentinel);
+    let practices = 0;
+    let games = 0;
+    let continued: unknown;
+    root.addEventListener('dice-bandits:continue', (event) => {
+      continued = (event as CustomEvent).detail;
+    });
+    const title = (): void =>
+      showTitle(setup, {
+        onPractice: () => {
+          practices += 1;
+        },
+      });
+    const setup = (): void =>
+      showSetup(() => {
+        games += 1;
+      }, title);
+    title();
+    for (let i = 0; i < 2; i++) {
+      root.querySelector<HTMLButtonElement>('[data-action="new"]')!.click();
+      expect(root.querySelector('[data-testid="screen-setup"]')).not.toBeNull();
+      setLang(i === 0 ? 'th' : 'en');
+      root.querySelector<HTMLButtonElement>(`[data-lang="${i === 0 ? 'th' : 'en'}"]`)!.click();
+      root.querySelector<HTMLButtonElement>('[data-action="back"]')!.click();
+      expect(root.querySelectorAll('[data-testid="title-practice"]')).toHaveLength(1);
+      click('title-practice');
+      root.querySelector<HTMLButtonElement>('[data-action="continue"]')!.click();
+      expect(continued).toEqual(state);
+      expect(localStorage.getItem('diceBandits.save')).toBe(sentinel);
+    }
+    expect([practices, games]).toEqual([2, 0]);
+  });
+
+  it('retains the legacy setup Back and New game contract without a title owner', () => {
+    showSetup(() => undefined);
+    root.querySelector<HTMLButtonElement>('[data-action="back"]')!.click();
+    expect(root.querySelector('[data-testid="screen-title"]')).not.toBeNull();
+    root.querySelector<HTMLButtonElement>('[data-action="new"]')!.click();
+    expect(root.querySelector('[data-testid="screen-setup"]')).not.toBeNull();
   });
 
   it('offers practice only for an unseen comic completed at its final panel', () => {
@@ -336,12 +381,28 @@ describe('real practice UI', () => {
     let replays = 0;
     root.addEventListener('dice-bandits:practice-setup', () => {
       setups += 1;
+      view.destroy();
+      session.destroy();
+      showSetup(
+        () => undefined,
+        () =>
+          showTitle(() => undefined, {
+            onPractice: () => {
+              replays += 1;
+            },
+          }),
+      );
     });
     root.addEventListener('dice-bandits:practice-replay', () => {
       replays += 1;
     });
-    click('practice-setup');
     click('practice-replay');
+    click('practice-setup');
     expect([setups, replays]).toEqual([1, 1]);
+    expect(root.querySelector('[data-testid="screen-setup"]')).not.toBeNull();
+    root.querySelector<HTMLButtonElement>('[data-action="back"]')!.click();
+    expect(root.querySelectorAll('[data-testid="title-practice"]')).toHaveLength(1);
+    click('title-practice');
+    expect(replays).toBe(2);
   });
 });

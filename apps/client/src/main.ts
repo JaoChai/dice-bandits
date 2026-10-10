@@ -464,12 +464,15 @@ app.addEventListener('dice-bandits:practice-setup', () => {
 });
 
 function startSetup(): void {
-  showSetup((config) => {
-    clearSave();
-    const seed = testHooks.seed ?? config.seed;
-    const state = createGame({ ...config, seed, rounds: 12 });
-    startGame(state);
-  });
+  showSetup(
+    (config) => {
+      clearSave();
+      const seed = testHooks.seed ?? config.seed;
+      const state = createGame({ ...config, seed, rounds: 12 });
+      startGame(state);
+    },
+    () => showTitle(startSetup, { onPractice: openPractice }),
+  );
 }
 
 function startGame(
