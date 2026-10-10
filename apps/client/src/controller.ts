@@ -19,16 +19,19 @@ export class GameController {
   private readonly onEvents: (events: GameEvent[], state: GameState) => Promise<void>;
   private botRun: Promise<void> | null = null;
   private dispatching = false;
+  private readonly persist: boolean;
 
   constructor(opts: {
     state: GameState;
     speed: number;
+    persist?: boolean;
     onEvents: (events: GameEvent[], state: GameState) => Promise<void>;
   }) {
     this.currentState = opts.state;
     this.speed = Math.max(0, opts.speed);
     this.onEvents = opts.onEvents;
-    saveGame(this.currentState);
+    this.persist = opts.persist ?? true;
+    this.persistState();
   }
 
   get state(): GameState {
@@ -59,12 +62,16 @@ export class GameController {
         return;
       }
       this.currentState = jsonState(result.state);
-      saveGame(this.currentState);
+      this.persistState();
       await this.onEvents(result.events, this.currentState);
       await this.runBotsIfNeeded();
     } finally {
       this.dispatching = false;
     }
+  }
+
+  private persistState(): void {
+    if (this.persist) saveGame(this.currentState);
   }
 
   private actingSides(): ActingSide[] {
@@ -119,11 +126,11 @@ export class GameController {
     try {
       const result = step(this.currentState, chooseAction(this.currentState, seat));
       this.currentState = jsonState(result.state);
-      saveGame(this.currentState);
+      this.persistState();
       await this.onEvents(result.events, this.currentState);
     } catch (error) {
       console.error(error);
-      saveGame(this.currentState);
+      this.persistState();
     }
   }
 }
