@@ -105,6 +105,7 @@ export default class BattleScene extends Phaser.Scene {
         for (const beat of beats) {
           deadline += beat.duration;
           if (revision !== this.presentationRevision) break;
+          const wallDeadline = options.mode === 'human' ? performance.now() + beat.duration : 0;
           options.onBeat?.(beat);
           effects?.showBeat(
             beat.kind === 'impact'
@@ -118,11 +119,28 @@ export default class BattleScene extends Phaser.Scene {
                 options.mode === 'human'
                   ? beat.duration
                   : Math.max(0, deadline - performance.now());
-              timer = this.time.delayedCall(wait, () => {
+              let settled = false;
+              const complete = (): void => {
+                settled = true;
                 timer = undefined;
                 finishWait = undefined;
                 resolve();
-              });
+              };
+              const checkHumanFloor = (): void => {
+                if (settled || cleaned || revision !== this.presentationRevision) return;
+                // Phaser's smoothed delta can dispatch early. Keep scene pause/
+                // timeScale eligibility, but give every human beat its own wall floor.
+                const remaining = wallDeadline - performance.now();
+                if (remaining > 0) {
+                  timer = this.time.delayedCall(remaining, checkHumanFloor);
+                } else {
+                  complete();
+                }
+              };
+              timer = this.time.delayedCall(
+                wait,
+                options.mode === 'human' ? checkHumanFloor : complete,
+              );
             });
         }
       } finally {
