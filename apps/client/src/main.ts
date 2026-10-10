@@ -33,6 +33,9 @@ import { createDiceRoll, readRollResult } from './ui/diceRoll';
 import { createBattleReadout } from './ui/battleUi';
 import { crossesBattleBoundary, planBattle } from './scenes/battle/presentation';
 import { reducedMotion } from './art/motion';
+import { createPractice, type PracticeSession } from './tutor/practice';
+import type { TutorialScript } from './tutor/script';
+import { mountPracticeUi, preparePractice } from './ui/practiceUi';
 
 const app = getMount();
 initAudio();
@@ -42,10 +45,21 @@ let battleReadout: ReturnType<typeof createBattleReadout> | undefined;
 let diceRoll: ReturnType<typeof createDiceRoll> | undefined;
 let sessionGeneration = 0;
 let unbindGameLanguage: (() => void) | undefined;
+let practiceSession: PracticeSession | undefined;
+let practiceUi: ReturnType<typeof mountPracticeUi> | undefined;
+let practicePreparation: ReturnType<typeof preparePractice> | undefined;
+let practiceRoute: TutorialScript | undefined;
 
 /** Phaser destroy is deferred; remove body-owned board UI synchronously. */
 function destroyGame(): void {
   sessionGeneration++;
+  practicePreparation?.destroy();
+  practicePreparation = undefined;
+  practiceUi?.destroy();
+  practiceUi = undefined;
+  practiceSession?.destroy();
+  practiceSession = undefined;
+  practiceRoute = undefined;
   unbindGameLanguage?.();
   unbindGameLanguage = undefined;
   (game?.scene.getScene('BattleScene') as BattleScene | undefined)?.cancelBattlePresentation?.();
@@ -90,7 +104,7 @@ function showOnlineErrorScreen(key: string): void {
   app.innerHTML = `<main class="screen online-screen" data-testid="screen-online-error"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button></header><p class="error" role="alert" data-testid="online-error">${escapeHtml(t(key))}</p></main>`;
   app.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', () => {
     history.pushState(null, '', '/');
-    showTitle(startSetup);
+    showTitle(startSetup, { onPractice: openPractice });
   });
 }
 
@@ -173,7 +187,7 @@ export function startOnlineGame(
     app.innerHTML = `<main class="screen online-screen" data-testid="screen-online-error"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button></header><p class="error" role="alert" data-testid="online-error">${escapeHtml(t(key))}</p></main>`;
     app.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', () => {
       history.pushState(null, '', '/');
-      showTitle(startSetup);
+      showTitle(startSetup, { onPractice: openPractice });
     });
   };
   const showOnlineResults = (state: GameState): void => {
@@ -185,11 +199,11 @@ export function startOnlineGame(
       state,
       () => {
         history.pushState(null, '', '/');
-        showTitle(startSetup);
+        showTitle(startSetup, { onPractice: openPractice });
       },
       () => {
         history.pushState(null, '', '/');
-        showTitle(startSetup);
+        showTitle(startSetup, { onPractice: openPractice });
       },
     );
   };
@@ -382,7 +396,7 @@ app.addEventListener('dice-bandits:online', (event) => {
 app.addEventListener('dice-bandits:menu-exit', () => {
   destroyGame();
   history.pushState(null, '', '/');
-  showTitle(startSetup);
+  showTitle(startSetup, { onPractice: openPractice });
 });
 // Board menu sound-settings: the menu entry bubbles the request out of the
 // game shell; the main flow owns the dialog (same one the title screen uses).
@@ -395,12 +409,13 @@ app.addEventListener('dice-bandits:sound-settings', (event) => {
 });
 app.addEventListener('dice-bandits:home', () => {
   history.pushState(null, '', '/');
-  showTitle(startSetup);
+  showTitle(startSetup, { onPractice: openPractice });
 });
 window.addEventListener('popstate', () => {
   const roomRoute = /^\/r\/([A-Z0-9]{5})$/i.exec(location.pathname);
+  if (practiceSession || practicePreparation) destroyGame();
   if (roomRoute) openOnline({ code: roomRoute[1]!.toUpperCase() });
-  else showTitle(startSetup);
+  else showTitle(startSetup, { onPractice: openPractice });
 });
 
 function getMount(): HTMLElement {
@@ -409,20 +424,69 @@ function getMount(): HTMLElement {
   return mount;
 }
 
-function startSetup(): void {
-  showSetup((config) => {
-    clearSave();
-    const seed = testHooks.seed ?? config.seed;
-    const state = createGame({ ...config, seed, rounds: 12 });
-    startGame(state);
+function openPractice(): void {
+  if (/^\/r\//i.test(location.pathname)) return;
+  destroyGame();
+  practicePreparation = preparePractice(app, beginPractice, () => {
+    showTitle(startSetup, { onPractice: openPractice });
+    app.querySelector<HTMLElement>('[data-testid="title-practice"]')?.focus();
   });
 }
 
-function startGame(state: GameState): void {
+function beginPractice(script: TutorialScript): void {
+  const learned = new Set<string>();
+  const session = createPractice(script, (topic) => learned.add(topic), {
+    present: async (events, state) => {
+      await present?.(events, state);
+    },
+  });
+  const present = startGame(session.controller.state, {
+    practice: session,
+    learned: () => learned.size,
+  });
+  practiceRoute = script;
+}
+
+app.addEventListener('dice-bandits:practice-exit', () => {
   destroyGame();
+  showTitle(startSetup, { onPractice: openPractice });
+  app.querySelector<HTMLElement>('[data-testid="title-practice"]')?.focus();
+});
+app.addEventListener('dice-bandits:practice-replay', () => {
+  const script = practiceRoute;
+  if (!script) return;
+  destroyGame();
+  beginPractice(script);
+});
+app.addEventListener('dice-bandits:practice-setup', () => {
+  destroyGame();
+  startSetup();
+});
+
+function startSetup(): void {
+  showSetup(
+    (config) => {
+      clearSave();
+      const seed = testHooks.seed ?? config.seed;
+      const state = createGame({ ...config, seed, rounds: 12 });
+      startGame(state);
+    },
+    () => showTitle(startSetup, { onPractice: openPractice }),
+  );
+}
+
+function startGame(
+  state: GameState,
+  options?: { practice?: ReturnType<typeof createPractice>; learned?: () => number },
+): ((events: GameEvent[], state: GameState) => Promise<void>) | undefined {
+  destroyGame();
+  const practice = options?.practice;
+  practiceSession = practice;
   if (state.phase.kind === 'gameOver') {
     setMusic('board');
-    renderResults(app, state, startSetup, () => showTitle(startSetup));
+    renderResults(app, state, startSetup, () =>
+      showTitle(startSetup, { onPractice: openPractice }),
+    );
     return;
   }
   const generation = sessionGeneration;
@@ -430,7 +494,7 @@ function startGame(state: GameState): void {
   setMusic(musicForState(state));
   window.diceBanditsText = t;
   window.diceBanditsSpeed = testHooks.speed;
-  const guide = createDiceyGuide(app);
+  const guide = practice ? undefined : createDiceyGuide(app);
   diceyGuide = guide;
   const rollView = createDiceRoll(app);
   diceRoll = rollView;
@@ -440,93 +504,115 @@ function startGame(state: GameState): void {
   let presentationBusy = false;
   const isLocalHuman = (seat: number): boolean => displayedState.players[seat]?.control === 'human';
   const renderLocalHud = (): void => {
-    if (isCurrent()) renderHud(app, displayedState, dispatch, { presentationBusy });
+    if (!isCurrent()) return;
+    renderHud(app, displayedState, dispatch, { presentationBusy });
+    practiceUi?.update();
   };
-  const controller = new GameController({
-    state,
-    speed: testHooks.speed,
-    onEvents: async (events, nextState) => {
-      if (!isCurrent()) return;
-      presentationBusy = true;
-      guide.dismiss();
-      renderLocalHud();
-      readout.reset(displayedState);
-      onGameEvents(events, nextState);
-      const ownedGame = game;
-      const scene = ownedGame?.scene.getScene('BoardScene') as BoardScene | undefined;
-      const battleScene = ownedGame?.scene.getScene('BattleScene') as BattleScene | undefined;
-      await animateThenRender(
-        async () => {
-          for (const event of events) {
-            const result = readRollResult(event);
-            if (!result) continue;
-            await rollView.play(result, {
-              speed: testHooks.speed,
-              reduced: reducedMotion(),
-              waitBeforeMovement: result.seat !== null && isLocalHuman(result.seat),
-            });
-            if (!isCurrent()) return;
-          }
+  const present = async (events: GameEvent[], nextState: GameState): Promise<void> => {
+    if (!isCurrent()) return;
+    presentationBusy = true;
+    guide?.dismiss();
+    renderLocalHud();
+    practiceUi?.update(events);
+    readout.reset(displayedState);
+    onGameEvents(events, nextState);
+    const ownedGame = game;
+    const scene = ownedGame?.scene.getScene('BoardScene') as BoardScene | undefined;
+    const battleScene = ownedGame?.scene.getScene('BattleScene') as BattleScene | undefined;
+    await animateThenRender(
+      async () => {
+        for (const event of events) {
+          const result = readRollResult(event);
+          if (!result) continue;
+          await rollView.play(result, {
+            speed: testHooks.speed,
+            reduced: reducedMotion(),
+            waitBeforeMovement: result.seat !== null && isLocalHuman(result.seat),
+          });
           if (!isCurrent()) return;
-          await Promise.all([
-            scene?.playEvents(events) ?? Promise.resolve(),
-            ownedGame?.scene.isActive('BattleScene')
-              ? (battleScene?.playEvents(events, testHooks.speed, {
-                  previous: displayedState,
-                  next: nextState,
-                  mode:
-                    displayedState.phase.kind === 'battle' &&
-                    (['a', 'b'] as const).some((side) => {
-                      if (displayedState.phase.kind !== 'battle') return false;
-                      const seat = displayedState.phase.battle[side].seat;
-                      return seat !== null && displayedState.players[seat]?.control === 'human';
-                    })
-                      ? 'human'
-                      : 'bot',
-                  onBeat: (beat) => readout.showBeat(beat),
-                  onCancel: () => readout.reset(nextState),
-                }) ?? Promise.resolve())
-              : Promise.resolve(),
-          ]);
-        },
-        () => {
-          // destroyGame settles play; its continuation must not touch a new game.
-          if (!isCurrent()) return;
-          const previous = displayedState;
-          displayedState = nextState;
-          // Static results remain legible until the next real action. Animated
-          // completion releases held HP before mounting the next legal tray.
-          if (testHooks.speed > 0 && !reducedMotion()) readout.reset(nextState);
-          presentationBusy = false;
-          renderLocalHud();
-          guide.update({ prev: previous, next: nextState, events, isLocalHuman });
-          renderEventToast(app, events);
-          ownedGame?.registry.set('state', nextState);
-          ownedGame?.events.emit('game-state', nextState);
-          if (nextState.phase.kind === 'battle') {
-            // BootScene handles battle entry when atlases are still loading.
-            if (ownedGame?.scene.isActive('BoardScene') && !ownedGame.scene.isActive('BattleScene'))
-              scene?.scene.launch('BattleScene');
-          } else if (ownedGame?.scene.isActive('BattleScene')) {
-            scene?.scene.stop('BattleScene');
-          }
-        },
+        }
+        if (!isCurrent()) return;
+        await Promise.all([
+          scene?.playEvents(events) ?? Promise.resolve(),
+          ownedGame?.scene.isActive('BattleScene')
+            ? (battleScene?.playEvents(events, testHooks.speed, {
+                previous: displayedState,
+                next: nextState,
+                mode:
+                  displayedState.phase.kind === 'battle' &&
+                  (['a', 'b'] as const).some((side) => {
+                    if (displayedState.phase.kind !== 'battle') return false;
+                    const seat = displayedState.phase.battle[side].seat;
+                    return seat !== null && displayedState.players[seat]?.control === 'human';
+                  })
+                    ? 'human'
+                    : 'bot',
+                onBeat: (beat) => readout.showBeat(beat),
+                onCancel: () => readout.reset(nextState),
+              }) ?? Promise.resolve())
+            : Promise.resolve(),
+        ]);
+      },
+      () => {
+        // destroyGame settles play; its continuation must not touch a new game.
+        if (!isCurrent()) return;
+        const previous = displayedState;
+        displayedState = nextState;
+        // Static results remain legible until the next real action. Animated
+        // completion releases held HP before mounting the next legal tray.
+        if (testHooks.speed > 0 && !reducedMotion()) readout.reset(nextState);
+        presentationBusy = false;
+        renderLocalHud();
+        guide?.update({ prev: previous, next: nextState, events, isLocalHuman });
+        renderEventToast(app, events);
+        ownedGame?.registry.set('state', nextState);
+        ownedGame?.events.emit('game-state', nextState);
+        // Practice teaches the learner's landing before the next bot acts.
+        // Keep that real endpoint in view; the next real bot update resumes
+        // the normal active-seat camera. Never change the engine state.
+        if (
+          practice &&
+          nextState.phase.kind !== 'battle' &&
+          events.some((event) => event.type === 'Teleported' && event.seat === 0)
+        ) {
+          const landing = nextState.board.spaces.find(
+            (space) => space.id === nextState.players[0]?.pos,
+          );
+          if (landing) scene?.cameras.main.centerOn(landing.x, landing.y);
+        }
+        if (nextState.phase.kind === 'battle') {
+          // BootScene handles battle entry when atlases are still loading.
+          if (ownedGame?.scene.isActive('BoardScene') && !ownedGame.scene.isActive('BattleScene'))
+            scene?.scene.launch('BattleScene');
+        } else if (ownedGame?.scene.isActive('BattleScene')) {
+          scene?.scene.stop('BattleScene');
+        }
+      },
+    );
+    if (!isCurrent()) return;
+    if (nextState.phase.kind === 'gameOver') {
+      destroyGame();
+      setMusic('board');
+      renderResults(app, nextState, startSetup, () =>
+        showTitle(startSetup, { onPractice: openPractice }),
       );
-      if (!isCurrent()) return;
-      if (nextState.phase.kind === 'gameOver') {
-        destroyGame();
-        setMusic('board');
-        renderResults(app, nextState, startSetup, () => showTitle(startSetup));
-      }
-    },
-  });
+    }
+  };
+  const controller =
+    practice?.controller ??
+    new GameController({ state, speed: testHooks.speed, onEvents: present });
   function dispatch(action: Action): void {
     if (!isCurrent() || presentationBusy) return;
-    void controller.dispatch(action);
+    if (practice) {
+      void practice.dispatch(action).then(() => {
+        if (isCurrent()) renderLocalHud();
+      });
+    } else void controller.dispatch(action);
   }
   // The HUD mounts `#phaser-board`; Phaser must be created after it exists.
   renderLocalHud();
-  guide.update({ prev: state, next: state, events: [], isLocalHuman });
+  if (practice) practiceUi = mountPracticeUi(app, practice, { learned: options?.learned });
+  guide?.update({ prev: state, next: state, events: [], isLocalHuman });
   game = createPhaserGame('phaser-board');
   game.events.on('board-chooseBranch', (to: number) => dispatch({ type: 'chooseBranch', to }));
   game.registry.set('state', state);
@@ -545,7 +631,8 @@ function startGame(state: GameState): void {
   }
   window.addEventListener('dice-bandits:lang', renderLocalHud);
   unbindGameLanguage = () => window.removeEventListener('dice-bandits:lang', renderLocalHud);
-  saveGame(controller.state);
+  if (!practice) saveGame(controller.state);
+  return present;
 }
 
 app.addEventListener('dice-bandits:continue', (event) => {
@@ -580,4 +667,4 @@ if (testHooks.enabled && testHooks.seed)
   );
 const initialRoom = /^\/r\/([A-Z0-9]{5})$/i.exec(location.pathname);
 if (initialRoom) openOnline({ code: initialRoom[1]!.toUpperCase() });
-else showTitle(startSetup);
+else showTitle(startSetup, { onPractice: openPractice });

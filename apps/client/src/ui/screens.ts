@@ -42,7 +42,12 @@ function bindLanguageToggle(root: HTMLElement, rerender: () => void): void {
 
 export function showTitle(
   onNewGame: () => void = () => {},
-  online: { create?: () => void; join?: () => void; back?: (code: string) => void } = {},
+  online: {
+    create?: () => void;
+    join?: () => void;
+    back?: (code: string) => void;
+    onPractice?: () => void;
+  } = {},
 ): void {
   setMusic('board');
   const root = document.querySelector<HTMLElement>('#app');
@@ -55,7 +60,7 @@ export function showTitle(
     const saved = loadGame();
     const room = latestSession();
     unsubscribe();
-    root.innerHTML = `<main class="screen title-screen card" data-testid="screen-title" style="background-image:url('/art/title.webp')"><header>${languageToggle()}<button type="button" class="text-button" data-testid="audio-settings">${t('audio.settings')}</button></header><h1 class="game-logo">${t('title.gameName')}</h1><p>${t('title.subtitle')}</p><div class="title-actions"><button class="primary" data-action="new">${t('title.newGame')}</button>${saved ? `<button class="secondary" data-action="continue">${t('title.continue')}</button>` : ''}<button class="secondary" data-testid="online-create">${t('online.create')}</button><button class="secondary" data-testid="online-join">${t('online.join')}</button><button class="secondary" data-testid="title-story">${t('title.story')}</button>${room ? `<button class="secondary" data-testid="online-back">${t('online.backToRoom', { code: room.code })}</button>` : ''}</div></main>`;
+    root.innerHTML = `<main class="screen title-screen card" data-testid="screen-title" style="background-image:url('/art/title.webp')"><header>${languageToggle()}<button type="button" class="text-button" data-testid="audio-settings">${t('audio.settings')}</button></header><h1 class="game-logo">${t('title.gameName')}</h1><p>${t('title.subtitle')}</p><div class="title-actions"><button class="primary" data-action="new">${t('title.newGame')}</button>${saved ? `<button class="secondary" data-action="continue">${t('title.continue')}</button>` : ''}<button class="secondary" data-testid="online-create">${t('online.create')}</button><button class="secondary" data-testid="online-join">${t('online.join')}</button><button class="secondary" data-testid="title-story">${t('title.story')}</button>${online.onPractice ? `<button class="secondary" data-testid="title-practice">${t('practice.entry')}</button>` : ''}${room ? `<button class="secondary" data-testid="online-back">${t('online.backToRoom', { code: room.code })}</button>` : ''}</div></main>`;
     if (discarded) {
       const toast = document.createElement('div');
       toast.className = 'toast';
@@ -73,6 +78,9 @@ export function showTitle(
       });
     });
     root.querySelector('[data-action="new"]')?.addEventListener('click', onNewGame);
+    root
+      .querySelector('[data-testid="title-practice"]')
+      ?.addEventListener('click', () => online.onPractice?.());
     root
       .querySelector('[data-testid="online-create"]')
       ?.addEventListener(
@@ -111,11 +119,15 @@ export function showTitle(
   if (shouldShowIntroComic()) {
     openIntroComic({
       onClose: () => root.querySelector<HTMLElement>('[data-testid="title-story"]')?.focus(),
+      onPracticeOffer: online.onPractice,
     });
   }
 }
 
-export function showSetup(onStart: (config: GameConfig) => void): void {
+export function showSetup(
+  onStart: (config: GameConfig) => void,
+  onBack: () => void = () => showTitle(() => showSetup(onStart)),
+): void {
   const root = document.querySelector<HTMLElement>('#app');
   if (!root) throw new Error('Missing #app mount element');
   let error = false;
@@ -128,9 +140,7 @@ export function showSetup(onStart: (config: GameConfig) => void): void {
       .join('');
     root.innerHTML = `<main class="screen setup-screen card" data-testid="screen-setup"><header><button class="text-button" data-action="back">← ${t('setup.back')}</button>${languageToggle()}</header><h1>${t('setup.title')}</h1><p>${t('setup.instructions')}</p><form id="setup-form"><div class="seat-list">${seatRows}</div><p class="error" role="alert">${error ? t('setup.invalid') : ''}</p><button class="primary" type="submit">${t('setup.start')}</button></form></main>`;
     bindLanguageToggle(root, render);
-    root
-      .querySelector('[data-action="back"]')
-      ?.addEventListener('click', () => showTitle(() => showSetup(onStart)));
+    root.querySelector('[data-action="back"]')?.addEventListener('click', onBack);
     root.querySelectorAll<HTMLElement>('.seat-row').forEach((row) => {
       const index = Number(row.dataset.seat);
       row
