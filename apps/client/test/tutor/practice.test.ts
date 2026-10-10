@@ -35,6 +35,103 @@ async function act(practice: ReturnType<typeof createPractice>, action: Action):
 }
 
 describe('isolated on-rails practice', () => {
+  it('awaits presentation of every human and bot batch in order', async () => {
+    const batches: number[] = [];
+    let release!: () => void;
+    const practice = createPractice(TUTORIAL_SCRIPT, () => undefined, {
+      present: async (_events, state) => {
+        batches.push(state.turnSeat);
+        if (batches.length === 1)
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+      },
+    });
+    const pending = practice.dispatch({ type: 'roll' });
+    expect(batches).toEqual([1]);
+    const held = structuredClone(practice.controller.state);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(practice.controller.state).toEqual(held);
+    expect(batches).toEqual([1]);
+    release();
+    await vi.runAllTimersAsync();
+    await pending;
+    expect(batches).toEqual([1, 1, 0]);
+    expectStorage();
+    practice.destroy();
+  });
+
+  it('presents the final robbery before marking completion', async () => {
+    let release!: () => void;
+    let finalPresented = false;
+    const practice = createPractice(TUTORIAL_SCRIPT, () => undefined, {
+      present: async (events) => {
+        if (!events.some((event) => event.type === 'GoldStolen')) return;
+        finalPresented = true;
+        expect(practice.completed).toBe(false);
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      },
+    });
+    for (const entry of TUTORIAL_SCRIPT.replay.filter((entry) => entry.seat === 0)) {
+      const pending = practice.dispatch(entry.action);
+      await vi.runAllTimersAsync();
+      if (finalPresented) {
+        expect(practice.completed).toBe(false);
+        release();
+      }
+      await pending;
+    }
+    expect(finalPresented).toBe(true);
+    expect(practice.completed).toBe(true);
+    expectStorage();
+    practice.destroy();
+  });
+
+  it.each(['destroy', 'restart'] as const)(
+    'ignores pending presentation after %s',
+    async (retire) => {
+      let release!: () => void;
+      let presentations = 0;
+      const practice = createPractice(TUTORIAL_SCRIPT, () => undefined, {
+        present: async () => {
+          presentations += 1;
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        },
+      });
+      const pending = practice.dispatch({ type: 'roll' });
+      expect(presentations).toBe(1);
+      practice[retire]();
+      await pending;
+      const retired = structuredClone(practice.controller.state);
+      release();
+      await vi.runAllTimersAsync();
+      expect(practice.controller.state).toEqual(retired);
+      expect(presentations).toBe(1);
+      expect(practice.completed).toBe(false);
+      expect(practice.error).toBeNull();
+      expect(practice.allowedActions()).toEqual(retire === 'restart' ? [{ type: 'roll' }] : []);
+      expectStorage();
+      practice.destroy();
+    },
+  );
+
+  it('stops in the error state when presentation rejects', async () => {
+    const practice = createPractice(TUTORIAL_SCRIPT, () => undefined, {
+      present: async () => {
+        throw new Error('Presentation failed');
+      },
+    });
+    await act(practice, { type: 'roll' });
+    expect(practice.error?.message).toBe('Presentation failed');
+    expect(practice.completed).toBe(false);
+    expect(practice.allowedActions()).toEqual([]);
+    expect(practice.controller.state.turnSeat).toBe(1);
+    practice.destroy();
+  });
   it('waits for human input and exposes only the legal canonical action', async () => {
     const seen: string[] = [];
     const practice = createPractice(TUTORIAL_SCRIPT, (topic) => seen.push(topic));

@@ -27,6 +27,7 @@ export interface PracticeSession {
 export function createPractice(
   input: TutorialScript,
   onProgress: (topic: Topic) => void,
+  options?: { present?: (events: GameEvent[], state: GameState) => Promise<void> },
 ): PracticeSession {
   const script: TutorialScript = structuredClone(input);
   let controller: GameController;
@@ -113,6 +114,10 @@ export function createPractice(
             script.lessons[lessonIndex]!.replayIndex <= cursor
           ) {
             throw new Error(`Missing lesson milestone at replay ${cursor}`);
+          }
+          if (options?.present) {
+            await options.present(events, state);
+            if (!isCurrent()) return parked;
           }
           cursor += 1;
           before = state;
