@@ -72,65 +72,81 @@ for (const lang of ['en', 'th']) {
   test(`human seven beats hold HP until drain and lock dispatch (${lang})`, async ({
     page,
   }, info) => {
+    const cpuRate = Number(process.env.BATTLE_FEEL_CPU_RATE ?? '1');
+    if (cpuRate !== 1 && cpuRate !== 4) {
+      throw new Error('BATTLE_FEEL_CPU_RATE must be 1 or 4');
+    }
     await observeBoardGame(page);
     await page.addInitScript((lang) => localStorage.setItem('lang', lang), lang);
     await startBattleJourney(page, 1);
-    await instrument(page);
-    await page.evaluate(() => {
-      window.diceBanditsSpeed = 1;
-    });
-    const before = await page.locator('.battle-hp-value').allTextContents();
-    await page.getByTestId('pick-attack').click();
-    await expect(page.locator('html')).toHaveAttribute('lang', lang);
-    if (info.project.name === 'mobile-landscape' && lang === 'th') {
-      for (const kind of ['anticipation', 'damage', 'drain', 'result']) {
-        await page.waitForFunction(
-          (kind) =>
-            document.querySelector<HTMLElement>('[data-testid="battle-readout"]')?.dataset.beat ===
+    const cpuSession = cpuRate === 4 ? await page.context().newCDPSession(page) : undefined;
+    try {
+      await cpuSession?.send('Emulation.setCPUThrottlingRate', { rate: cpuRate });
+      await instrument(page);
+      await page.evaluate(() => {
+        window.diceBanditsSpeed = 1;
+      });
+      const before = await page.locator('.battle-hp-value').allTextContents();
+      await page.getByTestId('pick-attack').click();
+      await expect(page.locator('html')).toHaveAttribute('lang', lang);
+      if (info.project.name === 'mobile-landscape' && lang === 'th') {
+        for (const kind of ['anticipation', 'damage', 'drain', 'result']) {
+          await page.waitForFunction(
+            (kind) =>
+              document.querySelector<HTMLElement>('[data-testid="battle-readout"]')?.dataset
+                .beat === kind,
             kind,
-          kind,
-          { polling: 'raf', timeout: 5000 },
-        );
-        await page.screenshot({ path: info.outputPath(`battle-${kind}-${lang}.png`) });
+            { polling: 'raf', timeout: 5000 },
+          );
+          await page.screenshot({ path: info.outputPath(`battle-${kind}-${lang}.png`) });
+        }
+      }
+      await expect.poll(() => page.evaluate(() => (window as Probe).__beats.length)).toBe(7);
+      const samples = await page.evaluate(() => (window as Probe).__beats);
+      expect(samples.map((s) => s.kind)).toEqual([
+        'reveal',
+        'anticipation',
+        'lunge',
+        'impact',
+        'damage',
+        'drain',
+        'result',
+      ]);
+      expect(samples.every((s) => s.locked)).toBe(true);
+      for (const sample of samples.slice(0, 6)) expect(sample.hp).toEqual(before);
+      for (const target of samples[5]!.beat.targets) {
+        const index = target.side === 'a' ? 0 : 1;
+        expect(Number(samples[6]!.hp[index]!.split('/')[0])).toBe(target.toHp);
+        expect(Number(samples[6]!.meters[index])).toBe(target.toHp);
+      }
+      await page.screenshot({ path: info.outputPath(`battle-result-${lang}.png`) });
+      await expect
+        .poll(() => page.evaluate(() => (window as Probe).__battleFinish || 0))
+        .toBeGreaterThan(0);
+      const timing = await page.evaluate(() => {
+        const p = window as Probe;
+        return {
+          elapsed: p.__battleFinish - p.__battleStart,
+          samples: p.__beats,
+          events: p.__battleEvents,
+        };
+      });
+      expect(timing.elapsed).toBeGreaterThanOrEqual(2220);
+      expect(timing.elapsed).toBeLessThan(3500);
+      await info.attach('battle-timing', {
+        body: JSON.stringify({ ...timing, cpuRate, cpuThrottlingApplied: !!cpuSession }),
+        contentType: 'application/json',
+      });
+      await expect(page.locator('.action-bar button:enabled').first()).toBeVisible();
+    } finally {
+      if (cpuSession) {
+        try {
+          await cpuSession.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+        } finally {
+          await cpuSession.detach();
+        }
       }
     }
-    await expect.poll(() => page.evaluate(() => (window as Probe).__beats.length)).toBe(7);
-    const samples = await page.evaluate(() => (window as Probe).__beats);
-    expect(samples.map((s) => s.kind)).toEqual([
-      'reveal',
-      'anticipation',
-      'lunge',
-      'impact',
-      'damage',
-      'drain',
-      'result',
-    ]);
-    expect(samples.every((s) => s.locked)).toBe(true);
-    for (const sample of samples.slice(0, 6)) expect(sample.hp).toEqual(before);
-    for (const target of samples[5]!.beat.targets) {
-      const index = target.side === 'a' ? 0 : 1;
-      expect(Number(samples[6]!.hp[index]!.split('/')[0])).toBe(target.toHp);
-      expect(Number(samples[6]!.meters[index])).toBe(target.toHp);
-    }
-    await page.screenshot({ path: info.outputPath(`battle-result-${lang}.png`) });
-    await expect
-      .poll(() => page.evaluate(() => (window as Probe).__battleFinish || 0))
-      .toBeGreaterThan(0);
-    const timing = await page.evaluate(() => {
-      const p = window as Probe;
-      return {
-        elapsed: p.__battleFinish - p.__battleStart,
-        samples: p.__beats,
-        events: p.__battleEvents,
-      };
-    });
-    expect(timing.elapsed).toBeGreaterThanOrEqual(2220);
-    expect(timing.elapsed).toBeLessThan(3500);
-    await info.attach('battle-timing', {
-      body: JSON.stringify(timing),
-      contentType: 'application/json',
-    });
-    await expect(page.locator('.action-bar button:enabled').first()).toBeVisible();
   });
 }
 
