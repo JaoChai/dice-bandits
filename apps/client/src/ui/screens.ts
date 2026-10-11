@@ -151,7 +151,10 @@ export function showTitle(
       toast.textContent = t('toast.saveDiscarded');
       root.append(toast);
     }
-    bindLanguageToggle(root, render);
+    bindLanguageToggle(root, () => {
+      render();
+      root.querySelector<HTMLElement>(`[data-lang="${getLang()}"]`)!.focus();
+    });
     root.querySelector('[data-testid="audio-settings"]')?.addEventListener('click', () => {
       openSoundDialog(root.querySelector<HTMLButtonElement>('[data-testid="audio-settings"]')!);
     });

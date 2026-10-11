@@ -69,6 +69,47 @@ async function scan(page: Page, name: string, info: TestInfo) {
   expect(contrast).toEqual([]);
 }
 
+test('keyboard language change keeps immediate Escape reachable in the chooser', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('lang', 'en');
+    localStorage.setItem('dice-bandits:intro-seen', '1');
+  });
+  await page.goto('/?speed=0');
+  await page.getByTestId('title-play').press('Enter');
+  await page.getByTestId('title-language').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-lang="th"]')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('title-back')).toHaveAccessibleName('กลับหน้าหลัก');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('title-chooser')).toBeHidden();
+  await expect(page.getByTestId('title-play')).toBeFocused();
+});
+
+for (const lang of ['th', 'en'] as const) {
+  test(`keyboard language change preserves landing focus for ${lang}`, async ({ page }) => {
+    await page.addInitScript((lang) => {
+      localStorage.clear();
+      localStorage.setItem('lang', lang === 'th' ? 'en' : 'th');
+      localStorage.setItem('dice-bandits:intro-seen', '1');
+    }, lang);
+    await page.goto('/?speed=0');
+    await page.getByTestId('title-language').focus();
+    await page.keyboard.press('Enter');
+    await page.locator(`[data-lang="${lang}"]`).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator(`[data-lang="${lang}"]`)).toBeFocused();
+    await expect(page.locator(`[data-lang="${lang}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#title-languages')).toBeHidden();
+    await expect(page.getByTestId('title-language')).toBeFocused();
+    await expect(page.getByTestId('title-play')).toBeVisible();
+  });
+}
+
 for (const [lang, width, height] of [
   ['th', 915, 412],
   ['th', 932, 388],

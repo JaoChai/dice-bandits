@@ -76,6 +76,23 @@ describe('title chooser', () => {
       .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(document.activeElement).toBe(document.querySelector('[data-testid="title-play"]'));
   });
+  it.each([false, true])('preserves language focus after rerender, choosing=%s', (choosing) => {
+    showTitle();
+    if (choosing) open();
+    click('[data-testid="title-language"]');
+    const language = document.querySelector<HTMLButtonElement>('[data-lang="th"]')!;
+    language.focus();
+    language.click();
+    expect(document.activeElement).toBe(document.querySelector('[data-lang="th"]'));
+    document.activeElement!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    expect(document.querySelector<HTMLElement>('#title-languages')!.hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>('[data-testid="title-chooser"]')!.hidden).toBe(true);
+    expect(document.activeElement).toBe(
+      document.querySelector(`[data-testid="${choosing ? 'title-play' : 'title-language'}"]`),
+    );
+  });
   it('keeps real action identifiers, room callback, language and sound controls reachable', () => {
     const back = vi.fn();
     saveSession({ code: 'ABCDE', seat: 0, token: 'test-only', name: 'Human' });
