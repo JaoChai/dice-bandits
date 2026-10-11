@@ -6,6 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 import en from '../src/i18n/en.json' with { type: 'json' };
 import th from '../src/i18n/th.json' with { type: 'json' };
 import {
+  openTitleChoice,
   assertInside,
   assertNoEllipsis,
   mutateBoardForCoverage,
@@ -36,7 +37,7 @@ async function waitBoardReady(page: Page): Promise<void> {
 async function startBoard(page: Page, seed: string, lang: Lang): Promise<void> {
   await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
   await page.goto(`/?seed=${seed}&speed=0`);
-  await page.locator('[data-action="new"]').click();
+  await openTitleChoice(page, 'new');
   await page.locator('#setup-form button[type="submit"]').click();
   await waitBoardReady(page);
   await expect(page.locator('html')).toHaveAttribute('lang', lang);
@@ -109,7 +110,7 @@ async function continueSave(page: Page, lang: Lang): Promise<void> {
     { state: separatedSave(), locale: lang },
   );
   await page.goto('/?speed=0&seed=m5a-separated-tokens');
-  await page.locator('[data-action="continue"]').click();
+  await openTitleChoice(page, 'continue');
   await waitBoardReady(page);
   await expect(page.locator('html')).toHaveAttribute('lang', lang);
 }

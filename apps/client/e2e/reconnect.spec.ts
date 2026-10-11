@@ -1,5 +1,6 @@
 import { expect, test, type WebSocketRoute } from '@playwright/test';
 import type { ServerMsg } from '@dice-bandits/room';
+import { openTitleChoice } from './helpers';
 
 type ReconnectProbe = {
   sockets: WebSocket[];
@@ -44,8 +45,9 @@ for (const language of ['th', 'en']) {
       };
     });
     await page.goto('http://127.0.0.1:8787/?speed=0');
+    await page.getByTestId('title-language').click();
     await page.locator(`[data-lang="${language}"]`).click();
-    await page.getByTestId('online-create').click();
+    await openTitleChoice(page, 'online-create');
     await page.getByTestId('online-name').fill('Alice');
     await page.getByTestId('online-create-submit').click();
     await expect(page.getByTestId('screen-lobby')).toBeVisible();

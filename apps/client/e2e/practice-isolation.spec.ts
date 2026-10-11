@@ -1,7 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { TUTORIAL_SCRIPT } from '../src/tutor/script';
 import { writeFile } from 'node:fs/promises';
-import { assertInside, assertNoEllipsis, startBattleJourney } from './helpers';
+import { openTitleChoice, assertInside, assertNoEllipsis, startBattleJourney } from './helpers';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -108,6 +108,7 @@ test('real saved game survives completion, replay, exit, setup Back and Continue
     );
   }, saved);
   await page.reload();
+  await openTitleChoice(page, 'title-practice', false);
   await expect(page.getByTestId('title-practice')).toBeVisible();
   const original = await bytes(page);
   await page.evaluate(() => {
@@ -139,7 +140,7 @@ test('real saved game survives completion, replay, exit, setup Back and Continue
     expect(connections).toEqual([]);
   };
   const enter = async () => {
-    await page.getByTestId('title-practice').click();
+    await openTitleChoice(page, 'title-practice');
     await expect(page.getByTestId('practice-begin')).toBeFocused();
     await unchanged();
     await page.getByTestId('practice-begin').click();
@@ -170,7 +171,7 @@ test('real saved game survives completion, replay, exit, setup Back and Continue
   await page.locator('[data-action="back"]').click();
   await expect(page.getByTestId('title-practice')).toHaveCount(1);
   await unchanged();
-  await page.locator('[data-action="continue"]').click();
+  await openTitleChoice(page, 'continue');
   await page.waitForFunction(() => window.__db?.art.boardReady && window.__db.art.battleReady);
   expect(await page.evaluate(() => window.__db!.getState())).toEqual(savedState);
   await expect(page.getByTestId('practice-coach')).toHaveCount(0);
@@ -206,8 +207,9 @@ test('real saved game survives completion, replay, exit, setup Back and Continue
   });
   // Starting a normal game after practice uses the actual setup/saving flow.
   await page.reload();
+  await openTitleChoice(page, 'title-practice', false);
   await expect(page.getByTestId('title-practice')).toBeVisible();
-  await page.getByTestId('title-practice').click();
+  await openTitleChoice(page, 'title-practice');
   await page.getByTestId('practice-begin').click();
   await page.waitForFunction(() => window.__db?.art.boardReady);
   await complete(page, async () => {
@@ -267,7 +269,7 @@ for (const failure of ['loading', 'unavailable', 'empty'] as const) {
     });
     await page.goto('/?speed=0');
     const original = await bytes(page);
-    await page.getByTestId('title-practice').click();
+    await openTitleChoice(page, 'title-practice');
     const control = page.getByTestId(
       failure === 'unavailable' ? 'practice-retry' : 'practice-back',
     );

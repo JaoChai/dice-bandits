@@ -45,7 +45,7 @@ test('MP3 fallback decodes and starts both looping tracks only after a gesture',
   });
 
   await page.goto('/?seed=m5ab-1&speed=0');
-  await expect(page.locator('[data-action="new"]')).toBeVisible();
+  await expect(page.getByTestId('title-play')).toBeVisible();
   expect(musicResponses).toEqual([]);
   expect(await page.evaluate(() => (window as unknown as MusicProbeWindow).__musicStarts)).toEqual(
     [],

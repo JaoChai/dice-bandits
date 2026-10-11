@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openTitleChoice } from './helpers';
 
 test('hot-seat game startup has no console errors or uncaught page errors', async ({ page }) => {
   const consoleErrors: string[] = [];
@@ -11,7 +12,7 @@ test('hot-seat game startup has no console errors or uncaught page errors', asyn
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto('/?seed=console-e2e&speed=0');
-  await page.locator('[data-action="new"]').click();
+  await openTitleChoice(page, 'new');
   for (let seat = 1; seat < 4; seat += 1) {
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('human');
   }

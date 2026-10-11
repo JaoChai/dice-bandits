@@ -12,11 +12,12 @@ async function boardLang(page: Page, lang: 'th' | 'en'): Promise<void> {
 
 test('switches language on the title and in-game', async ({ page }) => {
   await page.goto('/?seed=e2e-i18n&speed=0');
-  await expect(page.locator('[data-action="new"]')).toHaveText('New game');
+  await expect(page.getByTestId('title-play')).toHaveText('Play');
+  await page.getByTestId('title-language').click();
   await page.locator('[data-lang="th"]').click();
-  await expect(page.locator('[data-action="new"]')).toHaveText('เริ่มเกมใหม่');
+  await expect(page.getByTestId('title-play')).toHaveText('เล่น');
   await page.locator('[data-lang="en"]').click();
-  await expect(page.locator('[data-action="new"]')).toHaveText('New game');
+  await expect(page.getByTestId('title-play')).toHaveText('Play');
 
   await startTestGame(page);
   await expect(page.locator('[data-testid="action-roll"]')).toHaveText('Roll');

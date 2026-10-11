@@ -1,7 +1,7 @@
 import { createGame, step, type GameEvent, type GameState } from '@dice-bandits/engine';
 import { expect, test, type Page } from '@playwright/test';
 import type Phaser from 'phaser';
-import { assertInside, observeBoardGame, renderedBoardGeometry } from './helpers';
+import { openTitleChoice, assertInside, observeBoardGame, renderedBoardGeometry } from './helpers';
 
 type Trace = { at: number; stage: string | null; events: GameEvent[] };
 type ProbeWindow = Window & {
@@ -35,7 +35,7 @@ async function start(page: Page, state = saved(), options = mode): Promise<void>
     { state, lang: options.lang },
   );
   await page.goto(`/?speed=${options.speed}`);
-  await page.locator('[data-action="continue"]').click();
+  await openTitleChoice(page, 'continue');
   await page.waitForFunction(() => window.__db?.art.boardReady);
   await installTrace(page);
 }
@@ -218,7 +218,7 @@ for (const stage of ['rolling', 'result']) {
     await expect(page.getByTestId('dice-roll')).toHaveCount(0);
     await expect(page.getByTestId('last-roll-chip')).toHaveCount(0);
     expect((await trace(page)).moves).toEqual([]);
-    await page.locator('[data-action="new"]').click();
+    await openTitleChoice(page, 'new');
     await page.locator('#setup-form button[type="submit"]').click();
     await page.waitForFunction(() => window.__db?.art.boardReady);
     await expect(page.getByTestId('last-roll-chip')).toHaveCount(0);
@@ -253,7 +253,7 @@ test('real online roll at normal speed has static badge and no added dice wait',
 }, info) => {
   await observeBoardGame(page);
   await page.goto('http://127.0.0.1:8787/?speed=1');
-  await page.getByTestId('online-create').click();
+  await openTitleChoice(page, 'online-create');
   await page.getByTestId('online-name').fill('Alice');
   await page.getByTestId('online-create-submit').click();
   await expect(page.getByTestId('screen-lobby')).toBeVisible();

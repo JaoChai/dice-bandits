@@ -1,6 +1,6 @@
 import { createGame, type GameState } from '@dice-bandits/engine';
 import { expect, test, type Page } from '@playwright/test';
-import { observeBoardGame, renderedBoardGeometry } from './helpers';
+import { openTitleChoice, observeBoardGame, renderedBoardGeometry } from './helpers';
 
 function savedFork(): GameState {
   const state = createGame({
@@ -23,7 +23,7 @@ async function continueSave(page: Page, state: GameState): Promise<void> {
     localStorage.setItem('diceBandits.lang', 'en');
   }, state);
   await page.goto('/?speed=0&seed=rf3-fork-19');
-  await page.locator('[data-action="continue"]').click();
+  await openTitleChoice(page, 'continue');
   await expect(page.locator('[data-testid="screen-board"] canvas')).toBeVisible();
   // Canvas mounts before Boot finishes loading art; use the same scene-ready
   // wait as renderer.spec.ts rather than the shorter DOM assertion poll.

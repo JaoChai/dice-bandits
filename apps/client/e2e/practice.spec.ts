@@ -11,7 +11,7 @@ import {
 import type Phaser from 'phaser';
 import { writeFile } from 'node:fs/promises';
 import { TUTORIAL_SCRIPT } from '../src/tutor/script';
-import { assertInside, assertNoEllipsis, observeBoardGame } from './helpers';
+import { openTitleChoice, assertInside, assertNoEllipsis, observeBoardGame } from './helpers';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -157,7 +157,7 @@ async function runJourney(
   }, lang);
   await observeBoardGame(page);
   await page.goto(`/?speed=${speed}`);
-  await page.getByTestId('title-practice').click();
+  await openTitleChoice(page, 'title-practice');
   await expect(page.getByTestId('practice-begin')).toBeFocused();
   const invitationPath = info.outputPath('invitation.png');
   await page.screenshot({ path: invitationPath });
@@ -343,6 +343,7 @@ async function runJourney(
   await page.getByTestId('practice-leave').click();
   await expect(page.getByTestId('title-practice')).toBeFocused();
   expect(network).toEqual([]);
+  await expect(page.getByTestId('title-recommended')).toHaveCount(0);
   expect(errors).toEqual([]);
 }
 

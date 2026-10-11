@@ -1,5 +1,7 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
+import { openTitleChoice } from './helpers';
+
 const testCode = 'ZZZZZ';
 const onlineOrigin = 'http://127.0.0.1:8787';
 const actionSelector =
@@ -11,7 +13,7 @@ const enabledActionSelector = actionSelector
 
 async function createRoom(page: Page): Promise<string> {
   await page.goto(`${onlineOrigin}/?speed=0`);
-  await page.getByTestId('online-create').click();
+  await openTitleChoice(page, 'online-create');
   await page.getByTestId('online-name').fill('Alice');
   await page.getByTestId('online-create-submit').click();
   await expect(page.getByTestId('screen-lobby')).toBeVisible();

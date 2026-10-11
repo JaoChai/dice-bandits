@@ -6,7 +6,7 @@ import Phaser from 'phaser';
 import { createGame as createPhaserGame } from './game';
 import { createGame, type Action, type GameEvent, type GameState } from '@dice-bandits/engine';
 import { GameController } from './controller';
-import { showSetup, showTitle } from './ui/screens';
+import { focusTitleChoice, showSetup, showTitle } from './ui/screens';
 import { clearSave, saveGame } from './save';
 import { clearSession } from './online/session';
 import { OnlineController } from './online/onlineController';
@@ -429,7 +429,7 @@ function openPractice(): void {
   destroyGame();
   practicePreparation = preparePractice(app, beginPractice, () => {
     showTitle(startSetup, { onPractice: openPractice });
-    app.querySelector<HTMLElement>('[data-testid="title-practice"]')?.focus();
+    focusTitleChoice('title-practice');
   });
 }
 
@@ -450,7 +450,7 @@ function beginPractice(script: TutorialScript): void {
 app.addEventListener('dice-bandits:practice-exit', () => {
   destroyGame();
   showTitle(startSetup, { onPractice: openPractice });
-  app.querySelector<HTMLElement>('[data-testid="title-practice"]')?.focus();
+  focusTitleChoice('title-practice');
 });
 app.addEventListener('dice-bandits:practice-replay', () => {
   const script = practiceRoute;

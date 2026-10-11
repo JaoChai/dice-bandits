@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { observeBoardGame, playUntil, waitForBattleArt } from './helpers';
+import { openTitleChoice, observeBoardGame, playUntil, waitForBattleArt } from './helpers';
 
 test('reward dialog frame stays inside the viewport with all choices scrollable', async ({
   page,
@@ -11,7 +11,7 @@ test('reward dialog frame stays inside the viewport with all choices scrollable'
   // and takes a pvpReward with 13 choices at action 38; the M4 seed
   // review-m4a no longer reaches a human pvpReward within budget).
   await page.goto('/?seed=m5a-7&speed=0');
-  await page.locator('[data-action="new"]').click();
+  await openTitleChoice(page, 'new');
   for (let seat = 1; seat < 4; seat++)
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
   await page.locator('#setup-form button[type="submit"]').click();
@@ -55,7 +55,7 @@ for (const [region, seed] of [
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(`/?seed=${seed}&speed=0`);
-    await page.locator('[data-action="new"]').click();
+    await openTitleChoice(page, 'new');
     for (let seat = 1; seat < 4; seat++)
       await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
     await page.locator('#setup-form button[type="submit"]').click();
@@ -89,7 +89,7 @@ test('snow battle survives atlas loading and renders without a page error', asyn
     await route.continue();
   });
   await page.goto('/?seed=snow-7&speed=0', { waitUntil: 'domcontentloaded' });
-  await page.locator('[data-action="new"]').click();
+  await openTitleChoice(page, 'new');
   for (let seat = 1; seat < 4; seat++)
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
   await page.locator('#setup-form button[type="submit"]').click();
@@ -130,7 +130,7 @@ test('ships no pixel-art /sprites requests or legacy texture keys', async ({ pag
   observeBoardGame(page);
 
   await page.goto('/?seed=m5a-2&speed=0');
-  await page.locator('[data-action="new"]').click();
+  await openTitleChoice(page, 'new');
   for (let seat = 1; seat < 4; seat++)
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
   await page.locator('#setup-form button[type="submit"]').click();

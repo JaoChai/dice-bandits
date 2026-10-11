@@ -8,7 +8,7 @@ import {
 } from '@dice-bandits/engine';
 import { expect, test, type Page } from '@playwright/test';
 import type Phaser from 'phaser';
-import { observeBoardGame, startJourney } from './helpers';
+import { openTitleChoice, observeBoardGame, startJourney } from './helpers';
 
 type Point = { x: number; y: number };
 type Sample = { token: Point; projected: Point; spaces: Point[] };
@@ -186,7 +186,7 @@ async function startGoldWalk(page: Page, lang: 'th' | 'en', speed = 1, reduced =
     { previous: fixture.previous, lang },
   );
   await page.goto(`/?speed=${speed}`);
-  await page.locator('[data-action="continue"]').click();
+  await openTitleChoice(page, 'continue');
   await page.waitForFunction(() => window.__db?.art.boardReady);
   await page.evaluate(() => {
     const probe = window as LocalProbe;

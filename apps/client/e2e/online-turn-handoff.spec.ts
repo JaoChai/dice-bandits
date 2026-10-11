@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { step, type GameState } from '@dice-bandits/engine';
 import type { ServerMsg } from '@dice-bandits/room';
 import type Phaser from 'phaser';
-import { observeBoardGame } from './helpers';
+import { openTitleChoice, observeBoardGame } from './helpers';
 
 type ProbeWindow = Window & { __m5aGame?: Phaser.Game };
 type Frame = Extract<ServerMsg, { type: 'events' | 'view' }>;
@@ -52,7 +52,7 @@ test('online speed-1 movement commits both views before ghost playback finishes'
       });
     }
     await host.goto('http://127.0.0.1:8787/?speed=0');
-    await host.getByTestId('online-create').click();
+    await openTitleChoice(host, 'online-create');
     await host.getByTestId('online-name').fill('Alice');
     await host.getByTestId('online-create-submit').click();
     await expect(host.getByTestId('screen-lobby')).toBeVisible();
@@ -277,7 +277,7 @@ for (const language of ['th', 'en']) {
       // Never fabricate RNG, server frames or game state.
       for (let room = 0; room < 6 && !reached; room++) {
         await host.goto('http://127.0.0.1:8787/?speed=0');
-        await host.getByTestId('online-create').click();
+        await openTitleChoice(host, 'online-create');
         await host.getByTestId('online-name').fill('Alice');
         await host.getByTestId('online-create-submit').click();
         await expect(host.getByTestId('screen-lobby')).toBeVisible();
