@@ -29,6 +29,9 @@ vi.mock('../../src/art/motion', async (importOriginal) => ({
 const { default: BoardScene } = await import('../../src/scenes/BoardScene');
 
 interface Rec {
+  text?: string;
+  fontFamily?: string;
+  visible?: boolean;
   kind: string;
   depth: number;
   texture?: string;
@@ -39,6 +42,11 @@ interface Rec {
   tint?: number;
   played?: string;
   name?: string;
+  scaleX?: number;
+  scaleY?: number;
+  alpha?: number;
+  color?: number;
+  radius?: number;
 }
 
 /** Chainable Phaser game-object test double that records what the scene did. */
@@ -47,11 +55,37 @@ function gameObject(
   texture?: string,
   frame?: number | string,
 ): { proxy: never; rec: Rec } {
-  const rec: Rec = { kind, depth: 0, texture, frame };
+  const rec: Rec = { kind, depth: 0, texture, frame, scaleX: 1, scaleY: 1, alpha: 1 };
   const proxy: unknown = new Proxy(rec, {
     get(target, prop: string | symbol) {
       if (typeof prop !== 'string') return undefined;
-      if (prop === 'depth') return target.depth;
+      if (prop === 'setText')
+        return (text: string) => {
+          target.text = text;
+          return proxy;
+        };
+      if (prop === 'setVisible')
+        return (visible: boolean) => {
+          target.visible = visible;
+          return proxy;
+        };
+      if (prop === 'depth' || prop === 'scaleX' || prop === 'scaleY' || prop === 'alpha')
+        return target[prop];
+      if (prop === 'setAlpha')
+        return (alpha: number) => {
+          target.alpha = alpha;
+          return proxy;
+        };
+      if (prop === 'lineStyle')
+        return (_width: number, color: number) => {
+          target.color = color;
+          return proxy;
+        };
+      if (prop === 'strokeCircle')
+        return (_x: number, _y: number, radius: number) => {
+          target.radius = radius;
+          return proxy;
+        };
       if (prop === 'setDepth')
         return (depth: number) => {
           target.depth = depth;
@@ -73,8 +107,10 @@ function gameObject(
           return proxy;
         };
       if (prop === 'setScale')
-        return (scale: number) => {
+        return (scale: number, scaleY = scale) => {
           target.scale = scale;
+          target.scaleX = scale;
+          target.scaleY = scaleY;
           return proxy;
         };
       if (prop === 'setTint')
@@ -114,8 +150,7 @@ function makeScene() {
     tokenObjects: new Map(),
     spacePositions: new Map(),
     wholeMap: false,
-    ringTween: null,
-    children: { removeAll: vi.fn() },
+    children: { removeAll: vi.fn(), remove: vi.fn(), add: vi.fn() },
     scale: { on: vi.fn(), off: vi.fn() },
     events: { once: vi.fn(), on: vi.fn(), off: vi.fn() },
     cameras: {
@@ -162,6 +197,22 @@ function makeScene() {
       remove: vi.fn(),
     },
     add: {
+      text: vi.fn((_x, _y, text, style) => {
+        const made = gameObject('text');
+        Object.assign(made.rec, { text, fontFamily: style.fontFamily });
+        objects.push(made.rec);
+        return made.proxy;
+      }),
+      container: vi.fn(() => {
+        const made = gameObject('container');
+        objects.push(made.rec);
+        return made.proxy;
+      }),
+      ellipse: vi.fn(() => {
+        const made = gameObject('ellipse');
+        objects.push(made.rec);
+        return made.proxy;
+      }),
       image: vi.fn((x: number, y: number, key: string, frame?: number | string) => {
         const made = gameObject('image', key, frame);
         objects.push(made.rec);
@@ -189,6 +240,8 @@ function makeScene() {
       }),
     },
   }) as unknown as {
+    add: { container: ReturnType<typeof vi.fn> };
+    children: { remove: ReturnType<typeof vi.fn>; add: ReturnType<typeof vi.fn> };
     renderBoard(state: GameState): void;
     create(): void;
     input: { on: ReturnType<typeof vi.fn> };
@@ -272,27 +325,30 @@ describe('BoardScene movement destinations', () => {
     live.tokenObjects.set(mover.seat, token);
     scene.tweens.add.mockClear();
     scene.tweens.add.mockImplementation((config) => {
-      if (config.targets === token) {
-        Object.assign(token, { x: config.x, y: config.y });
+      if (config.targets.progress !== undefined) {
+        config.targets.progress = 1;
+        config.onUpdate();
         config.onComplete();
       }
     });
     await live.playEvents(moves);
     const walks = scene.tweens.add.mock.calls
       .map(([config]) => config)
-      .filter((config) => config.targets === token);
+      .filter((config) => config.targets.progress !== undefined);
     const destinations = moves.map((event) =>
       previous.board.spaces.find((space) => space.id === event.params.to)!,
     );
-    expect(walks.map(({ x, y, duration }) => ({ x, y, duration }))).toEqual(
+    expect(walks.map(({ duration }) => duration)).toEqual(
       speed > 0
-        ? destinations.map(({ x, y }) => ({
-            x,
-            y,
-            duration: previous.players[mover.seat]!.control === 'human' ? 280 : 120,
-          }))
+        ? destinations.map(() => (previous.players[mover.seat]!.control === 'human' ? 560 : 400))
         : [],
     );
+    // Both tween touchdown and instant movement plant the actual token in order.
+    expect(
+      token.setPosition.mock.calls
+        .slice(speed > 0 ? 1 : 0)
+        .filter((_call, i) => speed === 0 || i % 2 === 0),
+    ).toEqual(destinations.map(({ x, y }) => [x, y]));
     const endpoint = next.board.spaces.find((space) => space.id === next.players[mover.seat]!.pos)!;
     expect({ x: token.x, y: token.y }).toEqual({ x: endpoint.x, y: endpoint.y });
     if (speed === 0) {
@@ -303,6 +359,55 @@ describe('BoardScene movement destinations', () => {
 });
 
 describe('BoardScene layering', () => {
+  it('keeps identity rings but uses static active size/depth and a dark oval instead of yellow rings', () => {
+    const { scene, objects } = makeScene();
+    const state = gameFor('active-cue');
+    scene.renderBoard(state);
+    const tokens = objects.filter((o) => o.texture === '__WHITE');
+    const active = tokens[state.turnSeat]!;
+    for (const token of tokens.filter((o) => o !== active)) {
+      expect(active.depth).toBeGreaterThan(token.depth);
+      expect(active.scaleX).toBeCloseTo(token.scaleX! * 1.18);
+      expect(active.scaleY).toBeCloseTo(token.scaleY! * 1.18);
+      expect(token.alpha).toBe(0.8);
+    }
+    expect(objects.filter((o) => o.radius === 14)).toHaveLength(state.players.length);
+    expect(objects.filter((o) => o.color === 0xf5c51c)).toEqual([]);
+    expect(
+      objects.filter((o) => o.kind === 'ellipse' && o.name === 'active-token-shadow'),
+    ).toHaveLength(1);
+    expect(
+      scene.tweens.add.mock.calls.some(([c]) => c.repeat === -1 && c.scale !== undefined),
+    ).toBe(false);
+  });
+  it('keeps one font-inheriting counter hidden across real board redraws and reuses it', () => {
+    document.documentElement.style.fontFamily = 'Mitr, sans-serif';
+    const state = gameFor('pill-redraw');
+    const { scene, objects } = makeScene();
+    const live = scene as unknown as {
+      tokenObjects: Map<number, Phaser.GameObjects.Image>;
+      walkCounter: Phaser.GameObjects.Container;
+      showWalkCounter(token: Phaser.GameObjects.Image, remaining: number): void;
+    };
+    scene.renderBoard(state);
+    live.showWalkCounter(live.tokenObjects.get(state.turnSeat)!, 4);
+    const counter = live.walkCounter;
+    const text = objects.find((o) => o.kind === 'text')!;
+    expect(text.fontFamily).toBe('Mitr, sans-serif');
+    const next = structuredClone(state);
+    next.players[state.turnSeat]!.pos++;
+    scene.renderBoard(next);
+    expect(scene.children.remove).toHaveBeenCalledWith(counter);
+    expect(scene.children.add).toHaveBeenCalledWith(counter);
+    expect(text.text).toBe('');
+    expect(objects.find((o) => o.kind === 'container')!.visible).toBe(false);
+    live.showWalkCounter(live.tokenObjects.get(state.turnSeat)!, 3);
+    expect(live.walkCounter).toBe(counter);
+    expect(text.text).toBe('3');
+    expect(scene.add.container).toHaveBeenCalledOnce();
+    document.documentElement.style.fontFamily = '';
+  });
+
   it('ignores a queued fork click after the branch phase has already ended', () => {
     const { scene } = makeScene();
     const state = gameFor('queued-fork');
