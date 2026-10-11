@@ -3,7 +3,7 @@ import type { GameState } from '@dice-bandits/engine';
 import type { ServerMsg } from '@dice-bandits/room';
 import type Phaser from 'phaser';
 import recorded from './fixtures/online-battle-swap.json' with { type: 'json' };
-import { observeBoardGame } from './helpers';
+import { openTitleChoice, observeBoardGame } from './helpers';
 
 // QA journey 3/action 24: unchanged public Worker views/events only, never
 // welcome/session traffic. Bob/mushroom ends, Bot3/town resolves, Bot4/Bob starts.
@@ -36,7 +36,7 @@ for (const viewport of [
       };
     });
     await page.goto('http://127.0.0.1:8787/?speed=1');
-    await page.getByTestId('online-create').click();
+    await openTitleChoice(page, 'online-create');
     await page.getByTestId('online-name').fill('ReplayQA');
     await page.getByTestId('online-create-submit').click();
     await expect(page.getByTestId('screen-lobby')).toBeVisible();

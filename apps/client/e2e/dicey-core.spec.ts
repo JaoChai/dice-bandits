@@ -3,6 +3,7 @@ import en from '../src/i18n/en.json' with { type: 'json' };
 import th from '../src/i18n/th.json' with { type: 'json' };
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import {
+  openTitleChoice,
   assertInside,
   assertMinFont,
   assertNoEllipsis,
@@ -101,7 +102,7 @@ test('initial local roll tips are non-blocking, dismissed and persistent on resu
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('dice-bandits:tips')!));
   expect(stored.seen).toContain('roll');
   await page.reload();
-  await page.locator('[data-action="continue"]').click();
+  await openTitleChoice(page, 'continue');
   await expect(page.getByTestId('screen-board')).toBeVisible();
   await expect(page.getByTestId('dicey-tip')).toHaveCount(0);
   await page.getByTestId('action-roll').click();
@@ -224,7 +225,7 @@ test('online tips belong only to this human seat and acknowledgement sends no ac
     }),
   );
   await page.goto('http://127.0.0.1:8787/?speed=0');
-  await page.getByTestId('online-create').click();
+  await openTitleChoice(page, 'online-create');
   await page.getByTestId('online-name').fill('Alice');
   await page.getByTestId('online-create-submit').click();
   await expect(page.getByTestId('screen-lobby')).toBeVisible();

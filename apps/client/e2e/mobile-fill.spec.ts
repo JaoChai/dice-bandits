@@ -3,6 +3,7 @@ import th from '../src/i18n/th.json' with { type: 'json' };
 import type Phaser from 'phaser';
 import { expect, test, type Page } from '@playwright/test';
 import {
+  openTitleChoice,
   assertInside,
   assertMinFont,
   assertNoEllipsis,
@@ -169,7 +170,7 @@ for (const viewport of viewports) {
         await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
         await observeBoardGame(page);
         await page.goto('/?seed=e2e-layout&speed=0');
-        await page.locator('[data-action="new"]').click();
+        await openTitleChoice(page, 'new');
         const names = Array.from({ length: 4 }, () => 'W'.repeat(18));
         for (const [seat, name] of names.entries()) {
           await page

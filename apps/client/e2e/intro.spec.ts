@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { assertInside, assertNoEllipsis } from './helpers';
+import { openTitleChoice, assertInside, assertNoEllipsis } from './helpers';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -71,11 +71,11 @@ for (const lang of ['en', 'th'] as const) {
     await page.reload();
     await expect(page.getByTestId('screen-title')).toBeVisible();
     await expect(page.getByTestId('intro-comic')).toHaveCount(0);
-    await page.getByTestId('title-story').click();
+    await openTitleChoice(page, 'title-story');
     await expect(page.getByTestId('intro-caption')).toHaveText(captions[lang][0]!);
     await page.getByTestId('intro-skip').click();
     await expect(page.getByTestId('practice-dialog')).toHaveCount(0);
-    await page.getByTestId('title-story').click();
+    await openTitleChoice(page, 'title-story');
     for (let panel = 0; panel < 3; panel++) await page.getByTestId('intro-next').click();
     await page.getByTestId('intro-done').click();
     await expect(page.getByTestId('practice-dialog')).toHaveCount(0);
@@ -103,7 +103,7 @@ test('skip persists across reload and keyboard focus is trapped and restored', a
   await page.reload();
   await expect(page.getByTestId('screen-title')).toBeVisible();
   await expect(dialog).toHaveCount(0);
-  await page.getByTestId('title-story').click();
+  await openTitleChoice(page, 'title-story');
   await page.keyboard.press('ArrowRight');
   await expect(page.getByTestId('intro-caption')).toHaveText(captions.en[1]!);
   await page.keyboard.press('ArrowLeft');

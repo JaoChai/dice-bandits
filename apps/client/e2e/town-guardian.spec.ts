@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createGame, step } from '@dice-bandits/engine';
 import type Phaser from 'phaser';
-import { observeBoardGame, waitForBattleArt } from './helpers';
+import { openTitleChoice, observeBoardGame, waitForBattleArt } from './helpers';
 
 const state = createGame({
   seed: 'town-guardian-art',
@@ -35,7 +35,7 @@ for (const viewport of [
       localStorage.setItem('lang', 'th');
     }, battle);
     await page.goto('/?speed=0');
-    await page.locator('[data-action="continue"]').click();
+    await openTitleChoice(page, 'continue');
     await waitForBattleArt(page);
     await expect(page.locator('.battle-hp-card.right')).toBeVisible();
     const rendered = await page.evaluate(async () => {

@@ -211,7 +211,7 @@ describe('cartoon re-skin', () => {
   it('title and setup screens use the cartoon card', () => {
     mount();
     showTitle();
-    expect(document.querySelector('.screen.title-screen.card')).not.toBeNull();
+    expect(document.querySelector('.title-screen .title-sheet-card')).not.toBeNull();
     showSetup(vi.fn());
     expect(document.querySelector('.screen.setup-screen.card')).not.toBeNull();
   });
@@ -235,7 +235,11 @@ describe('cartoon re-skin', () => {
 
   it('body is cream (theme.css wins, no dark radial gradient in styles.css)', () => {
     const stylesCss = readFileSync('src/ui/styles.css', 'utf8');
-    expect(stylesCss).not.toContain('radial-gradient');
+    // Title A explicitly approves a radial scrim on the title artwork only.
+    const body = /body\s*\{[^}]*\}/.exec(stylesCss);
+    expect(body).not.toBeNull();
+    expect(body![0]).not.toContain('radial-gradient');
+    expect(stylesCss).toMatch(/\.title-scrim\s*\{[^}]*radial-gradient/);
     const themeCss = readFileSync('src/ui/theme.css', 'utf8');
     expect(themeCss).toContain('body');
   });

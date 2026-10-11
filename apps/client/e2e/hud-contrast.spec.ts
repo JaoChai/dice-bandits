@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { startBattleJourney } from './helpers';
+import { openTitleChoice, startBattleJourney } from './helpers';
 
 // Removing the label's opaque surface must fail on the blue command cards.
 for (const lang of ['th', 'en']) {
@@ -60,7 +60,7 @@ for (const lang of ['th', 'en'] as const) {
   }, testInfo) => {
     await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
     await page.goto('/?seed=e2e-layout&speed=0');
-    await page.locator('[data-action="new"]').click();
+    await openTitleChoice(page, 'new');
     const button = page.locator('#setup-form .primary');
     await expect(button).toBeVisible();
     const contrast = await button.evaluate((element) => {
@@ -88,7 +88,7 @@ for (const lang of ['th', 'en'] as const) {
 
 test('board, menu and world-rule controls have readable text contrast', async ({ page }) => {
   await page.goto('/?seed=e2e-layout&speed=0');
-  await page.locator('[data-action="new"]').click();
+  await openTitleChoice(page, 'new');
   await page.locator('#setup-form button[type="submit"]').click();
   await expect(page.locator('[data-testid="screen-board"]')).toBeVisible();
 

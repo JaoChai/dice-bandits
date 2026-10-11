@@ -1,5 +1,6 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import {
+  openTitleChoice,
   assertInside,
   observeBoardGame,
   playOneStep,
@@ -49,7 +50,7 @@ for (const lang of ['th', 'en'] as const) {
       await page.goto('/?seed=m5ab-1&speed=0');
       await page.evaluate(() => document.fonts.ready);
       await page.screenshot({ path: info.outputPath(`${prefix}-title.png`) });
-      await page.locator('[data-action="new"]').click();
+      await openTitleChoice(page, 'new');
       await page.screenshot({ path: info.outputPath(`${prefix}-setup.png`) });
       if (viewport.width < 1000) await audit(page, `${prefix}-setup`, info);
       for (let seat = 1; seat < 4; seat++) {

@@ -1,7 +1,13 @@
 import { createGame, data, legalActions, step, type GameState } from '@dice-bandits/engine';
 import { expect, test, type Page } from '@playwright/test';
 import type Phaser from 'phaser';
-import { assertInside, assertMinFont, assertNoEllipsis, observeBoardGame } from './helpers';
+import {
+  openTitleChoice,
+  assertInside,
+  assertMinFont,
+  assertNoEllipsis,
+  observeBoardGame,
+} from './helpers';
 
 type ProbeWindow = Window & {
   __db?: { getState: () => GameState };
@@ -45,7 +51,7 @@ async function start(page: Page, state: GameState, lang: 'th' | 'en', speed = 0)
     { state, lang },
   );
   await page.goto(`/?speed=${speed}`);
-  await page.locator('[data-action="continue"]').click();
+  await openTitleChoice(page, 'continue');
   await page.waitForFunction(() => window.__db?.art.boardReady);
   await page.evaluate(() => document.fonts.ready);
 }
@@ -365,7 +371,7 @@ for (const viewport of [
       await page.screenshot({ path: info.outputPath('error-text-only.png') });
       await page.unroute('**/art/tutor/dicey.webp');
       await page.reload();
-      await page.locator('[data-action="continue"]').click();
+      await openTitleChoice(page, 'continue');
       await expect(page.locator('.dicey-portrait')).toBeVisible();
       await page.screenshot({ path: info.outputPath('A-start-tip.png') });
       await page.getByTestId('action-roll').click();

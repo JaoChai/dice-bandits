@@ -1,6 +1,12 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { legalActions, step as engineStep } from '@dice-bandits/engine';
-import { assertInside, assertNoEllipsis, playOneStep, startJourney } from './helpers';
+import {
+  openTitleChoice,
+  assertInside,
+  assertNoEllipsis,
+  playOneStep,
+  startJourney,
+} from './helpers';
 
 const storageKey = 'dice-bandits:tips';
 const onlineOrigin = 'http://127.0.0.1:8787';
@@ -93,7 +99,7 @@ for (const lang of ['en', 'th'] as const) {
       test.setTimeout(120_000);
       await enableTips(page, lang);
       await page.goto('/?seed=qa-shop-1&speed=0');
-      await page.locator('[data-action="new"]').click();
+      await openTitleChoice(page, 'new');
       for (let seat = 1; seat < 4; seat += 1)
         await page
           .locator(`[data-seat="${seat}"] select[data-field="control"]`)
@@ -257,7 +263,7 @@ for (const lang of ['en', 'th'] as const) {
     await page.getByTestId('dicey-tip-ok').click();
     expect((await settings(page)).seen).toContain('roll');
     await page.reload();
-    await page.locator('[data-action="continue"]').click();
+    await openTitleChoice(page, 'continue');
     await expect(page.getByTestId('screen-board')).toBeVisible();
     await expect(page.getByTestId('dicey-tip')).toHaveCount(0);
     await page.getByTestId('menu-button').click();
@@ -274,7 +280,7 @@ for (const lang of ['en', 'th'] as const) {
     await expect(page.getByTestId('dicey-tip')).toHaveCount(0);
     expect(await state(page)).not.toBe(resumed);
     await page.reload();
-    await page.locator('[data-action="continue"]').click();
+    await openTitleChoice(page, 'continue');
     await page.getByTestId('menu-button').click();
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByTestId('dicey-tip')).toHaveCount(0);
@@ -374,7 +380,7 @@ for (const lang of ['en', 'th'] as const) {
     };
     watchErrors(page);
     await page.goto(`${onlineOrigin}/?speed=0`);
-    await page.getByTestId('online-create').click();
+    await openTitleChoice(page, 'online-create');
     await page.getByTestId('online-name').fill('Alice');
     await page.getByTestId('online-create-submit').click();
     await expect(page.getByTestId('screen-lobby')).toBeVisible();

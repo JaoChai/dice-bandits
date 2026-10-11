@@ -8,7 +8,7 @@ import {
 } from '@dice-bandits/engine';
 import type Phaser from 'phaser';
 import type { BattleBeat } from '../src/scenes/battle/presentation';
-import { observeBoardGame, startBattleJourney } from './helpers';
+import { openTitleChoice, observeBoardGame, startBattleJourney } from './helpers';
 
 type Sample = {
   kind: string;
@@ -474,7 +474,7 @@ test('two real online browsers commit battle views and act before detached beats
     const pages = [host, guest];
     for (const page of pages) await observeBoardGame(page);
     await host.goto('http://127.0.0.1:8787/?speed=1');
-    await host.getByTestId('online-create').click();
+    await openTitleChoice(host, 'online-create');
     await host.getByTestId('online-name').fill('Alice');
     await host.getByTestId('online-create-submit').click();
     await expect(host.getByTestId('screen-lobby')).toBeVisible();

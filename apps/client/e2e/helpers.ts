@@ -235,9 +235,24 @@ export async function playUntil(
   throw new Error('Game did not reach requested phase within 300 actions');
 }
 
+/** Navigate the redesigned title, preserving every existing action assertion. */
+export async function openTitleChoice(page: Page, action: string, click = true): Promise<void> {
+  const chooser = page.getByTestId('title-chooser');
+  if (!(await chooser.isVisible())) await page.getByTestId('title-play').click();
+  if (action === 'online-create' || action === 'online-join') {
+    const button = page.getByTestId(action);
+    if (!(await button.isVisible())) await page.getByTestId('title-friends').click();
+  }
+  if (click) {
+    if (action === 'new' || action === 'continue')
+      await page.locator(`[data-action="${action}"]`).click();
+    else await page.getByTestId(action).click();
+  }
+}
+
 export async function startTestGame(page: Page, speed = 0): Promise<void> {
   await page.goto(`/?seed=e2e-1&speed=${speed}`);
-  await page.locator('[data-action="new"]').click();
+  await openTitleChoice(page, 'new');
   for (let seat = 1; seat < 4; seat += 1) {
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
   }
@@ -307,7 +322,7 @@ export async function playSteps(page: Page, count: number): Promise<void> {
  */
 export async function startJourney(page: Page, speed = 0): Promise<void> {
   await page.goto(`/?seed=m5ab-1&speed=${speed}`);
-  await page.locator('[data-action="new"]').click();
+  await openTitleChoice(page, 'new');
   for (let seat = 1; seat < 4; seat += 1) {
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
   }

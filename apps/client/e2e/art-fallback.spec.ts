@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { observeBoardGame, renderedBoardGeometry, startJourney } from './helpers';
+import { openTitleChoice, observeBoardGame, renderedBoardGeometry, startJourney } from './helpers';
 
 /**
  * Lead-review guard: every authored cartoon asset must load in the built
@@ -19,7 +19,7 @@ test('authored cartoon assets load without any art fallback warning', async ({ p
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto('/?seed=m5ab-1&speed=0');
-  await page.locator('[data-action="new"]').click();
+  await openTitleChoice(page, 'new');
   for (let seat = 1; seat < 4; seat += 1) {
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
   }

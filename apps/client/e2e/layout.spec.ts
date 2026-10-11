@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import {
+  openTitleChoice,
   assertInside,
   assertMinFont,
   assertNoEllipsis,
@@ -240,7 +241,7 @@ for (const name of ['Sir Bram', 'Sir Bram the Great']) {
   }) => {
     await mkdir(screenshotDir, { recursive: true });
     await page.goto('/?seed=e2e-layout&speed=0');
-    await page.locator('[data-action="new"]').click();
+    await openTitleChoice(page, 'new');
     await page.locator('[data-seat="0"] input[data-field="name"]').fill(name);
     for (let seat = 1; seat < 4; seat += 1) {
       await page
@@ -342,7 +343,7 @@ for (const name of ['Sir Bram', 'Sir Bram the Great']) {
 
 test('world-rule chip opens the tap-to-explain popup and Escape closes it', async ({ page }) => {
   await page.goto('/?seed=e2e-layout&speed=0');
-  await page.locator('[data-action="new"]').click();
+  await openTitleChoice(page, 'new');
   for (let seat = 1; seat < 4; seat += 1) {
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('human');
   }

@@ -10,6 +10,7 @@ import type { PracticeSession } from '../tutor/practice';
 import type { TutorialScript } from '../tutor/script';
 import { getLang, onLangChange, setLang, t } from '../i18n';
 import atlas from '../../public/art/tutor/dicey.json';
+import { markPracticeComplete } from './titleProgress';
 
 type Topic = TutorialScript['lessons'][number]['topic'];
 const topics: Topic[] = ['roll', 'move', 'fork', 'chest', 'battle', 'shop', 'town', 'steal'];
@@ -327,6 +328,7 @@ export function mountPracticeUi(
       return;
     }
     if (session.completed) {
+      markPracticeComplete();
       coach.hidden = true;
       show('complete');
       return;
