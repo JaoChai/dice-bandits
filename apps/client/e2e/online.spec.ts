@@ -149,12 +149,13 @@ test('creates, plays, disconnects, reclaims, claims, and rejects an unknown onli
       languageCode,
     );
     await joinRoom(languageTab, languageCode, 'Bob');
+    await languageHost.getByTestId('online-language').click();
     await languageHost.locator('[data-lang="en"]').click();
-    await expect(languageTab.getByRole('heading', { level: 1 })).toHaveText('Room lobby');
+    await expect(languageTab.getByRole('heading', { level: 1 })).toHaveText('Waiting room');
     await languageHost.locator('[data-lang="th"]').click();
-    await expect(languageTab.getByRole('heading', { level: 1 })).toHaveText('ห้องรอผู้เล่น');
+    await expect(languageTab.getByRole('heading', { level: 1 })).toHaveText('ห้องรอเพื่อน');
     await languageHost.locator('[data-lang="en"]').click();
-    await expect(languageTab.getByRole('heading', { level: 1 })).toHaveText('Room lobby');
+    await expect(languageTab.getByRole('heading', { level: 1 })).toHaveText('Waiting room');
   } finally {
     await languageContext.close();
   }

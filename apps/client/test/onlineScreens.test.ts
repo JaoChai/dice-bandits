@@ -60,6 +60,79 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('friends A presentation', () => {
+  it.each(['create', 'join'] as const)('shows labelled fields and one CTA on %s', (initialMode) => {
+    showOnlineScreens({ initialMode, socketFactory, onStartGame: vi.fn() });
+    const form = document.querySelector('[data-testid="online-form"]')!;
+    expect(form.querySelectorAll('.friends-cta')).toHaveLength(1);
+    expect(form.querySelectorAll('input')).toHaveLength(initialMode === 'join' ? 2 : 1);
+    for (const input of form.querySelectorAll('input')) {
+      expect(input.closest('label')?.firstElementChild?.tagName).toBe('SPAN');
+      expect(input.closest('label')?.lastElementChild).toBe(input);
+    }
+    expect(document.querySelector('.friends-note')?.textContent).toBeTruthy();
+    expect(document.querySelector('[data-testid="online-error"]')).not.toBeNull();
+    expect(
+      document.querySelector('[data-testid="online-back-title"]')?.getAttribute('aria-label'),
+    ).toBe(t('setup.back'));
+    expect(document.querySelector('[data-testid="audio-settings"]')).not.toBeNull();
+  });
+
+  it('restores language focus and typed fields after a language re-render', () => {
+    showOnlineScreens({ initialMode: 'join', socketFactory, onStartGame: vi.fn() });
+    const name = document.querySelector<HTMLInputElement>('[data-testid="online-name"]')!;
+    name.value = 'Lin';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    const code = document.querySelector<HTMLInputElement>('[data-testid="online-code"]')!;
+    code.value = 'ABCDE';
+    code.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector<HTMLButtonElement>('[data-testid="online-language"]')!.click();
+    const language = document.querySelector<HTMLButtonElement>('[data-lang="th"]')!;
+    language.focus();
+    language.click();
+    expect(document.activeElement).toBe(document.querySelector('[data-lang="th"]'));
+    expect(document.querySelector<HTMLInputElement>('[data-testid="online-name"]')!.value).toBe(
+      'Lin',
+    );
+    expect(document.querySelector<HTMLInputElement>('[data-testid="online-code"]')!.value).toBe(
+      'ABCDE',
+    );
+  });
+
+  it('renders four real slots with matching portraits, host crown and own-seat highlight', () => {
+    saveSession({ code: 'ABCDE', seat: 2, token: 'token', name: 'Lin' });
+    showOnlineScreens({ initialCode: 'ABCDE', socketFactory, onStartGame: vi.fn() });
+    socket.receive({
+      type: 'lobby',
+      code: 'ABCDE',
+      host: 0,
+      seats: [seat(), seat({ seat: 2, name: 'Lin', classId: 'mage' })],
+    });
+    expect(document.querySelectorAll('.friends-seat')).toHaveLength(4);
+    expect(document.querySelectorAll('.friends-seat.empty')).toHaveLength(2);
+    const host = document.querySelector('[data-testid="lobby-seat-0"]')!;
+    const own = document.querySelector('[data-testid="lobby-seat-2"]')!;
+    expect(host.querySelector('.host-badge svg')).not.toBeNull();
+    expect(own.classList.contains('me')).toBe(true);
+    expect(own.textContent).toContain('(You)');
+    expect(own.querySelector('.host-badge')).toBeNull();
+    for (const [slot, classId] of [
+      [0, 'knight'],
+      [2, 'mage'],
+    ] as const) {
+      const portrait = document.querySelector(`[data-testid="lobby-seat-${slot}"] .seat-portrait`)!;
+      expect(portrait.classList.contains(`portrait-${classId}`)).toBe(true);
+      expect(portrait.getAttribute('style')).toContain(`hero-${classId}.webp`);
+    }
+    expect(document.querySelector('[data-testid="lobby-seat-1"]')?.textContent).toContain(
+      'Waiting…',
+    );
+    expect(document.querySelectorAll('[data-testid^="lobby-class-"]')).toHaveLength(4);
+    expect(document.querySelector('[data-testid="online-copy-link"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="lobby-start"]')).toBeNull();
+  });
+});
+
 describe('online screens', () => {
   it('shows create, join and the latest saved room on the title screen', () => {
     saveSession({ code: 'ABCDE', seat: 0, token: 'token', name: 'Ada' });

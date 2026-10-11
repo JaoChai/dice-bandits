@@ -3,6 +3,11 @@ import type { RoomSession } from './session';
 import { clearSession, loadSession, saveSession } from './session';
 import { RoomSocket, type RoomSocketOptions, type RoomSocketHandlers } from './socket';
 import { getLang, onLangChange, setLang, t } from '../i18n';
+import { MAX_SEATS } from '@dice-bandits/room';
+import { portraitStyle } from '../ui/artFrames';
+import { titleIcon } from '../ui/titleIcons';
+import { openSoundDialog } from '../ui/screens';
+import './friends.css';
 
 export interface OnlineSocket {
   send(message: ClientMsg): void;
@@ -44,10 +49,50 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
   let name = '';
   let seat = 0;
   let unsubscribeLanguage = (): void => undefined;
+  let languageOpen = false;
+  const page = (
+    testId: string,
+    title: string,
+    icon: FriendsIcon,
+    body: string,
+    wide = false,
+  ): string => `
+    <div class="friends-page"><div class="friends-blur" aria-hidden="true"></div>
+      <div class="friends-top"><button type="button" class="title-icon-button" data-testid="online-language" aria-label="${t('title.language')}" aria-expanded="${languageOpen}" aria-controls="friends-languages">${getLang() === 'th' ? 'EN' : 'TH'}</button><div id="friends-languages" class="title-languages" ${languageOpen ? '' : 'hidden'}>${languageToggle()}</div><button type="button" class="title-icon-button" data-testid="audio-settings" aria-label="${t('audio.settings')}">${titleIcon('gear')}</button></div>
+      <div class="friends-wrap"><main class="screen online-screen card friends-card${wide ? ' wide' : ''}" data-testid="${testId}"><header class="friends-head"><button type="button" class="title-icon-button" data-testid="online-back-title" aria-label="${t('setup.back')}">${titleIcon('back')}</button><span class="friends-badge" aria-hidden="true">${friendsIcon(icon)}</span><h1>${title}</h1></header>${body}</main></div>
+    </div>`;
   const bindCurrentLanguage = (element: HTMLElement, rerender: () => void): void => {
     unsubscribeLanguage();
-    unsubscribeLanguage = onLangChange(rerender);
-    bindLanguage(element, rerender);
+    unsubscribeLanguage = onLangChange(() => {
+      const active = document.activeElement as HTMLElement | null;
+      const selector = active?.dataset.lang
+        ? `[data-lang="${active.dataset.lang}"]`
+        : active?.dataset.testid
+          ? `[data-testid="${active.dataset.testid}"]`
+          : null;
+      rerender();
+      if (selector) element.querySelector<HTMLElement>(selector)?.focus();
+    });
+    bindLanguage(element);
+    const languageButton = element.querySelector<HTMLButtonElement>(
+      '[data-testid="online-language"]',
+    );
+    languageButton?.addEventListener('click', () => {
+      languageOpen = !languageOpen;
+      element.querySelector<HTMLElement>('#friends-languages')!.hidden = !languageOpen;
+      languageButton.setAttribute('aria-expanded', String(languageOpen));
+      if (languageOpen) element.querySelector<HTMLElement>('[data-lang]')?.focus();
+    });
+    element.querySelector('.friends-page')?.addEventListener('keydown', (event) => {
+      if ((event as KeyboardEvent).key !== 'Escape' || !languageOpen) return;
+      event.stopPropagation();
+      languageOpen = false;
+      element.querySelector<HTMLElement>('#friends-languages')!.hidden = true;
+      languageButton?.setAttribute('aria-expanded', 'false');
+      languageButton?.focus();
+    });
+    const settings = element.querySelector<HTMLButtonElement>('[data-testid="audio-settings"]');
+    settings?.addEventListener('click', () => openSoundDialog(settings));
   };
   const showTitle = (): void => {
     unsubscribeLanguage();
@@ -56,7 +101,12 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
     root.dispatchEvent(new CustomEvent('dice-bandits:home'));
   };
   const errorView = (): void => {
-    root.innerHTML = `<main class="screen online-screen card" data-testid="screen-online-error"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><p class="error" role="alert" data-testid="online-error">${escapeHtml(t(errorKey || 'online.error.server'))}</p></main>`;
+    root.innerHTML = page(
+      'screen-online-error',
+      t('online.title'),
+      'friends',
+      `<p class="error" role="alert" data-testid="online-error">${escapeHtml(t(errorKey || 'online.error.server'))}</p>`,
+    );
     bindCurrentLanguage(root, errorView);
     root.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', showTitle);
   };
@@ -64,7 +114,12 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
     const candidates = (claimSeats ?? []).filter(
       (item) => item.kind === 'human' && item.controller === 'botTakeover',
     );
-    root.innerHTML = `<main class="screen online-screen card" data-testid="screen-claim"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><h1>${t('online.claim.title')}</h1><p>${t('online.claim.instructions')}</p><div class="online-list">${candidates.map((item) => `<button class="secondary" data-testid="claim-seat-${item.seat}" data-seat="${item.seat}">${escapeHtml(item.name)} · ${t(`class.${item.classId}`)}</button>`).join('')}</div>${candidates.length ? '' : `<p data-testid="online-claim-none">${t('online.claim.none')}</p>`}</main>`;
+    root.innerHTML = page(
+      'screen-claim',
+      t('online.claim.title'),
+      'friends',
+      `<p>${t('online.claim.instructions')}</p><div class="online-list">${candidates.map((item) => `<button class="secondary" data-testid="claim-seat-${item.seat}" data-seat="${item.seat}">${escapeHtml(item.name)} · ${t(`class.${item.classId}`)}</button>`).join('')}</div>${candidates.length ? '' : `<p data-testid="online-claim-none">${t('online.claim.none')}</p>`}`,
+    );
     bindCurrentLanguage(root, renderClaim);
     root.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', showTitle);
     root.querySelectorAll<HTMLButtonElement>('[data-seat]').forEach((button) =>
@@ -81,7 +136,23 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
       ? document.activeElement.getAttribute('data-testid')
       : null;
     const own = lobby.seats.find((item) => item.seat === session!.seat);
-    root.innerHTML = `<main class="screen online-screen card" data-testid="screen-lobby"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><h1>${t('online.lobby.title')}</h1><div class="room-code"><strong>${escapeHtml(lobby.code)}</strong>&nbsp;&nbsp;<button class="secondary" data-testid="online-copy-link">${t('online.lobby.copyLink')}</button></div><ul class="online-list">${lobby.seats.map((item) => `<li data-testid="lobby-seat-${item.seat}"><span class="seat-portrait portrait-${item.classId}" role="img" aria-label="${t(`class.${item.classId}`)}"></span><strong>${escapeHtml(item.name)}</strong><span>${t(`class.${item.classId}`)}</span>${item.seat === lobby!.host ? `<span class="host-badge">${t('online.lobby.host')}</span>` : ''}</li>`).join('')}</ul><div class="class-picker" aria-label="${t('online.lobby.chooseClass')}">${classes.map((classId) => `<button type="button" class="secondary ${own?.classId === classId ? 'selected' : ''}" data-testid="lobby-class-${classId}" aria-pressed="${own?.classId === classId}">${t(`class.${classId}`)}</button>`).join('')}</div>${lobby.host === session.seat ? `<button class="primary" data-testid="lobby-start">${t('online.lobby.start')}</button>` : ''}</main>`;
+    const seats = Array.from({ length: MAX_SEATS }, (_, slot) => {
+      const item = lobby!.seats.find((candidate) => candidate.seat === slot);
+      if (!item)
+        return `<li class="friends-seat empty" data-testid="lobby-seat-${slot}">${t('friends.wait')}</li>`;
+      const isOwn = item.seat === session!.seat;
+      return `<li class="friends-seat${isOwn ? ' me' : ''}" data-testid="lobby-seat-${item.seat}">${item.seat === lobby!.host ? `<span class="host-badge">${friendsIcon('crown')}${t('friends.host')}</span>` : ''}<span class="seat-portrait portrait-${item.classId}" style="${portraitStyle(item.classId)}" role="img" aria-label="${t(`class.${item.classId}`)}"></span><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}${isOwn ? ` <span class="friends-you">(${t('friends.you')})</span>` : ''}</strong><span class="friends-class-name">${t(`class.${item.classId}`)}</span></li>`;
+    }).join('');
+    root.innerHTML = page(
+      'screen-lobby',
+      t('friends.lobby'),
+      'friends',
+      `
+      <div class="room-code friends-codebox"><div><div class="friends-code-label">${t('friends.roomCode')}</div><strong>${escapeHtml(lobby.code)}</strong></div><button type="button" class="friends-copy" data-testid="online-copy-link">${friendsIcon('copy')}${t('friends.copy')}</button></div>
+      <ul class="friends-seats">${seats}</ul>
+      <div class="friends-lobby-foot"><div class="class-picker friends-classes" role="group" aria-label="${t('online.lobby.chooseClass')}"><span>${t('friends.pick')}</span>${classes.map((classId) => `<button type="button" class="friends-class ${own?.classId === classId ? 'selected' : ''}" data-testid="lobby-class-${classId}" aria-pressed="${own?.classId === classId}">${t(`class.${classId}`)}</button>`).join('')}</div>${lobby.host === session.seat ? `<button type="button" class="primary friends-cta" data-testid="lobby-start">${titleIcon('play')}${t('online.lobby.start')}</button>` : ''}</div>`,
+      true,
+    );
     bindCurrentLanguage(root, renderLobby);
     root.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', showTitle);
     root
@@ -187,15 +258,30 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
   };
   function renderForm(): void {
     if (mode === 'claim') {
-      mount.innerHTML = `<main class="screen online-screen card" data-testid="screen-claim"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><h1>${t('online.claim.title')}</h1><p>${t('online.claim.connecting')}</p></main>`;
+      mount.innerHTML = page(
+        'screen-claim',
+        t('online.claim.title'),
+        'friends',
+        `<p>${t('online.claim.connecting')}</p>`,
+      );
       bindCurrentLanguage(mount, render);
       mount
         .querySelector('[data-testid="online-back-title"]')
         ?.addEventListener('click', showTitle);
       return;
     }
-    mount.innerHTML = `<main class="screen online-screen card" data-testid="screen-online"><header><button class="text-button" data-testid="online-back-title">← ${t('setup.back')}</button>${languageToggle()}</header><h1>${t('online.title')}</h1><form data-testid="online-form"><label>${t('online.name')}<input data-testid="online-name" name="name" maxlength="16" autocomplete="name" required value="${escapeHtml(name)}"></label>${mode === 'join' ? `<label>${t('online.code')}<input data-testid="online-code" name="code" maxlength="5" autocomplete="off" required value="${escapeHtml(code)}"></label>` : ''}<p class="error" role="alert" data-testid="online-error">${errorKey ? escapeHtml(t(errorKey)) : ''}</p><button class="primary" data-testid="${mode === 'join' ? 'online-join-submit' : 'online-create-submit'}" type="submit">${mode === 'join' ? t('online.join') : t('online.create')}</button></form></main>`;
+    const joining = mode === 'join';
+    mount.innerHTML = page(
+      'screen-online',
+      t(joining ? 'friends.join' : 'friends.create'),
+      joining ? 'key' : 'plus',
+      `<form data-testid="online-form"><div class="friends-formrow"><label class="friends-field"><span>${t('friends.name')}</span><input data-testid="online-name" name="name" maxlength="16" autocomplete="name" required value="${escapeHtml(name)}"></label>${joining ? `<label class="friends-field"><span>${t('friends.code')}</span><input class="friends-code-input" data-testid="online-code" name="code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" required value="${escapeHtml(code)}"></label>` : ''}</div><p class="error" role="alert" data-testid="online-error">${errorKey ? escapeHtml(t(errorKey)) : ''}</p><button class="primary friends-cta${joining ? ' blue' : ''}" data-testid="${joining ? 'online-join-submit' : 'online-create-submit'}" type="submit">${titleIcon('play')}${t(joining ? 'friends.goJoin' : 'friends.go')}</button><div class="friends-note">${t(joining ? 'friends.noteJ' : 'friends.noteC')}</div></form>`,
+    );
     bindCurrentLanguage(mount, render);
+    const nameInput = mount.querySelector<HTMLInputElement>('[data-testid="online-name"]');
+    nameInput?.addEventListener('input', () => {
+      name = nameInput.value;
+    });
     mount.querySelector('[data-testid="online-back-title"]')?.addEventListener('click', showTitle);
     const codeInput = mount.querySelector<HTMLInputElement>('[data-testid="online-code"]');
     codeInput?.addEventListener('input', () => {
@@ -272,13 +358,27 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
 function languageToggle(): string {
   return `<div class="language-toggle" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></div>`;
 }
-function bindLanguage(root: HTMLElement, rerender: () => void): void {
+function bindLanguage(root: HTMLElement): void {
   root.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach((button) =>
     button.addEventListener('click', () => {
       setLang(button.dataset.lang as 'th' | 'en');
-      rerender();
     }),
   );
+}
+
+// Additional decorative SVGs from the approved friends mock; title icons are reused.
+const friendsIcons = {
+  plus: '<svg viewBox="0 0 32 32" width="34" height="34"><circle cx="16" cy="16" r="12" fill="#fff" stroke="#5c3317" stroke-width="2.5"/><path d="M16 10v12M10 16h12" stroke="#5c3317" stroke-width="3" stroke-linecap="round"/></svg>',
+  key: '<svg viewBox="0 0 32 32" width="34" height="34"><circle cx="11" cy="16" r="6" fill="#fff" stroke="#5c3317" stroke-width="2.5"/><path d="M17 16h11M24 16v5M28 16v4" stroke="#5c3317" stroke-width="2.8" stroke-linecap="round"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
+  crown:
+    '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 18h18l-2-10-5 4-2-6-2 6-5-4z" fill="#ffc93c" stroke="#5c3317" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+};
+type FriendsIcon = keyof typeof friendsIcons | 'friends';
+function friendsIcon(icon: FriendsIcon): string {
+  return icon === 'friends'
+    ? titleIcon('friends')
+    : friendsIcons[icon].replace('<svg ', '<svg aria-hidden="true" focusable="false" ');
 }
 function escapeHtml(value: string): string {
   return value.replace(
