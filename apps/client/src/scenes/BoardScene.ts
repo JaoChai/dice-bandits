@@ -556,22 +556,38 @@ export default class BoardScene extends Phaser.Scene {
         .setOrigin(0.5, 1)
         .setDepth(player.seat === state.turnSeat ? 45 : 44)
         .setName(`hero-name-${player.seat}`);
-      // Keep unusually long names intact instead of ellipsizing them. Lift a
-      // colliding tag by one row until it clears earlier tags on the board.
-      for (const previousTag of this.nameTags.values()) {
-        const other = previousTag.getBounds();
-        let bounds = tag.getBounds();
-        while (
-          bounds.left < other.right &&
-          bounds.right > other.left &&
-          bounds.top < other.bottom &&
-          bounds.bottom > other.top
-        ) {
-          lift += 24;
-          tag.setPosition(x, y - token.displayHeight - 4 - lift);
-          bounds = tag.getBounds();
-        }
+      // Pack full labels using their rendered stroke/padding dimensions, not
+      // fixed-height rows. Prefer the alternating height, then a free row above
+      // or below it, bounded by the map top and this hero's head.
+      const initial = tag.getBounds();
+      const height = initial.bottom - initial.top;
+      const halfWidth = (initial.right - initial.left) / 2;
+      const tagX = Math.max(halfWidth, Math.min(WORLD.width - halfWidth, x));
+      const lowest = Math.min(WORLD.height, token.getBounds().top - 4);
+      const previous = [...this.nameTags.values()].map((other) => other.getBounds());
+      const candidates = [
+        initial.bottom,
+        ...previous.flatMap((other) => [other.top - 4, other.bottom + height + 4]),
+        lowest,
+        height,
+      ]
+        .map((bottom) => Math.max(height, Math.min(lowest, bottom)))
+        .sort((a, b) => Math.abs(a - initial.bottom) - Math.abs(b - initial.bottom));
+      for (const bottom of candidates) {
+        tag.setPosition(tagX, bottom);
+        const bounds = tag.getBounds();
+        if (
+          previous.every(
+            (other) =>
+              bounds.left >= other.right ||
+              bounds.right <= other.left ||
+              bounds.top >= other.bottom ||
+              bounds.bottom <= other.top,
+          )
+        )
+          break;
       }
+      lift = y - token.displayHeight - 4 - tag.y;
       this.nameTagLifts.set(player.seat, lift);
       this.nameTags.set(player.seat, tag);
     }

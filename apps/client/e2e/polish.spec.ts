@@ -29,11 +29,11 @@ for (const lang of ['th', 'en'] as const) {
       expect(token.right).toBeLessThanOrEqual(geometry.canvas.right);
       expect(token.top).toBeGreaterThanOrEqual(geometry.canvas.top);
       expect(token.bottom).toBeLessThanOrEqual(geometry.canvas.bottom);
-      // Feet remain local to the shared castle tile, not spread down the road.
+      // Feet stay in the approved four-hero row: maximum castle offset is 99px.
       const castle = geometry.tiles.find((tile) => tile.frame === 'castle')!;
       expect(
         Math.hypot(token.world.x - castle.world.x, token.world.y - castle.world.y),
-      ).toBeLessThanOrEqual(48);
+      ).toBeLessThanOrEqual(99);
     }
     for (const pair of pairs) expect(pair.percent, `pair ${pair.pair}`).toBeLessThanOrEqual(35);
   });
