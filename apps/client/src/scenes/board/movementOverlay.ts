@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import type { GameState } from '@dice-bandits/engine';
 import { motionScale, reducedMotion } from '../../art/motion';
-import { createHeroToken } from './tokens';
+import { createHeroToken, createHopPose } from './tokens';
 import type { MovementPlan } from './movementPlan';
 
 /** Detached cosmetic objects only. Authoritative tokens remain visible and
@@ -76,10 +76,9 @@ export function createMovementOverlay(scene: Phaser.Scene): {
             .setName(`online-movement-${segment.seat}`);
           ghosts.set(segment.seat, ghost);
         }
-        ghost.setFlipX(destination.x < ghost.x);
+        const pose = createHopPose(ghost, destination.x, segment.hopMs);
         const startX = ghost.x,
-          startY = ghost.y,
-          baseScaleY = ghost.scaleY;
+          startY = ghost.y;
         const hop = { progress: 0 };
         tween = scene.tweens.add({
           targets: hop,
@@ -91,13 +90,14 @@ export function createMovementOverlay(scene: Phaser.Scene): {
             const k = hop.progress;
             ghost.x = startX + (destination.x - startX) * k;
             ghost.y = startY + (destination.y - startY) * k - Math.sin(Math.PI * k) * 26;
-            ghost.scaleY = baseScaleY * (k >= 0.85 ? 0.88 + (0.12 * (k - 0.85)) / 0.15 : 1);
+            pose.update(k);
           },
           onComplete: () => {
             if (revision !== ownedRevision || generation !== nextGeneration) return;
             ghost.x = destination.x;
             ghost.y = destination.y;
-            ghost.scaleY = baseScaleY;
+            pose.update(1);
+            pose.reset();
             tween = undefined;
             advance(index + 1);
           },

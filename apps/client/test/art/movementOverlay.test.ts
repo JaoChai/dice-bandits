@@ -12,7 +12,8 @@ vi.mock('phaser', () => ({
   },
 }));
 
-vi.mock('../../src/scenes/board/tokens', () => ({
+vi.mock('../../src/scenes/board/tokens', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/scenes/board/tokens')>()),
   createHeroToken: (
     scene: { add: { image: (x: number, y: number) => unknown } },
     _class: string,
@@ -40,7 +41,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function setup() {
+function setup(facing = false) {
   vi.useFakeTimers();
   const objects: Array<{ x: number; y: number; destroy: ReturnType<typeof vi.fn> }> = [];
   const tweens: Array<{ x: number; y: number; duration: number }> = [];
@@ -48,12 +49,18 @@ function setup() {
     const object = {
       x,
       y,
+      scaleX: 1,
       scaleY: 1,
+      angle: 0,
+      flipX: facing,
       destroy: vi.fn(),
       setAlpha: vi.fn(),
       setDepth: vi.fn(),
       setName: vi.fn(),
-      setFlipX: vi.fn(),
+      setFlipX: vi.fn((flip: boolean) => {
+        object.flipX = flip;
+        return object;
+      }),
     };
     for (const method of [object.setAlpha, object.setDepth, object.setName, object.setFlipX])
       method.mockReturnValue(object);
@@ -134,6 +141,36 @@ describe('movement plan', () => {
 });
 
 describe('detached movement overlay', () => {
+  it('squeezes and flips once inside a 120ms direction-changing hop, leans and restores its pose', () => {
+    const plan = planMovement(state, events, 'online');
+    const source = state.board.spaces.find((s) => s.id === plan.segments[0]!.from)!;
+    const destination = state.board.spaces.find((s) => s.id === plan.segments[0]!.to)!;
+    const { overlay, scene, objects } = setup(destination.x > source.x);
+    overlay.play(plan, 1);
+    const ghost = objects[0] as unknown as {
+      scaleX: number;
+      scaleY: number;
+      flipX: boolean;
+      angle: number;
+      setFlipX: ReturnType<typeof vi.fn>;
+    };
+    const config = scene.tweens.add.mock.calls[0]![0];
+    expect(config.duration).toBe(120);
+    config.targets.progress = 0.25;
+    config.onUpdate();
+    expect(Math.abs(ghost.angle)).toBeCloseTo(12);
+    config.targets.progress = 0.5;
+    config.onUpdate();
+    expect(ghost.scaleX).toBeCloseTo(0.05);
+    expect(ghost.setFlipX).toHaveBeenCalledOnce();
+    config.targets.progress = 1;
+    config.onUpdate();
+    expect(ghost.scaleX).toBeCloseTo(1);
+    expect(ghost.scaleY).toBeCloseTo(1);
+    config.onComplete();
+    expect(ghost.angle).toBe(0);
+    overlay.destroy();
+  });
   it('arcs 26px above the route and plants the ghost exactly without extending its deadline', async () => {
     const { overlay, scene, objects } = setup();
     const plan = planMovement(state, events, 'online');
@@ -203,6 +240,9 @@ describe('detached movement overlay', () => {
         scale: { on: (name: string, fn: () => void) => handlers.set(name, fn), off: vi.fn() },
         tweens: { ...scene.tweens, killTweensOf: vi.fn() },
         tokenObjects: new Map(),
+        nameTags: new Map(),
+        nameTagLifts: new Map(),
+        localDust: new Map(),
         spacePositions: new Map(),
         mapImages: [],
         applyViewports: vi.fn(),
