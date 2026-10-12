@@ -176,6 +176,7 @@ test('real bot follow view tracks hops and reuses a readable overhead counter', 
         tokenObjects: Map<number, Phaser.GameObjects.Image>;
         walkCounter?: Phaser.GameObjects.Container;
         walkCountText?: Phaser.GameObjects.Text;
+        nameTags: Map<number, Phaser.GameObjects.Text>;
         playEvents(events: GameEvent[]): Promise<void>;
         toggleWholeMap(state: GameState, whole: boolean): void;
       };
@@ -195,7 +196,7 @@ test('real bot follow view tracks hops and reuses a readable overhead counter', 
           count: scene.walkCountText?.text ?? '',
           visible: scene.walkCounter?.visible ?? false,
           offsetX: (scene.walkCounter?.x ?? token.x) - token.x,
-          offsetY: (scene.walkCounter?.y ?? token.y) - (token.y - token.displayHeight - 8),
+          offsetY: (scene.walkCounter?.y ?? token.y) - (scene.nameTags.get(seat)!.y - 32),
         });
       game.events.on('postrender', record);
       const started = performance.now();

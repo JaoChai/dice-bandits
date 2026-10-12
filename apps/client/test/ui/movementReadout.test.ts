@@ -51,6 +51,14 @@ function counterObject() {
     x: 0,
     y: 0,
     visible: false,
+    scaleX: 1,
+    scaleY: 1,
+    setScale: vi.fn((scale: number) => {
+      object.scaleX = scale;
+      object.scaleY = scale;
+      return object;
+    }),
+    setStrokeStyle: vi.fn().mockReturnThis(),
     text: '',
     displayWidth: 20,
     height: 36,
@@ -109,6 +117,7 @@ function setup(previous: GameState) {
   };
   token.setPosition.mockImplementation((x: number, y: number) => Object.assign(token, { x, y }));
   const tweenConfigs: TweenConfig[] = [];
+  const tweenTimers = new Map<object, Set<number>>();
   const graphics: Array<{ destroy: ReturnType<typeof vi.fn> }> = [];
   const label = counterObject();
   const labelText = counterObject();
@@ -133,6 +142,9 @@ function setup(previous: GameState) {
     drawPaintedMap: vi.fn(),
     scale: { on: (name: string, cb: () => void) => resizeHandlers.set(name, cb) },
     tokenObjects: new Map([[previous.turnSeat, token]]),
+    nameTags: new Map(),
+    nameTagLifts: new Map(),
+    localDust: new Map(),
     spacePositions: new Map(previous.board.spaces.map(({ id, x, y }) => [id, { x, y }])),
     scene: { isActive: () => true },
     game: {
@@ -144,15 +156,28 @@ function setup(previous: GameState) {
     tweens: {
       add: vi.fn((config) => {
         tweenConfigs.push(config);
+        const owned = tweenTimers.get(config.targets) ?? new Set<number>();
+        tweenTimers.set(config.targets, owned);
         const timer = window.setTimeout(() => {
+          owned.delete(timer);
           if (config.targets === token) token.setPosition(config.x, config.y);
           config.onComplete?.();
         }, config.duration);
-        return { remove: () => window.clearTimeout(timer) };
+        owned.add(timer);
+        return {
+          remove: () => {
+            window.clearTimeout(timer);
+            owned.delete(timer);
+          },
+        };
       }),
-      killTweensOf: vi.fn(),
+      killTweensOf: vi.fn((target: object) => {
+        for (const timer of tweenTimers.get(target) ?? []) window.clearTimeout(timer);
+        tweenTimers.delete(target);
+      }),
     },
     add: {
+      circle: () => counterObject(),
       text: vi.fn(() => labelText),
       container: vi.fn(() => label),
       graphics: () => pill,
@@ -265,7 +290,7 @@ describe('real local BoardScene playback', () => {
     expect(token.x).toBeCloseTo((start.x + destination.x) / 2);
     expect(token.y).toBeCloseTo((start.y + destination.y) / 2 - 26);
     expect(label.x).toBe(token.x);
-    expect(label.y).toBe(token.y - token.displayHeight - 8);
+    expect(label.y).toBe(token.y - token.displayHeight - 36);
     hop.targets.progress = 0.85;
     hop.onUpdate!();
     expect(token.scaleY).toBeCloseTo(0.88);

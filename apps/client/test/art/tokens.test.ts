@@ -6,16 +6,19 @@ describe('board hero tokens', () => {
     expect(tokenOffsets(1)).toEqual([{ x: 0, y: 0 }]);
   });
 
-  // Restoring the pixel-art ±6 spread must fail: a conservative 72x72
-  // cartoon box may share at most 35% of its area with another token.
+  // Compact two-row placement makes crowded heroes indistinguishable.
+  // The approved row keeps all feet on one baseline and >=60px apart.
   it.each([2, 3, 4])('keeps %i shared cartoon tokens distinguishable near their tile', (count) => {
     const offsets = tokenOffsets(count);
     expect(offsets).toHaveLength(count);
-    for (const offset of offsets) expect(Math.hypot(offset.x, offset.y)).toBeLessThanOrEqual(48);
+    const approved = count === 2 ? [-36, 36] : count === 3 ? [-66, 0, 66] : [-99, -33, 33, 99];
+    expect(offsets).toEqual(approved.map((x) => ({ x, y: 0 })));
+    for (const offset of offsets) expect(Math.hypot(offset.x, offset.y)).toBeLessThanOrEqual(99);
     for (let left = 0; left < offsets.length; left++) {
       for (let right = left + 1; right < offsets.length; right++) {
         const dx = Math.abs(offsets[left]!.x - offsets[right]!.x);
         const dy = Math.abs(offsets[left]!.y - offsets[right]!.y);
+        expect(Math.hypot(dx, dy), `pair ${left}/${right} separation`).toBeGreaterThanOrEqual(60);
         const overlap = (Math.max(0, 72 - dx) * Math.max(0, 72 - dy)) / (72 * 72);
         expect(overlap, `pair ${left}/${right}`).toBeLessThanOrEqual(0.35);
       }

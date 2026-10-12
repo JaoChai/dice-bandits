@@ -14,20 +14,60 @@ const FALLBACK_TINT = 0x8e8e93;
 export function tokenOffsets(countAtSpace: number): { x: number; y: number }[] {
   if (countAtSpace <= 0) return [];
   if (countAtSpace === 1) return [{ x: 0, y: 0 }];
-  /** Compact 72px cartoon footprint: 56px horizontal and 52px vertical
-   * separation leaves <=28% overlap even for a square token. Feet remain
-   * within one tile's 48px radius; single tokens still sit at its centre. */
-  if (countAtSpace === 2)
-    return [
-      { x: -28, y: 0 },
-      { x: 28, y: 0 },
-    ];
-  return [
-    { x: -28, y: -26 },
-    { x: 28, y: -26 },
-    { x: -28, y: 26 },
-    { x: 28, y: 26 },
-  ].slice(0, countAtSpace);
+  // One baseline keeps silhouettes readable; the widest four-seat row reaches
+  // 99 map pixels from the tile centre (the approved prototype).
+  const row =
+    countAtSpace === 2 ? [-36, 36] : countAtSpace === 3 ? [-66, 0, 66] : [-99, -33, 33, 99];
+  return row.slice(0, countAtSpace).map((x) => ({ x, y: 0 }));
+}
+
+/** Ignore tiny horizontal deltas so vertical travel keeps the current facing. */
+export function tokenFacing(token: Phaser.GameObjects.Image, destinationX: number): boolean {
+  return destinationX < token.x - 6 ? true : destinationX > token.x + 6 ? false : token.flipX;
+}
+
+/** Cosmetic pose fitted inside the existing hop, never a new awaited tween.
+ * Local turns take 90ms in + 90ms out; catch-up compresses to its hop budget. */
+export function createHopPose(
+  token: Phaser.GameObjects.Image,
+  destinationX: number,
+  hopMs: number,
+): {
+  update(progress: number): void;
+  reset(): void;
+} {
+  const baseX = token.scaleX,
+    baseY = token.scaleY;
+  const facing = tokenFacing(token, destinationX);
+  const turning = facing !== token.flipX;
+  const turnMs = Math.min(180, hopMs);
+  let flipped = !turning;
+  return {
+    update(k) {
+      if (turning) {
+        const turn = Math.min(1, (k * hopMs) / turnMs);
+        const half = turn < 0.5 ? turn * 2 : (1 - turn) * 2;
+        token.scaleX = baseX * (1 - 0.95 * Math.sin((Math.PI * half) / 2));
+        if (!flipped && turn >= 0.5) {
+          token.setFlipX(facing);
+          flipped = true;
+        }
+      }
+      token.scaleY =
+        baseY *
+        (k < 0.2
+          ? 1 - 0.18 * Math.sin((Math.PI * k) / 0.2)
+          : k >= 0.85
+            ? 0.88 + (0.12 * (k - 0.85)) / 0.15
+            : 1);
+      token.angle = Math.sin(Math.PI * 2 * k) * 12 * (token.flipX ? -1 : 1);
+    },
+    reset() {
+      token.scaleX = baseX;
+      token.scaleY = baseY;
+      token.angle = 0;
+    },
+  };
 }
 
 /** Offsets for tokens in seat order, spread by how many share each space. */

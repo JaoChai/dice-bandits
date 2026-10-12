@@ -136,6 +136,9 @@ function realSceneOn(gameMock: {
   const registry = new Map<string, unknown>();
   const scene = Object.assign(Object.create(BoardScene.prototype), {
     tokenObjects: new Map(),
+    nameTags: new Map(),
+    nameTagLifts: new Map(),
+    localDust: new Map(),
     spacePositions: new Map(),
     wholeMap: false,
     children: { removeAll: vi.fn() },

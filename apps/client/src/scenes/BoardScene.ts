@@ -3,7 +3,7 @@ import type { GameState, GameEvent } from '@dice-bandits/engine';
 import { coinBurst, dice, shake } from '../fx';
 import { reducedMotion, motionScale } from '../art/motion';
 import { seatColors, seatTint } from '../art/colors';
-import { createHeroToken, tokenLayout } from './board/tokens';
+import { createHeroToken, createHopPose, tokenFacing, tokenLayout } from './board/tokens';
 import { drawRoad } from './board/road';
 import { drawTiles } from './board/tiles';
 import { drawBuildings } from './board/buildings';
@@ -35,6 +35,9 @@ export default class BoardScene extends Phaser.Scene {
   private walkCountPill?: Phaser.GameObjects.Graphics;
   private walkPillColor = 0xf5c51c;
   private activeShadow?: Phaser.GameObjects.Ellipse;
+  private nameTags = new Map<number, Phaser.GameObjects.Text>();
+  private nameTagLifts = new Map<number, number>();
+  private localDust = new Map<Phaser.GameObjects.Arc, Phaser.Tweens.Tween>();
   private latestState: GameState | null = null;
   private onlineMovement: ReturnType<typeof createMovementOverlay> | undefined;
   private movementReadout?: ReturnType<typeof createMovementReadout>;
@@ -155,6 +158,9 @@ export default class BoardScene extends Phaser.Scene {
       this.walkCounter = undefined;
       this.walkCountText = undefined;
       this.walkCountPill = undefined;
+      for (const tag of this.nameTags.values()) tag.destroy();
+      this.nameTags.clear();
+      this.nameTagLifts.clear();
     };
     this.events.once('destroy', () => {
       destroyReadout();
@@ -230,7 +236,14 @@ export default class BoardScene extends Phaser.Scene {
     this.localWaits?.clear();
     this.cameraMovement?.remove();
     this.cameraMovement = undefined;
-    this.walkCounter?.setVisible(false);
+    this.walkCounter?.setVisible(false).setScale(1);
+    if (this.walkCounter) this.tweens.killTweensOf(this.walkCounter);
+    for (const [puff, tween] of this.localDust ?? []) {
+      tween.remove();
+      puff.destroy();
+    }
+    this.localDust?.clear();
+    this.activeShadow?.setScale(1);
     this.walkCountText?.setText('');
     if (!keepReadout) this.movementReadout?.clear();
   }
@@ -283,7 +296,8 @@ export default class BoardScene extends Phaser.Scene {
           segmentIndex++;
           const destination = this.spacePositions.get(segment.to);
           if (!token || !destination) continue;
-          token.setFlipX(destination.x < token.x);
+          const facing = tokenFacing(token, destination.x);
+          if (speed <= 0 && facing !== token.flipX) token.setFlipX(facing);
           if (segmentIndex === 1 && speed > 0) {
             this.panCameraTo(token.x, token.y, 300 * speed);
             await pause(300 * speed);
@@ -293,14 +307,24 @@ export default class BoardScene extends Phaser.Scene {
           this.panCameraTo(destination.x, destination.y, segment.hopMs * speed);
           if (speed > 0) {
             const startX = token.x,
-              startY = token.y,
-              baseScaleY = token.scaleY;
+              startY = token.y;
+            const pose = createHopPose(token, destination.x, segment.hopMs);
+            const tagLift = token.displayHeight + 4 + (this.nameTagLifts.get(segment.seat) ?? 0);
+            const followTag = (): void => {
+              this.nameTags.get(segment.seat)?.setPosition(token.x, token.y - tagLift);
+              this.walkCounter?.setPosition(token.x, token.y - tagLift - 32);
+            };
             const hop = { progress: 0 };
             await new Promise<void>((resolve) => {
               const handle: { tween?: Phaser.Tweens.Tween } = {};
+              let settled = false;
               const finish = (): void => {
+                if (settled) return;
+                settled = true;
                 handle.tween?.remove();
-                token.scaleY = baseScaleY;
+                pose.reset();
+                this.activeShadow?.setScale(1);
+                followTag();
                 this.localWaits.delete(finish);
                 resolve();
               };
@@ -317,17 +341,20 @@ export default class BoardScene extends Phaser.Scene {
                     startX + (destination.x - startX) * k,
                     groundY - Math.sin(Math.PI * k) * 26,
                   );
-                  // Squash at touchdown, then recover over the final 15%.
-                  token.scaleY = baseScaleY * (k >= 0.85 ? 0.88 + (0.12 * (k - 0.85)) / 0.15 : 1);
-                  this.walkCounter?.setPosition(token.x, token.y - token.displayHeight - 8);
+                  pose.update(k);
+                  followTag();
                   if (segment.seat === previous.turnSeat)
-                    this.activeShadow?.setPosition(token.x, groundY);
+                    this.activeShadow
+                      ?.setPosition(token.x, groundY)
+                      .setScale(1 - 0.45 * Math.sin(Math.PI * k));
                 },
                 onComplete: () => {
                   if (current()) {
                     token.setPosition(destination.x, destination.y);
+                    if (token.flipX !== facing) token.setFlipX(facing);
                     if (segment.seat === previous.turnSeat)
                       this.activeShadow?.setPosition(destination.x, destination.y);
+                    this.emitWalkDust(destination.x, destination.y, speed);
                   }
                   finish();
                 },
@@ -457,6 +484,8 @@ export default class BoardScene extends Phaser.Scene {
     if (this.walkCounter) this.children.add(this.walkCounter);
     this.activeShadow = undefined;
     this.tokenObjects.clear();
+    this.nameTags.clear();
+    this.nameTagLifts.clear();
     this.spacePositions.clear();
     closeSpaceInfo();
 
@@ -507,7 +536,60 @@ export default class BoardScene extends Phaser.Scene {
           .ellipse(x, y, 48, 16, 0x3a1f0d, 0.22)
           .setDepth(29)
           .setName('active-token-shadow');
-      } else token.setAlpha(0.8);
+      }
+      let lift =
+        offsets[playerIndex]!.x !== 0 ||
+        state.players.filter((p) => p.pos === player.pos).length > 1
+          ? (playerIndex % 2) * 24
+          : 0;
+      const tag = this.add
+        .text(x, y - token.displayHeight - 4 - lift, player.name, {
+          fontFamily: getComputedStyle(document.documentElement).fontFamily,
+          fontSize: '15px',
+          fontStyle: 'bold',
+          color: '#ffffff',
+          stroke: '#3a1f0d',
+          strokeThickness: 3,
+          backgroundColor: colors[playerIndex]!,
+          padding: { x: 8, y: 2 },
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(player.seat === state.turnSeat ? 45 : 44)
+        .setName(`hero-name-${player.seat}`);
+      // Pack full labels using their rendered stroke/padding dimensions, not
+      // fixed-height rows. Prefer the alternating height, then a free row above
+      // or below it, bounded by the map top and this hero's head.
+      const initial = tag.getBounds();
+      const height = initial.bottom - initial.top;
+      const halfWidth = (initial.right - initial.left) / 2;
+      const tagX = Math.max(halfWidth, Math.min(WORLD.width - halfWidth, x));
+      const lowest = Math.min(WORLD.height, token.getBounds().top - 4);
+      const previous = [...this.nameTags.values()].map((other) => other.getBounds());
+      const candidates = [
+        initial.bottom,
+        ...previous.flatMap((other) => [other.top - 4, other.bottom + height + 4]),
+        lowest,
+        height,
+      ]
+        .map((bottom) => Math.max(height, Math.min(lowest, bottom)))
+        .sort((a, b) => Math.abs(a - initial.bottom) - Math.abs(b - initial.bottom));
+      for (const bottom of candidates) {
+        tag.setPosition(tagX, bottom);
+        const bounds = tag.getBounds();
+        if (
+          previous.every(
+            (other) =>
+              bounds.left >= other.right ||
+              bounds.right <= other.left ||
+              bounds.top >= other.bottom ||
+              bounds.bottom <= other.top,
+          )
+        )
+          break;
+      }
+      lift = y - token.displayHeight - 4 - tag.y;
+      this.nameTagLifts.set(player.seat, lift);
+      this.nameTags.set(player.seat, tag);
     }
 
     // Layer 5: fork arrows while a branch choice is pending (Review Focus 3).
@@ -564,15 +646,53 @@ export default class BoardScene extends Phaser.Scene {
         .setVisible(false);
       this.walkPillColor = Number.parseInt(gold.replace('#', ''), 16);
     }
-    this.walkCountText!.setText(remaining > 0 ? String(remaining) : '');
+    const nextText = remaining > 0 ? String(remaining) : '';
+    const changed = this.walkCountText!.text !== nextText;
+    this.walkCountText!.setText(nextText);
     const width = this.walkCountText!.displayWidth + 24;
     const height = this.walkCountText!.height + 4;
     this.walkCountPill!.clear()
       .fillStyle(this.walkPillColor, 1)
       .fillRoundedRect(-width / 2, -height, width, height, height / 2);
+    const seat = [...this.tokenObjects].find(([, hero]) => hero === token)?.[0];
+    const tagLift = seat === undefined ? 0 : (this.nameTagLifts.get(seat) ?? 0);
     this.walkCounter
-      .setPosition(token.x, token.y - token.displayHeight - 8)
+      .setPosition(token.x, token.y - token.displayHeight - 36 - tagLift)
       .setVisible(remaining > 0);
+    if (!this.walkCounter.visible || motionScale() <= 0 || reducedMotion()) {
+      this.tweens.killTweensOf(this.walkCounter);
+      this.walkCounter.setScale(1);
+    } else if (changed) {
+      this.tweens.killTweensOf(this.walkCounter);
+      this.walkCounter.setScale(1.4);
+      this.tweens.add({ targets: this.walkCounter, scale: 1, duration: 220, ease: 'Back.easeOut' });
+    }
+  }
+
+  /** Owned nonblocking landing dust. Old completion callbacks cannot destroy
+   * a replacement effect or create anything after cancellation. */
+  private emitWalkDust(x: number, y: number, speed: number): void {
+    for (let d = 0; d < 8; d++) {
+      const angle = (Math.PI * 2 * d) / 8;
+      const puff = this.add
+        .circle(x, y - 4, 10, 0xfff3d6, 1)
+        .setStrokeStyle(2, 0xb89a6a, 0.9)
+        .setDepth(37)
+        .setName('walk-dust');
+      const tween = this.tweens.add({
+        targets: puff,
+        x: x + Math.cos(angle) * 44,
+        y: y - 6 + Math.sin(angle) * 14,
+        alpha: 0,
+        scale: 2,
+        duration: 520 * speed,
+        ease: 'Quad.easeOut',
+        onComplete: () => {
+          if (this.localDust.delete(puff)) puff.destroy();
+        },
+      });
+      this.localDust.set(puff, tween);
+    }
   }
 
   /** Turn-start ribbon text (`turn-ribbon` DOM element, rendered by hud.ts). */

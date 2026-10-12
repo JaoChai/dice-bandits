@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMovementOverlay } from '../../src/scenes/board/movementOverlay';
 import { planMovement } from '../../src/scenes/board/movementPlan';
 
-vi.mock('../../src/scenes/board/tokens', () => ({
+vi.mock('../../src/scenes/board/tokens', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/scenes/board/tokens')>()),
   createHeroToken: (
     scene: { add: { image: (x: number, y: number) => unknown } },
     _class: string,
@@ -53,6 +54,10 @@ async function setup() {
         const object = {
           x,
           y,
+          scaleX: 1,
+          scaleY: 1,
+          angle: 0,
+          flipX: false,
           destroy: vi.fn(),
           setAlpha: vi.fn(),
           setDepth: vi.fn(),

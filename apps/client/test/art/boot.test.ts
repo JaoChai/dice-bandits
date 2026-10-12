@@ -85,6 +85,9 @@ describe('BootScene cartoon loader contract', () => {
       add: vi.fn(() => (cameras.main = { ...camera })),
     };
     const board = Object.assign(Object.create(BoardScene.prototype), {
+      nameTags: new Map(),
+      nameTagLifts: new Map(),
+      localDust: new Map(),
       game: { registry, events: new EventEmitter() },
       scale: new EventEmitter(),
       events: new EventEmitter(),

@@ -69,6 +69,7 @@ function gameObject(
           target.visible = visible;
           return proxy;
         };
+      if (prop === 'text') return target.text;
       if (prop === 'depth' || prop === 'scaleX' || prop === 'scaleY' || prop === 'alpha')
         return target[prop];
       if (prop === 'setAlpha')
@@ -123,6 +124,7 @@ function gameObject(
           target.played = key;
           return proxy;
         };
+      if (prop === 'getBounds') return () => ({ left: 0, right: 0, top: 0, bottom: 0 });
       if (prop === 'texture') return { key: target.texture };
       if (prop === 'anims') return { stop: () => proxy };
       return () => proxy;
@@ -148,6 +150,9 @@ function makeScene() {
   const handlers = new Map<string, (state: GameState) => void>();
   const scene = Object.assign(Object.create(BoardScene.prototype), {
     tokenObjects: new Map(),
+    nameTags: new Map(),
+    nameTagLifts: new Map(),
+    localDust: new Map(),
     spacePositions: new Map(),
     wholeMap: false,
     children: { removeAll: vi.fn(), remove: vi.fn(), add: vi.fn() },
@@ -225,6 +230,11 @@ function makeScene() {
       }),
       graphics: vi.fn(() => {
         const made = gameObject('graphics');
+        objects.push(made.rec);
+        return made.proxy;
+      }),
+      circle: vi.fn(() => {
+        const made = gameObject('circle');
         objects.push(made.rec);
         return made.proxy;
       }),
@@ -325,16 +335,18 @@ describe('BoardScene movement destinations', () => {
     live.tokenObjects.set(mover.seat, token);
     scene.tweens.add.mockClear();
     scene.tweens.add.mockImplementation((config) => {
-      if (config.targets.progress !== undefined) {
+      if (typeof config.targets.progress === 'number') {
         config.targets.progress = 1;
         config.onUpdate();
         config.onComplete();
       }
+      const tween = { remove: vi.fn() };
+      return tween;
     });
     await live.playEvents(moves);
     const walks = scene.tweens.add.mock.calls
       .map(([config]) => config)
-      .filter((config) => config.targets.progress !== undefined);
+      .filter((config) => typeof config.targets.progress === 'number');
     const destinations = moves.map((event) =>
       previous.board.spaces.find((space) => space.id === event.params.to)!,
     );
@@ -359,6 +371,35 @@ describe('BoardScene movement destinations', () => {
 });
 
 describe('BoardScene layering', () => {
+  it('gives every hero a seat-coloured name tag and rebuilds ownership on redraw', () => {
+    const { scene, objects } = makeScene();
+    const state = gameFor('name-tags');
+    scene.renderBoard(state);
+    const live = scene as unknown as { nameTags: Map<number, unknown> };
+    expect(live.nameTags.size).toBe(4);
+    const first = [...live.nameTags.values()];
+    const tags = objects.filter((o) => o.name?.startsWith('hero-name-'));
+    expect(tags.map((o) => o.text)).toEqual(['P1', 'P2', 'P3', 'P4']);
+    const calls = (scene as unknown as { add: { text: ReturnType<typeof vi.fn> } }).add.text.mock
+      .calls;
+    const colours = ['#2E7FE0', '#3BA84A', '#6C2EBE', '#D42B3A'];
+    for (const [index, name] of ['P1', 'P2', 'P3', 'P4'].entries()) {
+      expect(calls.find((call) => call[2] === name)?.[3]).toMatchObject({
+        color: '#ffffff',
+        backgroundColor: colours[index],
+        fontSize: '15px',
+        fontStyle: 'bold',
+        strokeThickness: 3,
+      });
+    }
+    scene.renderBoard({ ...state, turnSeat: 1 });
+    expect(live.nameTags.size).toBe(4);
+    expect([...live.nameTags.values()].every((tag) => !first.includes(tag))).toBe(true);
+    expect(
+      (scene as unknown as { children: { removeAll: ReturnType<typeof vi.fn> } }).children
+        .removeAll,
+    ).toHaveBeenLastCalledWith(true);
+  });
   it('keeps identity rings but uses static active size/depth and a dark oval instead of yellow rings', () => {
     const { scene, objects } = makeScene();
     const state = gameFor('active-cue');
@@ -369,7 +410,7 @@ describe('BoardScene layering', () => {
       expect(active.depth).toBeGreaterThan(token.depth);
       expect(active.scaleX).toBeCloseTo(token.scaleX! * 1.18);
       expect(active.scaleY).toBeCloseTo(token.scaleY! * 1.18);
-      expect(token.alpha).toBe(0.8);
+      expect(token.alpha).toBe(1);
     }
     expect(objects.filter((o) => o.radius === 14)).toHaveLength(state.players.length);
     expect(objects.filter((o) => o.color === 0xf5c51c)).toEqual([]);
@@ -380,6 +421,50 @@ describe('BoardScene layering', () => {
       scene.tweens.add.mock.calls.some(([c]) => c.repeat === -1 && c.scale !== undefined),
     ).toBe(false);
   });
+  it('pops only changed counter numbers, suppresses static motion, and cancels its tween on redraw', () => {
+    window.diceBanditsSpeed = 1;
+    const { scene, objects } = makeScene();
+    const state = gameFor('counter-pop');
+    scene.renderBoard(state);
+    const live = scene as unknown as {
+      tokenObjects: Map<number, Phaser.GameObjects.Image>;
+      walkCounter: Phaser.GameObjects.Container;
+      showWalkCounter(token: Phaser.GameObjects.Image, remaining: number): void;
+      cancelLocalMovement(): void;
+    };
+    const hero = live.tokenObjects.get(0)!;
+    live.showWalkCounter(hero, 4);
+    const counter = objects.find((o) => o.kind === 'container')!;
+    expect(counter.scaleX).toBe(1.4);
+    expect(
+      scene.tweens.add.mock.calls.filter(([c]) => c.targets === live.walkCounter),
+    ).toHaveLength(1);
+    expect(
+      scene.tweens.add.mock.calls.find(([c]) => c.targets === live.walkCounter)?.[0],
+    ).toMatchObject({ scale: 1, duration: 220, ease: 'Back.easeOut' });
+    live.showWalkCounter(hero, 4);
+    expect(
+      scene.tweens.add.mock.calls.filter(([c]) => c.targets === live.walkCounter),
+    ).toHaveLength(1);
+    live.showWalkCounter(hero, 3);
+    expect(
+      scene.tweens.add.mock.calls.filter(([c]) => c.targets === live.walkCounter),
+    ).toHaveLength(2);
+    live.cancelLocalMovement();
+    expect(counter.scaleX).toBe(1);
+    expect(counter.visible).toBe(false);
+    expect(
+      (scene as unknown as { tweens: { killTweensOf: ReturnType<typeof vi.fn> } }).tweens
+        .killTweensOf,
+    ).toHaveBeenCalledWith(live.walkCounter);
+    window.diceBanditsSpeed = 0;
+    live.showWalkCounter(hero, 2);
+    expect(counter.scaleX).toBe(1);
+    expect(
+      scene.tweens.add.mock.calls.filter(([c]) => c.targets === live.walkCounter),
+    ).toHaveLength(2);
+  });
+
   it('keeps one font-inheriting counter hidden across real board redraws and reuses it', () => {
     document.documentElement.style.fontFamily = 'Mitr, sans-serif';
     const state = gameFor('pill-redraw');
@@ -392,7 +477,7 @@ describe('BoardScene layering', () => {
     scene.renderBoard(state);
     live.showWalkCounter(live.tokenObjects.get(state.turnSeat)!, 4);
     const counter = live.walkCounter;
-    const text = objects.find((o) => o.kind === 'text')!;
+    const text = objects.find((o) => o.kind === 'text' && o.text === '4')!;
     expect(text.fontFamily).toBe('Mitr, sans-serif');
     const next = structuredClone(state);
     next.players[state.turnSeat]!.pos++;
