@@ -36,6 +36,10 @@ export function createBattleEffects(
     : source;
   const objects: Phaser.GameObjects.GameObject[] = [];
   const tweens: Phaser.Tweens.Tween[] = [];
+  const persistentTweens = new Set<Phaser.Tweens.Tween>();
+  // Long-lived fields/coin paths survive lunge -> impact -> damage. They are
+  // still owned by this generation and are removed at drain or cancellation.
+  const persistent = new Set<object>();
   const bases = Object.fromEntries(
     (['a', 'b'] as const).map((side) => [
       side,
@@ -67,12 +71,26 @@ export function createBattleEffects(
   const pose = (side: Side, frame: string): void => {
     if (sprites[side].texture.has(frame)) sprites[side].setFrame(frame);
   };
-  const clear = (): void => {
-    for (const tween of tweens.splice(0)) tween.remove();
-    for (const object of objects.splice(0)) object.destroy();
+  const clear = (preserve = false): void => {
+    for (const handle of tweens.splice(0)) {
+      if (preserve && persistentTweens.has(handle)) tweens.push(handle);
+      else {
+        handle.remove();
+        persistentTweens.delete(handle);
+      }
+    }
+    for (const object of objects.splice(0)) {
+      if (preserve && persistent.has(object)) objects.push(object);
+      else object.destroy();
+    }
+    if (!preserve) persistent.clear();
   };
   const tween = (config: Phaser.Types.Tweens.TweenBuilderConfig): void => {
-    tweens.push(scene.tweens.add(config));
+    const handle = scene.tweens.add(config);
+    tweens.push(handle);
+    // Capture ownership before Phaser destroys a completed tween's targets.
+    const targets = Array.isArray(config.targets) ? config.targets : [config.targets];
+    if (targets.some((target) => target && persistent.has(target))) persistentTweens.add(handle);
   };
   const graphic = (name: string, side: Side, target = side): Phaser.GameObjects.Graphics => {
     const pos = layout[target === 'a' ? 'left' : 'right'];
@@ -109,11 +127,19 @@ export function createBattleEffects(
   const arc = (command: 'attack' | 'strike', side: Side, duration: number): void => {
     const shape = graphic(`${command}-arc`, side),
       h = layout.fighterHeight;
-    shape
-      .lineStyle(command === 'strike' ? 12 : 7, command === 'strike' ? gold : cream, 1)
-      .beginPath()
-      .arc(0, 0, h * 0.75, (-Math.PI * 5) / 12, (Math.PI * 5) / 12, false)
-      .strokePath();
+    const width = command === 'strike' ? 18 : 10;
+    // Three concentric strokes preserve the 150-degree/.75H silhouette on
+    // the light meadow: cocoa outline, class-coloured edge, solid white core.
+    for (const [thickness, ink] of [
+      [width + 12, cocoa],
+      [width + 6, command === 'strike' ? gold : blue],
+      [width, 0xffffff],
+    ] as const)
+      shape
+        .lineStyle(thickness, ink, 1)
+        .beginPath()
+        .arc(0, 0, h * 0.75, (-Math.PI * 5) / 12, (Math.PI * 5) / 12, false)
+        .strokePath();
     if (side === 'b') shape.setScale(-1, 1);
     tween({ targets: shape, angle: { from: side === 'a' ? -30 : 30, to: 0 }, duration });
   };
@@ -122,6 +148,10 @@ export function createBattleEffects(
       const command = persistentOnly ? undefined : beat.commands?.[side],
         skill = beat.skills?.[side];
       if (persistentOnly && skill !== 'firestorm' && skill !== 'sanctuary') continue;
+      const hasField = (name: string): boolean =>
+        objects.some(
+          (object) => persistent.has(object) && object.name === `battle-effect-${name}-${side}`,
+        );
       const direction = side === 'a' ? 1 : -1,
         h = layout.fighterHeight;
       if (command === 'attack' || command === 'strike') {
@@ -172,42 +202,83 @@ export function createBattleEffects(
           duration: beat.duration / 2,
           yoyo: true,
         });
-        if ((beat.stolenGold?.[side] ?? 0) > 0) {
+        if ((beat.stolenGold?.[side] ?? 0) > 0 && !hasField('transfer')) {
+          const origin = layout[side === 'a' ? 'right' : 'left'];
+          const size = Math.max(24, h * 0.15);
+          const factor = Math.min(1, beat.duration / 180);
           for (let index = 0; index < 5; index++) {
-            const coin = graphic('transfer', side, side === 'a' ? 'b' : 'a');
-            coin.fillStyle(gold, 1).fillEllipse((index - 2) * 12, -index * 8, 12, 16);
-            tween({ targets: coin, x: bases[side].x, duration: beat.duration });
+            const y = origin.y - h * (0.4 + index * 0.04);
+            // Existing atlas coin, with a procedural fallback when the atlas
+            // failed to load. Never allocate either for resolved stolen=0.
+            const coin =
+              scene.textures.exists(ART.icons) && scene.textures.get(ART.icons).has('coin')
+                ? scene.add.image(origin.x, y, ART.icons, 'coin').setDisplaySize(size, size)
+                : scene.add
+                    .graphics()
+                    .setPosition(origin.x, y)
+                    .fillStyle(gold, 1)
+                    .lineStyle(3, cocoa, 1)
+                    .fillEllipse(0, 0, size, size)
+                    .strokeEllipse(0, 0, size, size);
+            coin.setDepth(15).setName(`battle-effect-transfer-${side}`);
+            objects.push(coin);
+            persistent.add(coin);
+            tween({
+              targets: coin,
+              x: bases[side].x,
+              delay: index * 18 * factor,
+              duration: 340 * factor,
+              ease: 'Sine.easeInOut',
+              onUpdate: (handle: Phaser.Tweens.Tween) =>
+                coin.setY(y - Math.sin(handle.progress * Math.PI) * h * 0.35),
+            });
           }
         }
       } else if (skill === 'firestorm') {
+        if (hasField('firestorm')) continue;
         const cue = graphic('firestorm', side, side === 'a' ? 'b' : 'a');
-        cue.fillStyle(orange, 0.85);
-        for (let index = 0; index < 3; index++)
-          cue.fillRect((index - 1) * h * 0.22 - 10, -h * 0.65, 20, h);
-        cue.fillStyle(gold, 0.9);
-        for (let index = 0; index < 3; index++)
-          cue.fillRect((index - 1) * h * 0.22 - 4, -h * 0.45, 8, h * 0.8);
-        tween({ targets: cue, scaleY: { from: 0.2, to: 1 }, duration: beat.duration });
+        persistent.add(cue);
+        const width = h * 0.24,
+          height = h * 1.25,
+          bottom = h * 0.5;
+        for (let index = 0; index < 3; index++) {
+          const x = (index - 1) * h * 0.31 - width / 2;
+          cue.fillStyle(orange, 1).fillRect(x, bottom - height, width, height);
+          cue.lineStyle(4, cocoa, 1).strokeRect(x, bottom - height, width, height);
+          cue.fillStyle(gold, 1).fillRect(x + width * 0.16, bottom - height, width * 0.68, height);
+          cue
+            .fillStyle(0xffffff, 1)
+            .fillRect(x + width * 0.36, bottom - height * 0.96, width * 0.28, height * 0.96);
+        }
+        // Bright initial rise flash followed by a solid readable field; it
+        // persists through impact/damage rather than restarting at each beat.
+        tween({
+          targets: cue,
+          scaleY: { from: 0.4, to: 1 },
+          alpha: { from: 1, to: 0.9 },
+          duration: Math.min(150, beat.duration),
+        });
       } else if (skill === 'sanctuary') {
+        if (hasField('sanctuary')) continue;
         const cue = graphic('sanctuary', side);
+        persistent.add(cue);
         cue
           .fillStyle(gold, 0.7)
           .fillEllipse(0, h * 0.35, h * 0.95, h * 0.35)
+          .lineStyle(14, cocoa, 1)
+          .strokeCircle(0, 0, h * 0.48)
+          .strokeEllipse(0, h * 0.35, h * 0.95, h * 0.35)
           .lineStyle(8, gold, 1)
-          .strokeCircle(0, 0, h * 0.48);
-        tween({
-          targets: cue,
-          alpha: { from: 0.5, to: 1 },
-          duration: beat.duration / 2,
-          yoyo: true,
-        });
+          .strokeCircle(0, 0, h * 0.48)
+          .strokeEllipse(0, h * 0.35, h * 0.95, h * 0.35);
       }
     }
   };
   return {
     showBeat(beat) {
       if (destroyed) return;
-      clear();
+      const staticOnly = beat.duration <= 0 || reducedMotion();
+      clear(!staticOnly && (beat.kind === 'impact' || beat.kind === 'damage'));
       // Restore transforms at beat boundaries: cancelled yoyo tweens must not
       // leave a half-dash as the base for the next hit or cast.
       for (const side of ['a', 'b'] as const) {
@@ -215,10 +286,11 @@ export function createBattleEffects(
         sprites[side]
           .setPosition(base.x, base.y)
           .setScale(base.scaleX, base.scaleY)
-          .setAngle(base.angle);
+          .setAngle(base.angle)
+          .clearTint();
         pose(side, 'idle');
       }
-      if (beat.duration <= 0 || reducedMotion()) return;
+      if (staticOnly) return;
       if (beat.kind === 'anticipation') {
         for (const side of ['a', 'b'] as const) {
           if (beat.commands?.[side] !== 'strike') continue;
@@ -254,16 +326,21 @@ export function createBattleEffects(
                 bases[target.side].x + (target.side === 'a' ? -1 : 1) * layout.fighterHeight * 0.08,
               ease: 'Cubic.easeOut',
             });
+            // The white fill replaces (rather than dark-multiplies) the hit
+            // sprite for the whole impact. The next boundary clears the tint.
+            sprites[target.side].setTint(0xffffff).setTintMode(1 /* Phaser.TintModes.FILL */);
             const spark = graphic('impact', target.side);
-            // Graphics fallback is independent of the icon atlas.
-            spark
-              .lineStyle(5, gold, 1)
-              .beginPath()
-              .moveTo(-18, -18)
-              .lineTo(18, 18)
-              .moveTo(-18, 18)
-              .lineTo(18, -18)
-              .strokePath();
+            const heavy = beat.commands?.[beat.attacker ?? 'a'] === 'strike';
+            const radius = layout.fighterHeight * (heavy ? 0.42 : 0.3);
+            spark.fillStyle(0xffffff, 1).lineStyle(5, cocoa, 1).beginPath();
+            for (let index = 0; index < 16; index++) {
+              const angle = (index * Math.PI) / 8;
+              const r = index % 2 ? radius * 0.4 : radius;
+              if (index === 0) spark.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+              else spark.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+            }
+            spark.closePath().fillPath().strokePath();
+            spark.lineStyle(5, gold, 1).strokeCircle(0, 0, radius * 0.7);
           } else {
             const number = scene.add
               .text(
@@ -284,9 +361,12 @@ export function createBattleEffects(
             objects.push(number);
           }
         }
-        if (beat.kind === 'impact' && hitTargets.length && !detached) {
-          scene.cameras.main.flash(Math.min(90, beat.duration), 255, 235, 225);
-          scene.cameras.main.shake(Math.min(90, beat.duration), 0.006);
+        // Bot/online impacts are <=27ms before the existing .9 scaling;
+        // only a full human-speed impact owns a camera flash/shake.
+        if (beat.kind === 'impact' && hitTargets.length && !detached && beat.duration >= 60) {
+          scene.cameras.main.flash(Math.min(120, beat.duration), 255, 235, 225);
+          const heavy = beat.commands?.[beat.attacker ?? 'a'] === 'strike';
+          scene.cameras.main.shake(Math.min(120, beat.duration), heavy ? 0.016 : 0.01);
         }
       }
       if (beat.kind === 'result')

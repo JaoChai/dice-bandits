@@ -65,6 +65,7 @@ type RecordedObject = {
   tint?: number;
 };
 type RecordedTween = {
+  onUpdate?: (tween: { progress: number }) => void;
   targets: unknown;
   x: number;
   delay: number;
@@ -75,6 +76,7 @@ type RecordedTween = {
 function renderer(detached = false) {
   const objects: RecordedObject[] = [];
   const tweens: RecordedTween[] = [];
+  const handles: { targets: unknown[] | null; remove(): void }[] = [];
   const object = (x = 0, y = 0) => {
     const obj: RecordedObject = {
       x,
@@ -109,6 +111,8 @@ function renderer(detached = false) {
       'fillEllipse',
       'fillRect',
       'strokeCircle',
+      'strokeEllipse',
+      'strokeRect',
       'lineStyle',
       'fillStyle',
     ])
@@ -145,6 +149,19 @@ function renderer(detached = false) {
       obj.angle = value;
       return obj;
     };
+    obj.setDisplaySize = (width: number, height: number) => {
+      obj.displayWidth = width;
+      obj.displayHeight = height;
+      return obj;
+    };
+    obj.setY = (y: number) => {
+      obj.y = y;
+      return obj;
+    };
+    obj.setTintMode = (mode: number) => {
+      obj.tintMode = mode;
+      return obj;
+    };
     obj.setFrame = (value: string) => {
       obj.frame.name = value;
       return obj;
@@ -171,7 +188,17 @@ function renderer(detached = false) {
   const flash = vi.fn(),
     shake = vi.fn();
   const scene = {
-    add: { sprite: object, image: object, text: object, graphics: () => object() },
+    add: {
+      sprite: object,
+      image: (x: number, y: number, key: string, frame: string) => {
+        const image = object(x, y);
+        image.frame.name = frame;
+        image.texture = { key, has: () => true };
+        return image;
+      },
+      text: object,
+      graphics: () => object(),
+    },
     textures: { exists: () => true, get: () => ({ has: () => true }) },
     cameras: { main: { flash, shake } },
     tweens: {
@@ -189,7 +216,12 @@ function renderer(detached = false) {
           },
         };
         tweens.push(tween);
-        return tween;
+        const handle = {
+          targets: [config.targets] as unknown[] | null,
+          remove: () => tween.remove(),
+        };
+        handles.push(handle);
+        return handle;
       },
     },
   };
@@ -207,9 +239,156 @@ function renderer(detached = false) {
     flash,
     shake,
     layout,
+    handles,
     active: () => objects.filter((obj) => !obj.destroyed && obj.name.startsWith('battle-effect-')),
   };
 }
+describe('Lead stronger-impact corrections', () => {
+  it.each(['firestorm', 'pickpocket'] as const)(
+    'switching to reduced motion between beats removes persistent %s effects immediately',
+    (secret) => {
+      const r = renderer();
+      const beats = plan(
+        [{ type: 'SecretUsed', seat: 0, params: { side: 'a', secret, stolen: 10 } }],
+        fixture('thief', false),
+      );
+      r.effects.showBeat(getBeat(beats, 'lunge'));
+      expect(r.active().length).toBeGreaterThan(0);
+      vi.stubGlobal('matchMedia', () => ({ matches: true }));
+      r.effects.showBeat(getBeat(beats, 'impact'));
+      expect(r.active()).toEqual([]);
+      expect(r.tweens.every((t) => t.removed)).toBe(true);
+    },
+  );
+  it('completed Phaser tweens release targets without breaking the next beat or persistent fields', () => {
+    const r = renderer();
+    const beats = plan([
+      { type: 'SecretUsed', seat: 0, params: { side: 'a', secret: 'firestorm' } },
+      damage,
+    ]);
+    r.effects.showBeat(getBeat(beats, 'lunge'));
+    for (const handle of r.handles) handle.targets = null;
+    expect(() => r.effects.showBeat(getBeat(beats, 'impact'))).not.toThrow();
+    expect(r.active().some((o) => o.name === 'battle-effect-firestorm-a')).toBe(true);
+    r.effects.destroy();
+    expect(r.active()).toEqual([]);
+  });
+  it.each(['attack', 'strike'] as const)(
+    '%s flashes its actual recipient and draws a fighter-scale burst',
+    (command) => {
+      const r = renderer();
+      const beats = plan([pick('a', command, 0), damage]);
+      r.effects.showBeat({
+        ...getBeat(beats, 'impact'),
+        targets: getBeat(beats, 'damage').targets,
+      });
+      expect(r.source.b.tint).toBe(0xffffff);
+      expect(r.source.b.tintMode).toBe(1);
+      expect(getBeat(beats, 'impact').duration).toBeGreaterThanOrEqual(60);
+      expect(r.shake).toHaveBeenCalledExactlyOnceWith(90, command === 'strike' ? 0.016 : 0.01);
+      expect(r.source.a.tint).toBeUndefined();
+      const burst = r.active().find((o) => o.name === 'battle-effect-impact-b')!;
+      const xs = burst.geometry
+        .filter((g) => ['moveTo', 'lineTo'].includes(String(g[0])))
+        .map((g) => Number(g[1]));
+      expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThanOrEqual(
+        r.layout.fighterHeight * (command === 'strike' ? 0.8 : 0.5),
+      );
+      expect(burst.geometry).toContainEqual(['fillStyle', 0xffffff, 1]);
+      expect(burst.geometry.some((g) => g[0] === 'lineStyle' && g[2] === 0x5c3317)).toBe(true);
+      r.effects.showBeat(getBeat(beats, 'damage'));
+      expect(r.source.b.tint).toBeUndefined();
+    },
+  );
+  it.each(['attack', 'strike'] as const)(
+    '%s has outlined white slash core for the entire 180ms lunge',
+    (command) => {
+      const r = renderer();
+      const lunge = getBeat(plan([pick('a', command, 0), damage]), 'lunge');
+      r.effects.showBeat(lunge);
+      const arc = r.active().find((o) => o.name === `battle-effect-${command}-arc-a`)!;
+      const strokes = arc.geometry.filter((g) => g[0] === 'lineStyle');
+      expect(strokes.some((g) => g[2] === 0xffffff)).toBe(true);
+      expect(strokes.some((g) => g[2] === 0x5c3317)).toBe(true);
+      expect(r.tweens.find((tw) => tw.targets === arc)!.duration).toBeGreaterThanOrEqual(150);
+    },
+  );
+  it('Firestorm has three fighter-scale bright pillars and does not restart them at damage', () => {
+    const r = renderer();
+    const beats = plan([
+      { type: 'SecretUsed', seat: 0, params: { side: 'a', secret: 'firestorm' } },
+      damage,
+    ]);
+    r.effects.showBeat(getBeat(beats, 'lunge'));
+    const fire = r.active().find((o) => o.name === 'battle-effect-firestorm-a')!;
+    const pillars = fire.geometry.filter(
+      (g) =>
+        g[0] === 'fillRect' &&
+        Number(g[3]) >= r.layout.fighterHeight * 0.22 &&
+        Number(g[4]) >= r.layout.fighterHeight * 1.2,
+    );
+    expect(pillars).toHaveLength(3);
+    expect(fire.geometry).toContainEqual(['fillStyle', 0xffffff, 1]);
+    r.effects.showBeat({ ...getBeat(beats, 'impact'), targets: getBeat(beats, 'damage').targets });
+    r.effects.showBeat(getBeat(beats, 'damage'));
+    expect(r.active().find((o) => o.name === fire.name)).toBe(fire);
+    expect(fire.destroyed).toBe(false);
+    r.effects.destroy();
+    expect(fire.destroyed).toBe(true);
+  });
+  it('Sanctuary outlined field remains the same caster object through >=400ms of damage', () => {
+    const r = renderer();
+    const beats = plan([
+      { type: 'SecretUsed', seat: 0, params: { side: 'a', secret: 'sanctuary' } },
+    ]);
+    r.effects.showBeat(getBeat(beats, 'lunge'));
+    const field = r.active().find((o) => o.name === 'battle-effect-sanctuary-a')!;
+    expect(field.geometry.some((g) => g[0] === 'lineStyle' && g[2] === 0x5c3317)).toBe(true);
+    r.effects.showBeat(getBeat(beats, 'impact'));
+    r.effects.showBeat(getBeat(beats, 'damage'));
+    expect(getBeat(beats, 'damage').duration).toBeGreaterThanOrEqual(400);
+    expect(r.active().find((o) => o.name === field.name)).toBe(field);
+    r.effects.showBeat(getBeat(beats, 'drain'));
+    expect(field.destroyed).toBe(true);
+  });
+  it('positive theft uses five readable atlas coins on >=300ms arcing target-to-thief tweens without restarting', () => {
+    const r = renderer();
+    const beats = plan(
+      [{ type: 'SecretUsed', seat: 0, params: { side: 'a', secret: 'pickpocket', stolen: 10 } }],
+      fixture('thief', false),
+    );
+    r.effects.showBeat(getBeat(beats, 'lunge'));
+    const coins = r.active().filter((o) => o.name === 'battle-effect-transfer-a');
+    expect(coins).toHaveLength(5);
+    for (const coin of coins) {
+      expect(coin.frame.name).toBe('coin');
+      expect(Number(coin.displayWidth)).toBeGreaterThanOrEqual(r.layout.fighterHeight * 0.15);
+      expect(coin.x).toBe(r.layout.right.x);
+      const tw = r.tweens.find((tw) => tw.targets === coin)!;
+      expect(tw.duration).toBeGreaterThanOrEqual(300);
+      expect(tw.x).toBe(r.layout.left.x);
+      expect(tw.onUpdate).toBeTypeOf('function');
+    }
+    r.effects.showBeat(getBeat(beats, 'impact'));
+    r.effects.showBeat(getBeat(beats, 'damage'));
+    expect(r.active().filter((o) => o.name === 'battle-effect-transfer-a')).toEqual(coins);
+    r.effects.destroy();
+    expect(coins.every((o) => o.destroyed)).toBe(true);
+    expect(r.tweens.every((tw) => tw.removed)).toBe(true);
+  });
+  it('bot-length impact cannot shake or flash the camera', () => {
+    const r = renderer();
+    const impact = getBeat(plan([pick('a', 'strike', 0), damage]), 'impact');
+    r.effects.showBeat({
+      ...impact,
+      duration: 24.3,
+      targets: [{ side: 'b', amount: 7, fromHp: 40, toHp: 33 }],
+    });
+    expect(r.shake).not.toHaveBeenCalled();
+    expect(r.flash).not.toHaveBeenCalled();
+  });
+});
+
 describe('stronger impact R1-B', () => {
   it('150 degree slash uses radius .75 fighter height and mirror-safe geometry', () => {
     const r = renderer();
@@ -228,7 +407,7 @@ describe('stronger impact R1-B', () => {
     const recoil = r.tweens.find((tween) => tween.targets === r.source.b);
     expect(recoil).toMatchObject({ delay: 50, duration: 40 });
     expect(recoil!.x).toBeGreaterThan(r.layout.right.x);
-    expect(r.shake).toHaveBeenCalledExactlyOnceWith(90, 0.006);
+    expect(r.shake).toHaveBeenCalledExactlyOnceWith(90, 0.01);
     r.effects.destroy();
     expect(recoil!.removed).toBe(true);
   });
