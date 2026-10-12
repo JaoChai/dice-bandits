@@ -26,6 +26,73 @@ export function tokenFacing(token: Phaser.GameObjects.Image, destinationX: numbe
   return destinationX < token.x - 6 ? true : destinationX > token.x + 6 ? false : token.flipX;
 }
 
+/** Frames share handedness in all four shipped atlases (weapon, hair and
+ * costume asymmetries were compared, not the happy pose's closed eyes).
+ * Size from the new frame's aspect, retaining the seat's baseline height and
+ * the current pose deformation. Never reuse an idle width for a happy frame. */
+function createFramePose(token: Phaser.GameObjects.Image) {
+  const baseX = token.scaleX,
+    baseY = token.scaleY;
+  const height = token.displayHeight;
+  return (frame: 'idle' | 'happy', x = 1, y = 1): void => {
+    if (token.texture?.has('idle')) {
+      const wanted = token.texture.has(frame) ? frame : 'idle';
+      if (token.frame.name !== wanted) token.setFrame(wanted);
+      token.setDisplaySize((height * token.frame.width) / token.frame.height, height);
+      token.scaleX *= x;
+      token.scaleY *= y;
+    } else {
+      token.scaleX = baseX * x;
+      token.scaleY = baseY * y;
+    }
+  };
+}
+
+/** One progress clock, inside the existing 350ms roll pause. No frame timers
+ * or detached hero tweens survive cancellation. */
+export function createRollPose(token: Phaser.GameObjects.Image) {
+  const frame = createFramePose(token);
+  const baseY = token.y;
+  const out = (k: number): number => 1 - (1 - k) ** 2;
+  const bounce = (k: number): number => {
+    if (k < 1 / 2.75) return 7.5625 * k * k;
+    if (k < 2 / 2.75) return 7.5625 * (k - 1.5 / 2.75) ** 2 + 0.75;
+    if (k < 2.5 / 2.75) return 7.5625 * (k - 2.25 / 2.75) ** 2 + 0.9375;
+    return 7.5625 * (k - 2.625 / 2.75) ** 2 + 0.984375;
+  };
+  return {
+    update(k: number): void {
+      const ms = Math.max(0, Math.min(1, k)) * 350;
+      let x: number,
+        y: number,
+        lift = 0;
+      if (ms < 110) {
+        const t = out(ms / 110);
+        x = 1 + 0.1 * t;
+        y = 1 - 0.18 * t;
+      } else if (ms < 240) {
+        const t = out((ms - 110) / 130);
+        x = 1.1 - 0.15 * t;
+        y = 0.82 + 0.26 * t;
+        lift = 18 * t;
+      } else {
+        const t = bounce((ms - 240) / 110);
+        x = 0.95 + 0.05 * t;
+        y = 1.08 - 0.08 * t;
+        lift = 18 * (1 - t);
+      }
+      frame(ms >= 110 && ms < 330 ? 'happy' : 'idle', x, y);
+      token.y = baseY - lift;
+      token.angle = 0;
+    },
+    reset(): void {
+      frame('idle');
+      token.y = baseY;
+      token.angle = 0;
+    },
+  };
+}
+
 /** Cosmetic pose fitted inside the existing hop, never a new awaited tween.
  * Local turns take 90ms in + 90ms out; catch-up compresses to its hop budget. */
 export function createHopPose(
@@ -36,35 +103,34 @@ export function createHopPose(
   update(progress: number): void;
   reset(): void;
 } {
-  const baseX = token.scaleX,
-    baseY = token.scaleY;
+  const frame = createFramePose(token);
   const facing = tokenFacing(token, destinationX);
   const turning = facing !== token.flipX;
   const turnMs = Math.min(180, hopMs);
   let flipped = !turning;
   return {
     update(k) {
+      let squeeze = 1;
       if (turning) {
         const turn = Math.min(1, (k * hopMs) / turnMs);
         const half = turn < 0.5 ? turn * 2 : (1 - turn) * 2;
-        token.scaleX = baseX * (1 - 0.95 * Math.sin((Math.PI * half) / 2));
+        squeeze = 1 - 0.95 * Math.sin((Math.PI * half) / 2);
         if (!flipped && turn >= 0.5) {
           token.setFlipX(facing);
           flipped = true;
         }
       }
-      token.scaleY =
-        baseY *
-        (k < 0.2
+      const squash =
+        k < 0.2
           ? 1 - 0.18 * Math.sin((Math.PI * k) / 0.2)
           : k >= 0.85
             ? 0.88 + (0.12 * (k - 0.85)) / 0.15
-            : 1);
+            : 1;
+      frame(k > 0.22 && k < 0.82 ? 'happy' : 'idle', squeeze, squash);
       token.angle = Math.sin(Math.PI * 2 * k) * 12 * (token.flipX ? -1 : 1);
     },
     reset() {
-      token.scaleX = baseX;
-      token.scaleY = baseY;
+      frame('idle');
       token.angle = 0;
     },
   };

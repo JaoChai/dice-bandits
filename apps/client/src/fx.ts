@@ -7,11 +7,6 @@ export function hop(scene: Phaser.Scene, object: Phaser.GameObjects.Image, speed
   scene.tweens.add({ targets: sprite, y: sprite.y - 8, duration: 100 * speed, yoyo: true });
 }
 
-export function dice(scene: Phaser.Scene, object: Phaser.GameObjects.Image, speed: number): void {
-  if (speed <= 0) return;
-  scene.tweens.add({ targets: object, angle: object.angle + 360, duration: 350 * speed });
-}
-
 /** Board-scene fx draw above every board layer and under the tokens. */
 const BURST_DEPTH = 31;
 

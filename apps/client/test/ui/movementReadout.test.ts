@@ -142,6 +142,7 @@ function setup(previous: GameState) {
     drawPaintedMap: vi.fn(),
     scale: { on: (name: string, cb: () => void) => resizeHandlers.set(name, cb) },
     tokenObjects: new Map([[previous.turnSeat, token]]),
+    textures: { exists: () => false },
     nameTags: new Map(),
     nameTagLifts: new Map(),
     localDust: new Map(),

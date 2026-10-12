@@ -53,6 +53,24 @@ function setup(facing = false) {
       scaleY: 1,
       angle: 0,
       flipX: facing,
+      frame: { name: 'idle', width: 72, height: 72 },
+      texture: { has: (name: string) => ['idle', 'happy'].includes(name) },
+      get displayHeight() {
+        return object.frame.height * object.scaleY;
+      },
+      setFrame: (name: string) => {
+        object.frame = {
+          name,
+          width: name === 'happy' ? 80 : 72,
+          height: name === 'happy' ? 80 : 72,
+        };
+        return object;
+      },
+      setDisplaySize: (w: number, h: number) => {
+        object.scaleX = w / object.frame.width;
+        object.scaleY = h / object.frame.height;
+        return object;
+      },
       destroy: vi.fn(),
       setAlpha: vi.fn(),
       setDepth: vi.fn(),
@@ -88,6 +106,29 @@ function setup(facing = false) {
     overlay: createMovementOverlay(scene as unknown as Phaser.Scene),
   };
 }
+
+describe('online frame lifecycle inside the fixed catch-up budget', () => {
+  it('shows happy mid-hop, resets idle on cancellation, and fences stale frame callbacks', () => {
+    const s = setup();
+    const plan = planMovement(state, events, 'online');
+    s.overlay.play(plan, 1);
+    const config = s.tweens[0] as unknown as Phaser.Types.Tweens.TweenBuilderConfig;
+    const ghost = s.objects[0] as ReturnType<typeof s.scene.add.image>;
+    (config.targets as { progress: number }).progress = 0.5;
+    (config.onUpdate as () => void)();
+    expect(ghost.frame.name).toBe('happy');
+    expect(ghost.displayHeight).toBe(72);
+    expect(plan.segments.reduce((total, segment) => total + segment.hopMs, 0)).toBeLessThanOrEqual(
+      600,
+    );
+    s.overlay.destroy();
+    expect(ghost.frame.name).toBe('idle');
+    expect(ghost.destroy).toHaveBeenCalledOnce();
+    (config.onUpdate as () => void)();
+    (config.onComplete as () => void)();
+    expect(ghost.frame.name).toBe('idle');
+  });
+});
 
 describe('movement plan', () => {
   it.each([
