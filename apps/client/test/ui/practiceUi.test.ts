@@ -175,7 +175,7 @@ describe('practice preparation', () => {
     expect(root.textContent).toContain('Preparing your practice');
     resolve(TUTORIAL_SCRIPT);
     await view.ready;
-    expect(root.textContent).toContain('Practice with Dicey ~4 min');
+    expect(root.textContent).toContain('Practice with Dicey ~4–5 min');
     expect(root.querySelectorAll('.practice-topic')).toHaveLength(8);
     expect(began).toBe(0);
     click('practice-begin');

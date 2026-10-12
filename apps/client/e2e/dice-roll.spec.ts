@@ -160,8 +160,13 @@ for (const lang of ['th', 'en'] as const) {
     await expect(page.getByTestId('last-roll-chip')).toHaveText(
       lang === 'th' ? 'Rolled 5' : 'ทอยได้ 5',
     );
+    // Preserve the old 5s polling headroom, shifted by the approved five-hop
+    // duration delta and one lead-in (not a new online/cleanup deadline).
+    const localCommitTimeout = 5_000 + 300 + 5 * (560 + 140 - (280 + 120));
     await expect
-      .poll(() => page.evaluate(() => (window as ProbeWindow).__m5aGame.registry.get('state')))
+      .poll(() => page.evaluate(() => (window as ProbeWindow).__m5aGame.registry.get('state')), {
+        timeout: localCommitTimeout,
+      })
       .toEqual(expected.state);
     expect(await page.evaluate(() => window.__db!.getState())).toEqual(expected.state);
   });

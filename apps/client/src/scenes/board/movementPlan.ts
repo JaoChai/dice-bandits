@@ -41,8 +41,8 @@ export function planMovement(
       from,
       to,
       remaining: remaining > 0 ? remaining - 1 : 0,
-      hopMs: mode === 'human' ? 280 : 120,
-      holdMs: mode === 'human' ? 120 : mode === 'bot' ? 40 : 0,
+      hopMs: mode === 'human' ? 560 : mode === 'bot' ? 400 : 120,
+      holdMs: mode === 'human' ? 140 : mode === 'bot' ? 100 : 0,
     });
     positions.set(event.seat, to);
     plan.landingSeat = remaining === 0 ? event.seat : null;

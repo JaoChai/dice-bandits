@@ -30,7 +30,11 @@ export default class BoardScene extends Phaser.Scene {
   private spacePositions = new Map<number, { x: number; y: number }>();
   private renderSignature = '';
   private wholeMap = false;
-  private ringTween: Phaser.Tweens.Tween | null = null;
+  private walkCounter?: Phaser.GameObjects.Container;
+  private walkCountText?: Phaser.GameObjects.Text;
+  private walkCountPill?: Phaser.GameObjects.Graphics;
+  private walkPillColor = 0xf5c51c;
+  private activeShadow?: Phaser.GameObjects.Ellipse;
   private latestState: GameState | null = null;
   private onlineMovement: ReturnType<typeof createMovementOverlay> | undefined;
   private movementReadout?: ReturnType<typeof createMovementReadout>;
@@ -147,6 +151,10 @@ export default class BoardScene extends Phaser.Scene {
       this.cancelLocalMovement();
       this.movementReadout?.destroy();
       this.movementReadout = undefined;
+      this.walkCounter?.destroy();
+      this.walkCounter = undefined;
+      this.walkCountText = undefined;
+      this.walkCountPill = undefined;
     };
     this.events.once('destroy', () => {
       destroyReadout();
@@ -222,6 +230,8 @@ export default class BoardScene extends Phaser.Scene {
     this.localWaits?.clear();
     this.cameraMovement?.remove();
     this.cameraMovement = undefined;
+    this.walkCounter?.setVisible(false);
+    this.walkCountText?.setText('');
     if (!keepReadout) this.movementReadout?.clear();
   }
 
@@ -274,22 +284,53 @@ export default class BoardScene extends Phaser.Scene {
           const destination = this.spacePositions.get(segment.to);
           if (!token || !destination) continue;
           token.setFlipX(destination.x < token.x);
+          if (segmentIndex === 1 && speed > 0) {
+            this.panCameraTo(token.x, token.y, 300 * speed);
+            await pause(300 * speed);
+            if (!current()) return;
+            this.showWalkCounter(token, 0);
+          }
           this.panCameraTo(destination.x, destination.y, segment.hopMs * speed);
           if (speed > 0) {
+            const startX = token.x,
+              startY = token.y,
+              baseScaleY = token.scaleY;
+            const hop = { progress: 0 };
             await new Promise<void>((resolve) => {
               const handle: { tween?: Phaser.Tweens.Tween } = {};
               const finish = (): void => {
                 handle.tween?.remove();
+                token.scaleY = baseScaleY;
                 this.localWaits.delete(finish);
                 resolve();
               };
               handle.tween = this.tweens.add({
-                targets: token,
-                x: destination.x,
-                y: destination.y,
+                targets: hop,
+                progress: 1,
                 duration: segment.hopMs * speed,
-                ease: 'Sine.easeInOut',
-                onComplete: finish,
+                ease: 'Linear',
+                onUpdate: () => {
+                  if (!current()) return;
+                  const k = hop.progress;
+                  const groundY = startY + (destination.y - startY) * k;
+                  token.setPosition(
+                    startX + (destination.x - startX) * k,
+                    groundY - Math.sin(Math.PI * k) * 26,
+                  );
+                  // Squash at touchdown, then recover over the final 15%.
+                  token.scaleY = baseScaleY * (k >= 0.85 ? 0.88 + (0.12 * (k - 0.85)) / 0.15 : 1);
+                  this.walkCounter?.setPosition(token.x, token.y - token.displayHeight - 8);
+                  if (segment.seat === previous.turnSeat)
+                    this.activeShadow?.setPosition(token.x, groundY);
+                },
+                onComplete: () => {
+                  if (current()) {
+                    token.setPosition(destination.x, destination.y);
+                    if (segment.seat === previous.turnSeat)
+                      this.activeShadow?.setPosition(destination.x, destination.y);
+                  }
+                  finish();
+                },
               });
               this.localWaits.add(finish);
             });
@@ -298,25 +339,14 @@ export default class BoardScene extends Phaser.Scene {
           this.movementReadout?.step(segment.remaining, segment.seat, { static: speed === 0 });
           this.applyViewports();
           options?.onStep?.(segment.remaining, segment.seat);
-          // One transient outline per actually reached tile, not a predicted route.
-          const ring = speed > 0 ? this.add.graphics().setDepth(19) : undefined;
-          ring?.lineStyle(4, 0xf5c51c, 0.9).strokeCircle(destination.x, destination.y, 34);
-          const removeRing = (): void => {
-            ring?.destroy();
-          };
-          this.localWaits.add(removeRing);
-          try {
-            await pause(segment.holdMs * speed);
+          if (speed > 0) this.showWalkCounter(token, segment.remaining);
+          await pause(segment.holdMs * speed);
+          if (!current()) return;
+          if (segmentIndex === plan.segments.length && plan.landingSpace !== null) {
+            await pause((mode === 'human' ? 180 : 0) * speed);
             if (!current()) return;
-            if (segmentIndex === plan.segments.length && plan.landingSpace !== null) {
-              await pause((mode === 'human' ? 180 : 0) * speed);
-              if (!current()) return;
-              this.movementReadout?.land(plan.landingSpace, events, { keepCounter: speed === 0 });
-              await pause((mode === 'human' ? 650 : 250) * speed);
-            }
-          } finally {
-            this.localWaits.delete(removeRing);
-            removeRing();
+            this.movementReadout?.land(plan.landingSpace, events, { keepCounter: speed === 0 });
+            await pause((mode === 'human' ? 650 : 250) * speed);
           }
         } else if (event.type === 'GoldStolen' && token) {
           coinBurst(this, token, speed);
@@ -421,7 +451,11 @@ export default class BoardScene extends Phaser.Scene {
     if (signature === this.renderSignature) return;
     this.renderSignature = signature;
     clearForkArrows(this);
+    // The scene-owned pill is not part of the redrawable board geometry.
+    if (this.walkCounter) this.children.remove(this.walkCounter);
     this.children.removeAll(true);
+    if (this.walkCounter) this.children.add(this.walkCounter);
+    this.activeShadow = undefined;
     this.tokenObjects.clear();
     this.spacePositions.clear();
     closeSpaceInfo();
@@ -467,7 +501,13 @@ export default class BoardScene extends Phaser.Scene {
       const ring = this.add.graphics().setDepth(40);
       ring.lineStyle(3, seatTint(colors[playerIndex]!), 1);
       ring.strokeCircle(x, y, 14);
-      if (player.seat === state.turnSeat) this.startActiveRing(x, y);
+      if (player.seat === state.turnSeat) {
+        token.setDepth(36).setScale(token.scaleX * 1.18, token.scaleY * 1.18);
+        this.activeShadow = this.add
+          .ellipse(x, y, 48, 16, 0x3a1f0d, 0.22)
+          .setDepth(29)
+          .setName('active-token-shadow');
+      } else token.setAlpha(0.8);
     }
 
     // Layer 5: fork arrows while a branch choice is pending (Review Focus 3).
@@ -501,23 +541,38 @@ export default class BoardScene extends Phaser.Scene {
     this.applyCamera(cameraTarget(state, this.wholeMap, this.cameras.main));
   }
 
-  private startActiveRing(x: number, y: number): void {
-    this.ringTween?.remove();
-    const ring = this.add.graphics().setDepth(41);
-    ring.lineStyle(3, 0xf5c51c, 1);
-    ring.strokeCircle(x, y, 20);
-    this.ringTween =
-      motionScale() > 0 && !reducedMotion()
-        ? this.tweens.add({
-            targets: ring,
-            scale: 1.15,
-            alpha: 0.55,
-            duration: 600,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut',
-          })
-        : null;
+  /** One scene-owned pill, retained through redraws and hidden on cancellation. */
+  private showWalkCounter(token: Phaser.GameObjects.Image, remaining: number): void {
+    if (!this.walkCounter) {
+      const theme = getComputedStyle(document.documentElement);
+      const cocoa = theme.getPropertyValue('--c-cocoa').trim() || '#5c3317';
+      const gold = theme.getPropertyValue('--c-gold').trim() || '#f5c51c';
+      const font = getComputedStyle(document.documentElement).fontFamily;
+      this.walkCountText = this.add
+        .text(0, -2, '', {
+          fontFamily: font,
+          fontSize: '30px',
+          fontStyle: 'bold',
+          color: cocoa,
+        })
+        .setOrigin(0.5, 1);
+      this.walkCountPill = this.add.graphics();
+      this.walkCounter = this.add
+        .container(0, 0, [this.walkCountPill, this.walkCountText])
+        .setName('walk-counter')
+        .setDepth(60)
+        .setVisible(false);
+      this.walkPillColor = Number.parseInt(gold.replace('#', ''), 16);
+    }
+    this.walkCountText!.setText(remaining > 0 ? String(remaining) : '');
+    const width = this.walkCountText!.displayWidth + 24;
+    const height = this.walkCountText!.height + 4;
+    this.walkCountPill!.clear()
+      .fillStyle(this.walkPillColor, 1)
+      .fillRoundedRect(-width / 2, -height, width, height, height / 2);
+    this.walkCounter
+      .setPosition(token.x, token.y - token.displayHeight - 8)
+      .setVisible(remaining > 0);
   }
 
   /** Turn-start ribbon text (`turn-ribbon` DOM element, rendered by hud.ts). */

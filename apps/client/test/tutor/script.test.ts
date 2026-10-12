@@ -485,6 +485,7 @@ describe('frozen ordinary-engine tutorial route', () => {
 
   it('records speed-1 presentation budgets from real replay frames, not fabricated battles', () => {
     const frames = validateScript(TUTORIAL_SCRIPT);
+    let leadInMs = 0;
     let walkMs = 0;
     let arrivalMs = 0;
     let diceMs = 0;
@@ -496,7 +497,11 @@ describe('frozen ordinary-engine tutorial route', () => {
       const mover = frame.events.find((event) => event.type === 'Moved')?.seat;
       const mode = mover === 1 ? 'bot' : 'human';
       const movement = planMovement(frame.before, frame.events, mode);
-      walkMs += movement.segments.reduce((sum, segment) => sum + segment.hopMs + segment.holdMs, 0);
+      leadInMs += movement.segments.length > 0 ? 300 : 0;
+      walkMs += movement.segments.reduce(
+        (total, segment) => total + segment.hopMs + segment.holdMs,
+        0,
+      );
       if (movement.landingSpace !== null) arrivalMs += mode === 'human' ? 180 + 650 : 250;
       for (const event of frame.events) {
         if (event.type === 'DiceRolled') diceMs += 350 + (event.seat === 0 ? 2300 : 0);
@@ -522,6 +527,7 @@ describe('frozen ordinary-engine tutorial route', () => {
     }
     const botPauseMs = 36 * 100;
     const stats = {
+      leadInMs,
       walkMs,
       arrivalMs,
       diceMs,
@@ -533,7 +539,8 @@ describe('frozen ordinary-engine tutorial route', () => {
     };
     console.log('SPEED_1_ESTIMATE', JSON.stringify(stats));
     expect(stats).toEqual({
-      walkMs: 14_800,
+      leadInMs: 7_500,
+      walkMs: 32_500,
       arrivalMs: 6_730,
       diceMs: 23_650,
       battleMs: 23_203.8,
@@ -542,9 +549,16 @@ describe('frozen ordinary-engine tutorial route', () => {
       humanBattleSteps: 9,
       botBattleSteps: 6,
     });
-    expect(walkMs + arrivalMs + diceMs + battleMs + robberyMs + botPauseMs).toBeCloseTo(
-      72_343.8,
-      3,
-    );
+    const presentationMs =
+      leadInMs + walkMs + arrivalMs + diceMs + battleMs + robberyMs + botPauseMs;
+    expect(presentationMs).toBeCloseTo(97_543.8, 3);
+    // The unchanged lesson allows 4s per prompt and 5s per topic recap.
+    // This is a guided replay estimate, not a measured UI journey.
+    const readingMs = 31 * 4_000 + 8 * 5_000;
+    const guidedEstimateMs = presentationMs + readingMs;
+    console.log('GUIDED_ESTIMATE', JSON.stringify({ presentationMs, readingMs, guidedEstimateMs }));
+    expect(readingMs).toBe(164_000);
+    expect(guidedEstimateMs).toBeCloseTo(261_543.8, 3);
+    expect(guidedEstimateMs).toBeLessThan(5 * 60_000);
   });
 });

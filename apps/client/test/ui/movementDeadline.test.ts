@@ -1,4 +1,7 @@
 import type Phaser from 'phaser';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 import { createGame, step } from '@dice-bandits/engine';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMovementOverlay } from '../../src/scenes/board/movementOverlay';
@@ -28,9 +31,7 @@ async function setup() {
   // 33ms of a stalled frame, unlike the ideal setTimeout mocks in older tests.
   const { default: TweenManager } = await vi.importActual<{
     default: new (scene: Phaser.Scene) => Phaser.Tweens.TweenManager & { start(): void };
-  }>(
-    new URL('../../../../node_modules/phaser/src/tweens/TweenManager.js', import.meta.url).pathname,
-  );
+  }>(new URL('../src/tweens/TweenManager.js', `file://${require.resolve('phaser')}`).pathname);
   const previous = createGame({
     seed: 'ghost-six-2',
     rounds: 12,

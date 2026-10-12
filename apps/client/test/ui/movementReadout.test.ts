@@ -39,15 +39,80 @@ function fixture(control: 'human' | 'bot' = 'human') {
   throw new Error('No five-step fixture');
 }
 
+type TweenConfig = {
+  duration: number;
+  targets: { progress?: number };
+  onUpdate?: () => void;
+  onComplete?: () => void;
+};
+
+function counterObject() {
+  const object = {
+    x: 0,
+    y: 0,
+    visible: false,
+    text: '',
+    displayWidth: 20,
+    height: 36,
+    setDepth: vi.fn(),
+    setName: vi.fn(),
+    setOrigin: vi.fn(),
+    setVisible: vi.fn(),
+    setPosition: vi.fn(),
+    setText: vi.fn(),
+    destroy: vi.fn(),
+    clear: vi.fn(),
+    fillStyle: vi.fn(),
+    fillRoundedRect: vi.fn(),
+    lineStyle: vi.fn(),
+    strokeCircle: vi.fn(),
+  };
+  for (const method of [
+    object.setDepth,
+    object.setName,
+    object.setOrigin,
+    object.clear,
+    object.fillStyle,
+    object.fillRoundedRect,
+    object.lineStyle,
+    object.strokeCircle,
+  ])
+    method.mockReturnValue(object);
+  object.setVisible.mockImplementation((visible: boolean) => {
+    object.visible = visible;
+    return object;
+  });
+  object.setText.mockImplementation((text: string) => {
+    object.text = text;
+    return object;
+  });
+  object.setPosition.mockImplementation((x: number, y: number) => {
+    Object.assign(object, { x, y });
+    return object;
+  });
+  return object;
+}
+
 function setup(previous: GameState) {
   const callbacks = new Map<string, () => void>();
   const source = previous.board.spaces.find(
     (s) => s.id === previous.players[previous.turnSeat]!.pos,
   )!;
-  const token = { x: source.x, y: source.y, setFlipX: vi.fn(), setPosition: vi.fn() };
+  const token = {
+    x: source.x,
+    y: source.y,
+    scaleX: 1,
+    scaleY: 1,
+    displayHeight: 72,
+    setFlipX: vi.fn(),
+    setPosition: vi.fn(),
+  };
   token.setPosition.mockImplementation((x: number, y: number) => Object.assign(token, { x, y }));
-  const tweenConfigs: Array<{ duration: number; targets: unknown }> = [];
+  const tweenConfigs: TweenConfig[] = [];
   const graphics: Array<{ destroy: ReturnType<typeof vi.fn> }> = [];
+  const label = counterObject();
+  const labelText = counterObject();
+  const pill = counterObject();
   const resizeHandlers = new Map<string, () => void>();
   const camera = {
     width: 1280,
@@ -88,18 +153,9 @@ function setup(previous: GameState) {
       killTweensOf: vi.fn(),
     },
     add: {
-      graphics: () => {
-        const graphic = {
-          setDepth: vi.fn(),
-          lineStyle: vi.fn(),
-          strokeCircle: vi.fn(),
-          destroy: vi.fn(),
-        };
-        for (const method of [graphic.setDepth, graphic.lineStyle, graphic.strokeCircle])
-          method.mockReturnValue(graphic);
-        graphics.push(graphic);
-        return graphic;
-      },
+      text: vi.fn(() => labelText),
+      container: vi.fn(() => label),
+      graphics: () => pill,
     },
   }) as BoardScene;
   // Exercise renderBoard's real lifecycle and signature guard without drawing
@@ -118,7 +174,18 @@ function setup(previous: GameState) {
     ]);
     internal.renderBoard(state);
   };
-  return { scene, token, tweenConfigs, callbacks, graphics, resizeHandlers, commit };
+  return {
+    scene,
+    token,
+    tweenConfigs,
+    callbacks,
+    graphics,
+    resizeHandlers,
+    commit,
+    label,
+    labelText,
+    pill,
+  };
 }
 
 beforeEach(() => {
@@ -183,6 +250,101 @@ describe('movement readout', () => {
 });
 
 describe('real local BoardScene playback', () => {
+  it('follows the sine arc, plants exactly, counts down in one pill and never outlines destinations', async () => {
+    const { previous, events } = fixture();
+    const moves = events.filter((e) => e.type === 'Moved');
+    const { scene, token, tweenConfigs, label, labelText, pill } = setup(previous);
+    const start = { x: token.x, y: token.y };
+    const destination = previous.board.spaces.find((s) => s.id === moves[0]!.params.to)!;
+    const promise = scene.playEvents(moves);
+    await vi.advanceTimersByTimeAsync(300);
+    const hop = tweenConfigs.find((c) => c.targets.progress !== undefined)!;
+    expect(hop, 'arc is driven by normalized progress').toBeDefined();
+    hop.targets.progress = 0.5;
+    hop.onUpdate!();
+    expect(token.x).toBeCloseTo((start.x + destination.x) / 2);
+    expect(token.y).toBeCloseTo((start.y + destination.y) / 2 - 26);
+    expect(label.x).toBe(token.x);
+    expect(label.y).toBe(token.y - token.displayHeight - 8);
+    hop.targets.progress = 0.85;
+    hop.onUpdate!();
+    expect(token.scaleY).toBeCloseTo(0.88);
+    await vi.advanceTimersByTimeAsync(560);
+    expect(token).toMatchObject({ x: destination.x, y: destination.y, scaleY: 1 });
+    expect(labelText.text).toBe('4');
+    expect(label.visible).toBe(true);
+    for (const remaining of [3, 2, 1, 0]) {
+      await vi.advanceTimersByTimeAsync(700);
+      expect(labelText.text).toBe(remaining > 0 ? String(remaining) : '');
+      expect(label.visible).toBe(remaining > 0);
+    }
+    await vi.runAllTimersAsync();
+    await promise;
+    expect(pill.lineStyle).not.toHaveBeenCalled();
+    expect(pill.strokeCircle).not.toHaveBeenCalled();
+    expect(label.visible).toBe(false);
+    const endpoint = previous.board.spaces.find((s) => s.id === moves.at(-1)!.params.to)!;
+    expect(token).toMatchObject({ x: endpoint.x, y: endpoint.y, scaleY: 1 });
+  });
+
+  it('reuses the scene pill across batches, hides it and restores squash on cancel, then destroys it on shutdown', async () => {
+    const { previous, events } = fixture();
+    const { scene, token, tweenConfigs, label, labelText, callbacks } = setup(previous);
+    scene.create();
+    const moves = events.filter((e) => e.type === 'Moved');
+    const promise = scene.playEvents(moves);
+    await vi.advanceTimersByTimeAsync(300 + 560 + 140);
+    const hop = tweenConfigs.filter((c) => c.targets.progress !== undefined).at(-1)!;
+    expect(labelText.text).toBe('4');
+    hop.targets.progress = 0.85;
+    hop.onUpdate!();
+    scene.cancelLocalMovement();
+    await promise;
+    expect(token.scaleY).toBe(1);
+    expect(label.visible).toBe(false);
+    expect(labelText.text).toBe('');
+    expect(vi.getTimerCount()).toBe(0);
+    expect(label.destroy).not.toHaveBeenCalled();
+    const again = scene.playEvents(moves.slice(1));
+    await vi.advanceTimersByTimeAsync(300 + 560);
+    expect(scene.add.container).toHaveBeenCalledOnce();
+    callbacks.get('destroy')!();
+    await again;
+    expect(label.destroy).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('leads the camera to the source for 300ms before the first hop', async () => {
+    const { previous, events } = fixture();
+    const { scene, token, tweenConfigs } = setup(previous);
+    Object.assign(scene, { wholeMap: false });
+    const promise = scene.playEvents(events.filter((e) => e.type === 'Moved'));
+    expect(tweenConfigs[0]).toMatchObject({
+      duration: 300,
+      scrollX: token.x - 640,
+      scrollY: token.y - 360,
+    });
+    await vi.advanceTimersByTimeAsync(299);
+    expect(tweenConfigs).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(tweenConfigs.some((c) => c.targets.progress === 0)).toBe(true);
+    scene.cancelLocalMovement();
+    await promise;
+  });
+  it('hides and clears the reusable pill at touchdown before the arrival hold finishes', async () => {
+    const { previous, events } = fixture();
+    const { scene, label, labelText } = setup(previous);
+    const moves = events.filter((event) => event.type === 'Moved');
+    const promise = scene.playEvents(moves, { mode: 'human' });
+    await vi.advanceTimersByTimeAsync(300 + 4 * (560 + 140) + 560);
+    expect(label.visible).toBe(false);
+    expect(labelText.text).toBe('');
+    expect(label.destroy).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    await vi.runAllTimersAsync();
+    await promise;
+  });
+
   it.each(['human', 'bot'] as const)(
     'uses moved-seat %s timing and counts 4,3,2,1,0 at planted endpoints',
     async (control) => {
@@ -202,20 +364,20 @@ describe('real local BoardScene playback', () => {
       );
       await vi.runAllTimersAsync();
       await promise;
-      const hop = control === 'human' ? 280 : 120;
-      const hold = control === 'human' ? 120 : 40;
+      const hop = control === 'human' ? 560 : 400;
+      const hold = control === 'human' ? 140 : 100;
       expect(counts.map((c) => c.count)).toEqual([4, 3, 2, 1, 0]);
-      expect(counts.map((c) => c.at)).toEqual(moves.map((_, i) => i * (hop + hold) + hop));
+      expect(counts.map((c) => c.at)).toEqual(moves.map((_, i) => 300 + i * (hop + hold) + hop));
       expect(counts.map(({ x, y }) => ({ x, y }))).toEqual(
         moves.map((e) => {
           const s = previous.board.spaces.find((s) => s.id === e.params.to)!;
           return { x: s.x, y: s.y };
         }),
       );
-      expect(tweenConfigs.filter((c) => c.targets === token).map((c) => c.duration)).toEqual(
-        Array(5).fill(hop),
-      );
-      expect(Date.now() - started).toBe(control === 'human' ? 2830 : 1050);
+      expect(
+        tweenConfigs.filter((c) => c.targets.progress !== undefined).map((c) => c.duration),
+      ).toEqual(Array(5).fill(hop));
+      expect(Date.now() - started).toBe(control === 'human' ? 4630 : 3050);
       expect(find('movement-readout')).toBeNull();
     },
   );
@@ -388,14 +550,14 @@ describe('real local BoardScene playback', () => {
   );
   it('cleans empty/loading/error batches and an explicit mode overrides moved-seat inference', async () => {
     const { previous, events } = fixture('bot');
-    const { scene, tweenConfigs, token } = setup(previous);
+    const { scene, tweenConfigs } = setup(previous);
     const moves = events.filter((e) => e.type === 'Moved');
     const promise = scene.playEvents(moves, { mode: 'human' });
     await vi.runAllTimersAsync();
     await promise;
-    expect(tweenConfigs.filter((c) => c.targets === token).map((c) => c.duration)).toEqual(
-      Array(5).fill(280),
-    );
+    expect(
+      tweenConfigs.filter((c) => c.targets.progress !== undefined).map((c) => c.duration),
+    ).toEqual(Array(5).fill(560));
     await scene.playEvents([]);
     expect(find('movement-readout')).toBeNull();
     const unloaded = setup(previous).scene;
@@ -406,7 +568,9 @@ describe('real local BoardScene playback', () => {
     broken.tweens.add = () => {
       throw new Error('renderer unavailable');
     };
-    await expect(broken.playEvents(moves)).rejects.toThrow('renderer unavailable');
+    const failure = expect(broken.playEvents(moves)).rejects.toThrow('renderer unavailable');
+    await vi.runAllTimersAsync();
+    await failure;
     expect(find('movement-readout')).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
   });

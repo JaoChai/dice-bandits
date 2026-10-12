@@ -138,7 +138,6 @@ function realSceneOn(gameMock: {
     tokenObjects: new Map(),
     spacePositions: new Map(),
     wholeMap: false,
-    ringTween: null,
     children: { removeAll: vi.fn() },
     cameras: {
       main: {

@@ -77,14 +77,27 @@ export function createMovementOverlay(scene: Phaser.Scene): {
           ghosts.set(segment.seat, ghost);
         }
         ghost.setFlipX(destination.x < ghost.x);
+        const startX = ghost.x,
+          startY = ghost.y,
+          baseScaleY = ghost.scaleY;
+        const hop = { progress: 0 };
         tween = scene.tweens.add({
-          targets: ghost,
-          x: destination.x,
-          y: destination.y,
+          targets: hop,
+          progress: 1,
           duration: segment.hopMs,
-          ease: 'Sine.easeInOut',
+          ease: 'Linear',
+          onUpdate: () => {
+            if (revision !== ownedRevision || generation !== nextGeneration) return;
+            const k = hop.progress;
+            ghost.x = startX + (destination.x - startX) * k;
+            ghost.y = startY + (destination.y - startY) * k - Math.sin(Math.PI * k) * 26;
+            ghost.scaleY = baseScaleY * (k >= 0.85 ? 0.88 + (0.12 * (k - 0.85)) / 0.15 : 1);
+          },
           onComplete: () => {
             if (revision !== ownedRevision || generation !== nextGeneration) return;
+            ghost.x = destination.x;
+            ghost.y = destination.y;
+            ghost.scaleY = baseScaleY;
             tween = undefined;
             advance(index + 1);
           },

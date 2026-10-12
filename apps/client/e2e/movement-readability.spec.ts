@@ -10,8 +10,10 @@ import { expect, test, type Page } from '@playwright/test';
 import type Phaser from 'phaser';
 import { openTitleChoice, observeBoardGame, startJourney } from './helpers';
 
+test.use({ video: 'on' });
+
 type Point = { x: number; y: number };
-type Sample = { token: Point; projected: Point; spaces: Point[] };
+type Sample = { token: Point; projected: Point; spaces: Point[]; lift: number };
 type ProbeWindow = Window & {
   __m5aGame?: Phaser.Game;
   __walk?: { done: boolean; samples: Sample[]; final?: Point; elapsed?: number };
@@ -74,7 +76,22 @@ for (const speed of [1, 0]) {
         const spaces = route.map((id) => previous.board.spaces.find((space) => space.id === id)!);
         const probe = { done: false, samples: [] } as NonNullable<ProbeWindow['__walk']>;
         (window as ProbeWindow).__walk = probe;
+        let hopIndex = -1;
+        let progress: { progress: number } | undefined;
+        const add = scene.tweens.add.bind(scene.tweens);
+        scene.tweens.add = (config) => {
+          const c = config as Phaser.Types.Tweens.TweenBuilderConfig;
+          if (c.progress === 1) {
+            hopIndex++;
+            progress = c.targets as { progress: number };
+          }
+          return add(config);
+        };
         const record = () => {
+          const from = spaces[Math.max(0, hopIndex)]!;
+          const to = spaces[Math.max(0, hopIndex) + 1]!;
+          const k = progress?.progress ?? 0;
+          const groundY = from.y + (to.y - from.y) * k;
           const canvas = game.canvas.getBoundingClientRect();
           const project = (point: Point) => {
             const p = scene.cameras.main.getViewMatrix().transformPoint(point.x, point.y);
@@ -85,7 +102,8 @@ for (const speed of [1, 0]) {
           };
           probe.samples.push({
             token: { x: token.x, y: token.y },
-            projected: project(token),
+            projected: project({ x: token.x, y: groundY }),
+            lift: groundY - token.y,
             spaces: spaces.map(project),
           });
         };
@@ -107,6 +125,10 @@ for (const speed of [1, 0]) {
       contentType: 'application/json',
     });
     if (speed > 0) {
+      expect(Math.max(...probe.samples.map((sample) => sample.lift))).toBeGreaterThan(25);
+      expect(probe.samples.every((sample) => sample.lift >= -0.01 && sample.lift <= 26.01)).toBe(
+        true,
+      );
       const ordered: number[] = [];
       for (const sample of probe.samples) {
         for (let segment = 0; segment < route.length - 1; segment++) {
@@ -137,6 +159,89 @@ for (const speed of [1, 0]) {
     await page.screenshot({ path: info.outputPath(`walk-speed-${speed}.png`) });
   });
 }
+
+test('real bot follow view tracks hops and reuses a readable overhead counter', async ({
+  page,
+}, info) => {
+  const fixture = fiveStepWalk();
+  const seat = fixture.moves[0]!.seat!;
+  expect(fixture.previous.players[seat]!.control).toBe('bot');
+  await observeBoardGame(page);
+  await startJourney(page);
+  await page.waitForFunction(() => window.__db?.art.boardReady);
+  await page.evaluate(
+    ({ previous, moves, seat }) => {
+      const game = (window as ProbeWindow).__m5aGame!;
+      const scene = game.scene.getScene('BoardScene') as Phaser.Scene & {
+        tokenObjects: Map<number, Phaser.GameObjects.Image>;
+        walkCounter?: Phaser.GameObjects.Container;
+        walkCountText?: Phaser.GameObjects.Text;
+        playEvents(events: GameEvent[]): Promise<void>;
+        toggleWholeMap(state: GameState, whole: boolean): void;
+      };
+      window.diceBanditsSpeed = 0;
+      game.events.emit('game-state', previous);
+      scene.toggleWholeMap(previous, false);
+      window.diceBanditsSpeed = 1;
+      const token = scene.tokenObjects.get(seat)!;
+      const probe = {
+        done: false,
+        frames: [] as Array<{ count: string; visible: boolean; offsetX: number; offsetY: number }>,
+        elapsed: 0,
+      };
+      (window as unknown as { __botFollow: typeof probe }).__botFollow = probe;
+      const record = () =>
+        probe.frames.push({
+          count: scene.walkCountText?.text ?? '',
+          visible: scene.walkCounter?.visible ?? false,
+          offsetX: (scene.walkCounter?.x ?? token.x) - token.x,
+          offsetY: (scene.walkCounter?.y ?? token.y) - (token.y - token.displayHeight - 8),
+        });
+      game.events.on('postrender', record);
+      const started = performance.now();
+      void scene.playEvents(moves).then(() => {
+        record();
+        probe.elapsed = performance.now() - started;
+        probe.done = true;
+        game.events.off('postrender', record);
+      });
+    },
+    { previous: fixture.previous, moves: fixture.moves, seat },
+  );
+  await page.waitForFunction(() =>
+    (
+      window as unknown as { __botFollow: { frames: Array<{ count: string; visible: boolean }> } }
+    ).__botFollow.frames.some((frame) => frame.visible && frame.count === '4'),
+  );
+  await page.screenshot({ path: info.outputPath('bot-follow-counter.png') });
+  await page.waitForFunction(
+    () => (window as unknown as { __botFollow: { done: boolean } }).__botFollow.done,
+  );
+  const probe = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __botFollow: {
+            frames: Array<{ count: string; visible: boolean; offsetX: number; offsetY: number }>;
+            elapsed: number;
+          };
+        }
+      ).__botFollow,
+  );
+  const visible = probe.frames.filter((frame) => frame.visible);
+  expect([...new Set(visible.map((frame) => frame.count))]).toEqual(['4', '3', '2', '1']);
+  expect(
+    visible.every((frame) => Math.abs(frame.offsetX) < 0.01 && Math.abs(frame.offsetY) < 0.01),
+  ).toBe(true);
+  expect(probe.frames.at(-1)).toMatchObject({ visible: false, count: '' });
+  // Same -30/+670ms browser tolerance as the human walk; authored bot total 3,050ms.
+  expect(probe.elapsed).toBeGreaterThanOrEqual(3020);
+  expect(probe.elapsed).toBeLessThan(3720);
+  await info.attach('bot-follow.json', {
+    body: JSON.stringify(probe),
+    contentType: 'application/json',
+  });
+});
 
 function goldWalk() {
   let state = createGame({
@@ -216,7 +321,8 @@ async function startGoldWalk(page: Page, lang: 'th' | 'en', speed = 1, reduced =
     const add = scene.tweens.add.bind(scene.tweens);
     scene.tweens.add = (config) => {
       const c = config as Phaser.Types.Tweens.TweenBuilderConfig;
-      if (c.targets === token && c.x !== undefined)
+      const progress = c.targets as { progress?: number };
+      if (typeof progress?.progress === 'number' && c.progress === 1)
         trace.hops.push({ at: performance.now(), duration: Number(c.duration) });
       return add(config);
     };
@@ -351,14 +457,16 @@ for (const lang of ['th', 'en'] as const) {
           lang === 'th' ? `เหลือ ${count} ช่อง` : `${count} spaces left`,
         ),
       );
-      expect(trace.hops.map((hop) => hop.duration)).toEqual([280, 280, 280, 280, 280]);
+      expect(trace.hops.map((hop) => hop.duration)).toEqual([560, 560, 560, 560, 560]);
       for (let i = 1; i < trace.hops.length; i++)
         expect(
           trace.hops[i]!.at - trace.counts[i - 1]!.at,
           'actual planted dwell before next hop',
-        ).toBeGreaterThanOrEqual(115);
-      expect(trace.ended! - trace.hops[0]!.at).toBeGreaterThanOrEqual(2800);
-      expect(trace.ended! - trace.hops[0]!.at).toBeLessThan(3500);
+        ).toBeGreaterThanOrEqual(135);
+      // 5*(560+140) + 300 lead-in + 180 settle + 650 arrival = 4,630ms.
+      // Keep the original browser tolerance (-30/+670ms), not a wider bound.
+      expect(trace.ended! - trace.hops[0]!.at + 300).toBeGreaterThanOrEqual(4600);
+      expect(trace.ended! - trace.hops[0]!.at + 300).toBeLessThan(5300);
       expect(trace.frames.length).toBeGreaterThan(30);
       expect(trace.frames.every((frame) => !frame.overlap && frame.clamped)).toBe(true);
       expect(trace.frames.filter((frame) => frame.count).length).toBeGreaterThan(5);

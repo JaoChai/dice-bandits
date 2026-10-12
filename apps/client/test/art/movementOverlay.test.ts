@@ -48,6 +48,7 @@ function setup() {
     const object = {
       x,
       y,
+      scaleY: 1,
       destroy: vi.fn(),
       setAlpha: vi.fn(),
       setDepth: vi.fn(),
@@ -82,6 +83,19 @@ function setup() {
 }
 
 describe('movement plan', () => {
+  it.each([
+    ['human', 560, 140],
+    ['bot', 400, 100],
+  ] as const)(
+    'uses the approved %s hop and planted hold without changing the route',
+    (mode, hopMs, holdMs) => {
+      const plan = planMovement(state, events, mode);
+      expect(plan.segments.map(({ hopMs, holdMs }) => [hopMs, holdMs])).toEqual(
+        Array(5).fill([hopMs, holdMs]),
+      );
+      expect(plan.segments.map(({ to }) => to)).toEqual([6, 7, 8, 9, 10]);
+    },
+  );
   it('uses ordered board IDs and before-consumption counts, without changing state', () => {
     const before = JSON.stringify(state);
     const plan = planMovement(state, events, 'online');
@@ -120,6 +134,27 @@ describe('movement plan', () => {
 });
 
 describe('detached movement overlay', () => {
+  it('arcs 26px above the route and plants the ghost exactly without extending its deadline', async () => {
+    const { overlay, scene, objects } = setup();
+    const plan = planMovement(state, events, 'online');
+    overlay.play(plan, 1);
+    const config = scene.tweens.add.mock.calls[0]![0];
+    expect(config.targets).toHaveProperty('progress', 0);
+    config.targets.progress = 0.5;
+    config.onUpdate();
+    const source = state.board.spaces.find((s) => s.id === plan.segments[0]!.from)!;
+    const destination = state.board.spaces.find((s) => s.id === plan.segments[0]!.to)!;
+    expect(objects[0]!.x).toBeCloseTo((source.x + destination.x) / 2);
+    expect(objects[0]!.y).toBeCloseTo((source.y + destination.y) / 2 - 26);
+    await vi.advanceTimersByTimeAsync(120);
+    expect(objects[0]).toMatchObject({ x: destination.x, y: destination.y, scaleY: 1 });
+    overlay.destroy();
+    config.targets.progress = 0.25;
+    config.onUpdate();
+    expect(objects[0]).toMatchObject({ x: destination.x, y: destination.y });
+    await vi.runAllTimersAsync();
+    expect(objects[0]!.destroy).toHaveBeenCalledOnce();
+  });
   it('BoardScene ignores older and repeated generations before touching the current ghost', async () => {
     window.diceBanditsSpeed = 1;
     const { scene, objects } = setup();
