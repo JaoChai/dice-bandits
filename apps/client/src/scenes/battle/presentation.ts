@@ -12,19 +12,22 @@ export type BattleBeat = {
   outcome?: 'hit' | 'miss' | 'blocked' | 'countered' | 'mutual' | null;
   revealed?: Array<{ side: Side; secretId: string }>;
   winner?: Side | null;
+  commands?: Partial<Record<Side, 'attack' | 'strike' | 'defend' | 'counter' | 'secret'>>;
+  skills?: Partial<Record<Side, 'bulwark' | 'pickpocket' | 'firestorm' | 'sanctuary'>>;
+  stolenGold?: Partial<Record<Side, number>>;
   /** Changed display maxima, reconciled with HP at drain/static result only. */
   maxHp?: Partial<Record<Side, number>>;
 };
 
 const SIDES = ['a', 'b'] as const;
 const TIMINGS: ReadonlyArray<readonly [BattleBeat['kind'], number]> = [
-  ['reveal', 240],
-  ['anticipation', 220],
-  ['lunge', 160],
-  ['impact', 100],
-  ['damage', 500],
-  ['drain', 350],
-  ['result', 650],
+  ['reveal', 200],
+  ['anticipation', 260],
+  ['lunge', 180],
+  ['impact', 90],
+  ['damage', 430],
+  ['drain', 300],
+  ['result', 540],
 ];
 
 const identity = (fighter: Combatant): string | number | null =>
@@ -93,6 +96,9 @@ export function planBattle(
   const amounts = { a: 0, b: 0 };
   const healed = new Set<Side>();
   const revealed: NonNullable<BattleBeat['revealed']> = [];
+  const commands: NonNullable<BattleBeat['commands']> = {};
+  const skills: NonNullable<BattleBeat['skills']> = {};
+  const stolenGold: NonNullable<BattleBeat['stolenGold']> = {};
   let attacker: Side | null = null;
   let resolved = false;
   let blocked = false;
@@ -103,6 +109,21 @@ export function planBattle(
     presented[side] = clampHp(presented[side] - amount, battle[side].stats.maxHp);
   };
 
+  // Only this resolved batch can publish a command. Role and seat validation
+  // prevents foreign/redacted picks from selecting a cosmetic action.
+  for (const event of events) {
+    const { side, pick, role } = event.params;
+    if (event.type !== 'BattlePick' || (side !== 'a' && side !== 'b')) continue;
+    const fighter = battle[side];
+    if (event.seat !== (fighter.kind === 'player' ? fighter.seat : null)) continue;
+    const attacking = side === battle.attackerSide;
+    if (role !== (attacking ? 'attack' : 'defense')) continue;
+    if (
+      (attacking && (pick === 'attack' || pick === 'strike')) ||
+      (!attacking && (pick === 'defend' || pick === 'counter'))
+    )
+      commands[side] = pick;
+  }
   for (const event of events) {
     const params = event.params;
     if (event.type === 'DamageDealt') {
@@ -132,6 +153,17 @@ export function planBattle(
         continue;
       resolved = hasConsequence = true;
       revealed.push({ side, secretId: params.secret });
+      if (
+        params.secret === 'bulwark' ||
+        params.secret === 'pickpocket' ||
+        params.secret === 'firestorm' ||
+        params.secret === 'sanctuary'
+      ) {
+        skills[side] = params.secret;
+        commands[side] = 'secret';
+        if (params.secret === 'pickpocket' && positive(params.stolen) > 0)
+          stolenGold[side] = positive(params.stolen);
+      }
       // These are already-resolved engine event amounts, not combat calculations.
       addDamage(opposite(side), positive(params.damage) + positive(params.reflected));
       const healing = positive(params.healed);
@@ -241,20 +273,31 @@ export function planBattle(
       },
     ];
   }
-  return TIMINGS.map(([kind, duration]): BattleBeat => ({
-    kind,
-    duration: mode === 'human' ? duration : Math.floor((duration * 600) / 2220),
-    targets:
-      kind === 'damage'
-        ? damageSides.map((side) => target(side, false))
-        : kind === 'drain'
-          ? drainSides.map((side) => target(side, false))
-          : [],
-    ...(kind === 'drain' ? maxChange : {}),
-    result: kind === 'result' ? result : null,
-    ...(kind === 'reveal' && revealed.length > 0 ? { revealed } : {}),
-    ...(kind === 'anticipation' || kind === 'lunge' || kind === 'impact' ? { attacker } : {}),
-    ...(kind === 'impact' || kind === 'damage' ? { outcome } : {}),
-    ...(kind === 'result' ? { winner } : {}),
-  }));
+  const heavy = attacker !== null && commands[attacker] === 'strike';
+  const metadata = {
+    ...(Object.keys(commands).length ? { commands } : {}),
+    ...(Object.keys(skills).length ? { skills } : {}),
+    ...(Object.keys(stolenGold).length ? { stolenGold } : {}),
+  };
+  return TIMINGS.map(([kind, baseDuration]): BattleBeat => {
+    const duration =
+      heavy && kind === 'anticipation' ? 320 : heavy && kind === 'result' ? 480 : baseDuration;
+    return {
+      kind,
+      duration: mode === 'human' ? duration : Math.floor((duration * 600) / 2000),
+      ...metadata,
+      targets:
+        kind === 'damage'
+          ? damageSides.map((side) => target(side, false))
+          : kind === 'drain'
+            ? drainSides.map((side) => target(side, false))
+            : [],
+      ...(kind === 'drain' ? maxChange : {}),
+      result: kind === 'result' ? result : null,
+      ...(kind === 'reveal' && revealed.length > 0 ? { revealed } : {}),
+      ...(kind === 'anticipation' || kind === 'lunge' || kind === 'impact' ? { attacker } : {}),
+      ...(kind === 'lunge' || kind === 'impact' || kind === 'damage' ? { outcome } : {}),
+      ...(kind === 'result' ? { winner } : {}),
+    };
+  });
 }

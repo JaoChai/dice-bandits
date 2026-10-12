@@ -131,7 +131,7 @@ for (const lang of ['en', 'th']) {
           events: p.__battleEvents,
         };
       });
-      expect(timing.elapsed).toBeGreaterThanOrEqual(2220);
+      expect(timing.elapsed).toBeGreaterThanOrEqual(2000);
       expect(timing.elapsed).toBeLessThan(3500);
       await info.attach('battle-timing', {
         body: JSON.stringify({ ...timing, cpuRate, cpuThrottlingApplied: !!cpuSession }),
