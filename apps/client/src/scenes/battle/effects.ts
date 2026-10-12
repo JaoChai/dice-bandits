@@ -326,9 +326,9 @@ export function createBattleEffects(
                 bases[target.side].x + (target.side === 'a' ? -1 : 1) * layout.fighterHeight * 0.08,
               ease: 'Cubic.easeOut',
             });
-            // The white fill replaces (rather than dark-multiplies) the hit
-            // sprite for the whole impact. The next boundary clears the tint.
-            sprites[target.side].setTint(0xffffff).setTintMode(1 /* Phaser.TintModes.FILL */);
+            // Keep atlas transparency intact: FILL tint exposes near-transparent
+            // texels as a rectangular backdrop. The owned burst and camera flash
+            // below provide the impact flash without recolouring the sprite cell.
             const spark = graphic('impact', target.side);
             const heavy = beat.commands?.[beat.attacker ?? 'a'] === 'strike';
             const radius = layout.fighterHeight * (heavy ? 0.42 : 0.3);

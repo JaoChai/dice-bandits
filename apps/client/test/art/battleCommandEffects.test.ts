@@ -85,6 +85,7 @@ function renderer(detached = false) {
       scaleY: 1,
       angle: 0,
       alpha: 1,
+      tintMode: 0,
       flipX: false,
       texture: { key: 'hero', has: () => true },
       frame: { name: 'idle' },
@@ -172,6 +173,7 @@ function renderer(detached = false) {
     };
     obj.clearTint = () => {
       delete obj.tint;
+      obj.tintMode = 0;
       return obj;
     };
     obj.destroy = () => {
@@ -244,6 +246,40 @@ function renderer(detached = false) {
   };
 }
 describe('Lead stronger-impact corrections', () => {
+  it.each([
+    ['ordinary', 0, 7],
+    ['reflected', 9, 0],
+    ['mutual', 5, 7],
+  ] as const)(
+    '%s impact preserves atlas transparency and actual hit ownership',
+    (_, toAttacker, toDefender) => {
+      const r = renderer();
+      const beats = plan([
+        pick('a', 'strike', 0),
+        {
+          ...damage,
+          params: { ...damage.params, toAttacker, toDefender },
+        },
+      ]);
+      const targets = getBeat(beats, 'damage').targets;
+      r.effects.showBeat({ ...getBeat(beats, 'impact'), targets });
+      for (const side of ['a', 'b'] as const) {
+        expect(r.source[side].tint).toBeUndefined();
+        expect(r.source[side].tintMode).toBe(0);
+        expect(r.active().some((o) => o.name === `battle-effect-impact-${side}`)).toBe(
+          targets.some((target) => target.side === side),
+        );
+      }
+      r.effects.destroy();
+      expect(r.active()).toEqual([]);
+      expect(r.tweens.every((tw) => tw.removed)).toBe(true);
+      for (const side of ['a', 'b'] as const) {
+        expect(r.source[side].frame.name).toBe('idle');
+        expect(r.source[side].tint).toBeUndefined();
+        expect(r.source[side].tintMode).toBe(0);
+      }
+    },
+  );
   it.each(['firestorm', 'pickpocket'] as const)(
     'switching to reduced motion between beats removes persistent %s effects immediately',
     (secret) => {
@@ -282,8 +318,11 @@ describe('Lead stronger-impact corrections', () => {
         ...getBeat(beats, 'impact'),
         targets: getBeat(beats, 'damage').targets,
       });
-      expect(r.source.b.tint).toBe(0xffffff);
-      expect(r.source.b.tintMode).toBe(1);
+      // Flash the camera and recipient-owned burst, never the atlas cell:
+      // white FILL made near-transparent texels a visible rectangular backdrop.
+      expect(r.source.b.tint).toBeUndefined();
+      expect(r.source.b.tintMode).toBe(0);
+      expect(r.flash).toHaveBeenCalledExactlyOnceWith(90, 255, 235, 225);
       expect(getBeat(beats, 'impact').duration).toBeGreaterThanOrEqual(60);
       expect(r.shake).toHaveBeenCalledExactlyOnceWith(90, command === 'strike' ? 0.016 : 0.01);
       expect(r.source.a.tint).toBeUndefined();
