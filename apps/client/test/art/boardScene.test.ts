@@ -47,6 +47,14 @@ interface Rec {
   alpha?: number;
   color?: number;
   radius?: number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  fontSize?: string;
+  padding?: { x: number; y: number };
+  oval?: number[];
+  fill?: number;
 }
 
 /** Chainable Phaser game-object test double that records what the scene did. */
@@ -105,6 +113,7 @@ function gameObject(
       if (prop === 'setDisplaySize')
         return (...args: number[]) => {
           target.displaySize = args;
+          [target.width, target.height] = args;
           return proxy;
         };
       if (prop === 'setScale')
@@ -124,7 +133,39 @@ function gameObject(
           target.played = key;
           return proxy;
         };
-      if (prop === 'getBounds') return () => ({ left: 0, right: 0, top: 0, bottom: 0 });
+      if (prop === 'x' || prop === 'y') return target[prop] ?? 0;
+      if (prop === 'displayWidth') return (target.width ?? 0) * target.scaleX!;
+      if (prop === 'displayHeight') return (target.height ?? 0) * target.scaleY!;
+      if (prop === 'setPosition')
+        return (x: number, y: number) => {
+          Object.assign(target, { x, y });
+          return proxy;
+        };
+      if (prop === 'fillStyle')
+        return (color: number) => {
+          target.fill = color;
+          return proxy;
+        };
+      if (prop === 'fillEllipse')
+        return (...args: number[]) => {
+          target.oval = args;
+          return proxy;
+        };
+      if (prop === 'getBounds')
+        return () => {
+          const width = (target.width ?? 0) * target.scaleX!;
+          const height = (target.height ?? 0) * target.scaleY!;
+          const x = target.x ?? 0,
+            y = target.y ?? 0;
+          return {
+            left: x - width / 2,
+            right: x + width / 2,
+            top: y - height,
+            bottom: y,
+            width,
+            height,
+          };
+        };
       if (prop === 'texture') return { key: target.texture };
       if (prop === 'anims') return { stop: () => proxy };
       return () => proxy;
@@ -204,7 +245,16 @@ function makeScene() {
     add: {
       text: vi.fn((_x, _y, text, style) => {
         const made = gameObject('text');
-        Object.assign(made.rec, { text, fontFamily: style.fontFamily });
+        Object.assign(made.rec, {
+          x: _x,
+          y: _y,
+          text,
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+          padding: style.padding,
+          width: Number.parseInt(style.fontSize) * text.length + (style.padding?.x ?? 0) * 2,
+          height: Number.parseInt(style.fontSize) + (style.padding?.y ?? 0) * 2 + 6,
+        });
         objects.push(made.rec);
         return made.proxy;
       }),
@@ -220,6 +270,7 @@ function makeScene() {
       }),
       image: vi.fn((x: number, y: number, key: string, frame?: number | string) => {
         const made = gameObject('image', key, frame);
+        Object.assign(made.rec, { x, y });
         objects.push(made.rec);
         return made.proxy;
       }),
@@ -387,8 +438,10 @@ describe('BoardScene layering', () => {
       expect(calls.find((call) => call[2] === name)?.[3]).toMatchObject({
         color: '#ffffff',
         backgroundColor: colours[index],
-        fontSize: '15px',
+        fontSize: '13px',
+        padding: { x: 6, y: 1 },
         fontStyle: 'bold',
+        stroke: '#3a1f0d',
         strokeThickness: 3,
       });
     }
@@ -400,9 +453,62 @@ describe('BoardScene layering', () => {
         .removeAll,
     ).toHaveBeenLastCalledWith(true);
   });
-  it('keeps identity rings but uses static active size/depth and a dark oval instead of yellow rings', () => {
+  it.each([2, 3, 4])(
+    'shrinks %i crowded heroes equally without active shadow/enlargement',
+    (count) => {
+      const { scene, objects } = makeScene();
+      const state = gameFor('crowd-scale');
+      state.players = state.players.slice(0, count);
+      scene.renderBoard(state);
+      const tokens = objects.filter((o) => o.texture === '__WHITE');
+      expect(tokens).toHaveLength(count);
+      for (const hero of tokens) expect(hero).toMatchObject({ scaleX: 0.85, scaleY: 0.85 });
+      expect(tokens[0]!.depth).toBeGreaterThan(Math.max(...tokens.slice(1).map((o) => o.depth)));
+      expect(tokens.slice(1).map((o) => o.depth)).toEqual(
+        [...tokens.slice(1).map((o) => o.depth)].sort((a, b) => a - b),
+      );
+      expect(objects.filter((o) => o.name === 'active-token-shadow')).toEqual([]);
+    },
+  );
+  it.each(['P1', 'Alexander Hamilton', 'W'.repeat(18), 'W'.repeat(100)])(
+    'packs full crowded names into one or two flat bounded rows: %s',
+    (name) => {
+      const { scene, objects } = makeScene();
+      const state = gameFor('flat-tags');
+      state.players.forEach((p) => {
+        p.name = name;
+        p.pos = 21;
+      });
+      scene.renderBoard(state);
+      const tags = objects.filter((o) => o.name?.startsWith('hero-name-'));
+      expect(tags.map((o) => o.text)).toEqual(Array(4).fill(name));
+      const rows = [...new Set(tags.map((o) => o.y))];
+      expect(rows).toHaveLength(name.length === 100 ? 2 : 1);
+      const top = Math.min(
+        ...objects.filter((o) => o.texture === '__WHITE').map((o) => o.y! - o.height! * o.scaleY!),
+      );
+      for (const y of rows) {
+        const row = tags.filter((o) => o.y === y);
+        expect(row.map((o) => o.x)).toEqual([...row.map((o) => o.x)].sort((a, b) => a! - b!));
+        for (const [i, tag] of row.entries()) {
+          expect(tag.x! - tag.width! / 2).toBeGreaterThanOrEqual(0);
+          expect(tag.x! + tag.width! / 2).toBeLessThanOrEqual(3200);
+          expect(tag.y! - tag.height!).toBeGreaterThanOrEqual(0);
+          expect(tag.y).toBeLessThanOrEqual(top - 10);
+          if (i)
+            expect(tag.x! - tag.width! / 2 - (row[i - 1]!.x! + row[i - 1]!.width! / 2)).toBeCloseTo(
+              8,
+            );
+        }
+      }
+    },
+  );
+  it('keeps normal size/depth, full-size labels and active shadow when alone', () => {
     const { scene, objects } = makeScene();
     const state = gameFor('active-cue');
+    state.players.forEach((p, i) => {
+      p.pos = i;
+    });
     scene.renderBoard(state);
     const tokens = objects.filter((o) => o.texture === '__WHITE');
     const active = tokens[state.turnSeat]!;
@@ -412,7 +518,34 @@ describe('BoardScene layering', () => {
       expect(active.scaleY).toBeCloseTo(token.scaleY! * 1.18);
       expect(token.alpha).toBe(1);
     }
-    expect(objects.filter((o) => o.radius === 14)).toHaveLength(state.players.length);
+    expect(tokens.filter((o) => o !== active).every((o) => o.scaleX === 1 && o.scaleY === 1)).toBe(
+      true,
+    );
+    expect(
+      objects.filter((o) => o.name?.startsWith('hero-name-')).every((o) => o.fontSize === '15px'),
+    ).toBe(true);
+    const calls = (scene as unknown as { add: { text: ReturnType<typeof vi.fn> } }).add.text.mock
+      .calls;
+    for (const [index, name] of ['P1', 'P2', 'P3', 'P4'].entries()) {
+      expect(calls.find((call) => call[2] === name)?.[3]).toMatchObject({
+        color: '#ffffff',
+        backgroundColor: ['#2E7FE0', '#3BA84A', '#6C2EBE', '#D42B3A'][index],
+        fontSize: '15px',
+        padding: { x: 8, y: 2 },
+        fontStyle: 'bold',
+        stroke: '#3a1f0d',
+        strokeThickness: 3,
+      });
+    }
+    const ovals = objects.filter((o) => o.name?.startsWith('seat-oval-'));
+    expect(ovals).toHaveLength(state.players.length);
+    expect(ovals.map((o) => o.fill)).toEqual([0x2e7fe0, 0x3ba84a, 0x6c2ebe, 0xd42b3a]);
+    for (const oval of ovals) {
+      expect(oval.oval!.slice(2)).toEqual([42, 15]);
+      expect(oval.depth).toBeLessThan(Math.min(...tokens.map((o) => o.depth)));
+      expect(oval.color).toBe(0x3a1f0d);
+    }
+    expect(objects.filter((o) => o.radius === 14)).toEqual([]);
     expect(objects.filter((o) => o.color === 0xf5c51c)).toEqual([]);
     expect(
       objects.filter((o) => o.kind === 'ellipse' && o.name === 'active-token-shadow'),
@@ -561,7 +694,7 @@ describe('BoardScene layering', () => {
     const road = objects.filter((o) => o.depth === -5);
     const tiles = objects.filter((o) => o.depth === 0);
     const tokens = objects.filter((o) => o.texture === '__WHITE');
-    const rings = objects.filter((o) => o.depth >= 40 && o.kind === 'graphics');
+    const rings = objects.filter((o) => o.name?.startsWith('seat-oval-'));
 
     expect(mapTiles.length).toBe(15); // 5x3 painted background tiles
     expect(road.length).toBe(1); // one graphics pass for the whole road
@@ -569,11 +702,12 @@ describe('BoardScene layering', () => {
     expect(tokens).toHaveLength(4);
     expect(rings.length).toBeGreaterThan(0);
 
-    // ordering: map < road < tiles < tokens < rings
+    // ordering: map < road < tiles < seat ovals < tokens
     expect(Math.max(...mapTiles.map((tile) => tile.depth))).toBeLessThan(
       Math.min(...road.map((segment) => segment.depth)),
     );
-    expect(rings[0]!.depth).toBeGreaterThan(tokens[0]!.depth);
+    expect(rings[0]!.depth).toBeGreaterThan(tiles[0]!.depth);
+    expect(rings[0]!.depth).toBeLessThan(tokens[0]!.depth);
   });
 
   it('does not rebuild the board for nonvisual battle state changes', () => {

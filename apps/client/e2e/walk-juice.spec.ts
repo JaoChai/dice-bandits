@@ -29,6 +29,40 @@ type Probe = Window & {
   };
 };
 
+type Rect = { left: number; right: number; top: number; bottom: number };
+
+// Measure the UNION of all foreground sprites clipped to the top 40%.
+// Summing pair intersections double-counts an area covered by two heroes.
+function faceClearance(hero: Rect & { depth: number }, others: Array<Rect & { depth: number }>) {
+  const bottom = hero.top + (hero.bottom - hero.top) * 0.4;
+  const covered = others
+    .filter((other) => other.depth > hero.depth)
+    .map((other) => ({
+      left: Math.max(hero.left, other.left),
+      right: Math.min(hero.right, other.right),
+      top: Math.max(hero.top, other.top),
+      bottom: Math.min(bottom, other.bottom),
+    }))
+    .filter((r) => r.right > r.left && r.bottom > r.top);
+  const edges = [...new Set(covered.flatMap((r) => [r.left, r.right]))].sort((a, b) => a - b);
+  let area = 0;
+  for (let i = 1; i < edges.length; i++) {
+    const left = edges[i - 1]!,
+      right = edges[i]!;
+    const intervals = covered
+      .filter((r) => r.left < right && r.right > left)
+      .sort((a, b) => a.top - b.top);
+    let end = -Infinity,
+      height = 0;
+    for (const r of intervals) {
+      height += Math.max(0, r.bottom - Math.max(end, r.top));
+      end = Math.max(end, r.bottom);
+    }
+    area += (right - left) * height;
+  }
+  return 1 - area / ((hero.right - hero.left) * (bottom - hero.top));
+}
+
 for (const [lang, width, height] of [
   ['th', 915, 412],
   ['en', 1280, 720],
@@ -70,29 +104,104 @@ for (const [lang, width, height] of [
         const tag = scene.nameTags?.get(seat);
         return {
           seat,
-          hero: bounds(hero),
+          hero: {
+            ...bounds(hero),
+            depth: hero.depth,
+            x: hero.x,
+            y: hero.y,
+            map: {
+              left: hero.getBounds().left,
+              right: hero.getBounds().right,
+              top: hero.getBounds().top,
+              bottom: hero.getBounds().bottom,
+            },
+          },
           tag: tag
-            ? { ...bounds(tag), text: tag.text, background: tag.style.backgroundColor }
+            ? {
+                ...bounds(tag),
+                text: tag.text,
+                background: tag.style.backgroundColor,
+                color: tag.style.color,
+                fontStyle: tag.style.fontStyle,
+                stroke: tag.style.stroke,
+                strokeThickness: tag.style.strokeThickness,
+                map: {
+                  left: tag.getBounds().left,
+                  right: tag.getBounds().right,
+                  top: tag.getBounds().top,
+                  bottom: tag.getBounds().bottom,
+                },
+              }
             : null,
+          tile: window.__db!.getState().board.spaces.find((s) => s.id === 0)!,
         };
       });
     });
+    await page.screenshot({
+      path: info.outputPath(`measured-start-${lang}-${width}x${height}.png`),
+    });
+    await info.attach('crowd-geometry.json', {
+      body: JSON.stringify(geometry),
+      contentType: 'application/json',
+    });
+    console.log(`Crowd B geometry ${lang} ${width}x${height}: ${JSON.stringify(geometry)}`);
     expect(geometry).toHaveLength(4);
+    const heroes = geometry.map(({ hero }) => ({ ...hero.map, depth: hero.depth }));
+    const clear = heroes.map((hero) => faceClearance(hero, heroes));
+    console.log(
+      `Crowd row ${lang}: width=${Math.max(...heroes.map((h) => h.right)) - Math.min(...heroes.map((h) => h.left))}, face-clear=${JSON.stringify(clear)}`,
+    );
+    expect(
+      Math.max(...heroes.map((h) => h.right)) - Math.min(...heroes.map((h) => h.left)),
+    ).toBeLessThanOrEqual(155);
+    expect(geometry.map((r) => r.hero.y)).toEqual(Array(4).fill(geometry[0]!.tile.y));
+    expect(
+      Math.max(...heroes.map((h) => h.bottom - h.top)) -
+        Math.min(...heroes.map((h) => h.bottom - h.top)),
+    ).toBeLessThanOrEqual(1);
+    for (const row of geometry) {
+      expect(Math.abs(row.hero.map.left - row.tile.x)).toBeLessThanOrEqual(78);
+      expect(Math.abs(row.hero.map.right - row.tile.x)).toBeLessThanOrEqual(78);
+    }
+    expect(
+      (Math.min(...heroes.map((h) => h.left)) + Math.max(...heroes.map((h) => h.right))) / 2,
+    ).toBeCloseTo(geometry[0]!.tile.x);
+    expect(geometry[0]!.hero.depth).toBeGreaterThan(
+      Math.max(...geometry.slice(1).map((r) => r.hero.depth)),
+    );
+    expect(
+      Math.max(...geometry.map((r) => r.tag!.map.bottom)) -
+        Math.min(...geometry.map((r) => r.tag!.map.bottom)),
+    ).toBeLessThanOrEqual(1);
     for (const [index, row] of geometry.entries()) {
+      expect(clear[index]).toBeGreaterThanOrEqual(0.7);
       expect(row.hero.visible).toBe(true);
       expect(row.hero.left).toBeGreaterThanOrEqual(0);
       expect(row.hero.right).toBeLessThanOrEqual(width);
       expect(row.tag).not.toBeNull();
       expect(row.tag!.visible).toBe(true);
-      expect(row.tag!.bottom).toBeLessThan(row.hero.top);
+      expect(row.tag!.map.bottom).toBeLessThanOrEqual(Math.min(...heroes.map((h) => h.top)) - 10);
+      if (index)
+        expect(row.tag!.map.left - geometry[index - 1]!.tag!.map.right).toBeGreaterThanOrEqual(8);
       expect(row.tag!.left).toBeGreaterThanOrEqual(0);
       expect(row.tag!.right).toBeLessThanOrEqual(width);
       expect(row.tag!.top).toBeGreaterThanOrEqual(0);
+      expect(row.tag!.color).toBe('#ffffff');
       expect(row.tag!.background).toBe(['#2E7FE0', '#3BA84A', '#6C2EBE', '#D42B3A'][index]);
+      expect(row.tag!.fontStyle).toBe('bold');
+      expect(row.tag!.stroke).toBe('#3a1f0d');
+      expect(row.tag!.strokeThickness).toBe(3);
       for (const other of geometry.slice(index + 1)) {
-        expect(
-          Math.min(row.hero.right, other.hero.right) - Math.max(row.hero.left, other.hero.left),
-        ).toBeLessThanOrEqual(0);
+        const a = row.hero,
+          b = other.hero;
+        const overlap =
+          (Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) *
+            Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top))) /
+          Math.min(
+            (a.right - a.left) * (a.bottom - a.top),
+            (b.right - b.left) * (b.bottom - b.top),
+          );
+        expect(overlap, `hero overlap ${row.seat}/${other.seat}`).toBeLessThanOrEqual(0.35);
         if (row.tag && other.tag) {
           const overlap =
             Math.max(
@@ -227,7 +336,13 @@ for (const name of ['Alexander Hamilton', 'W'.repeat(18)]) {
               fontSize: tag.style.fontSize,
               visible: tag.visible && tag.alpha === 1,
               tag: { left: b.left, top: b.top, right: b.right, bottom: b.bottom },
-              hero: { left: hero.left, top: hero.top, right: hero.right, bottom: hero.bottom },
+              hero: {
+                left: hero.left,
+                top: hero.top,
+                right: hero.right,
+                bottom: hero.bottom,
+                depth: scene.tokenObjects.get(seat)!.depth,
+              },
               screen: { left: a.x, top: a.y, right: z.x, bottom: z.y },
               viewport,
             };
@@ -244,15 +359,34 @@ for (const name of ['Alexander Hamilton', 'W'.repeat(18)]) {
           });
         }
         expect(rows).toHaveLength(4);
+        const heroTop = Math.min(...rows.map((r) => r.hero.top));
+        const tagWidth =
+          rows.reduce((sum, r) => sum + r.tag.right - r.tag.left, 0) + 8 * (rows.length - 1);
+        const baselines = [...new Set(rows.map((r) => r.tag.bottom))];
+        expect(baselines.length).toBe(tagWidth <= WORLD.width ? 1 : 2);
+        for (const baseline of baselines) {
+          const line = rows
+            .filter((r) => r.tag.bottom === baseline)
+            .sort((a, b) => a.tag.left - b.tag.left);
+          for (let i = 1; i < line.length; i++)
+            expect(line[i]!.tag.left - line[i - 1]!.tag.right).toBeGreaterThanOrEqual(8);
+        }
         for (const [index, row] of rows.entries()) {
           const context = `tile ${tile} seat ${row.seat}`;
+          expect(
+            faceClearance(
+              row.hero,
+              rows.map((r) => r.hero),
+            ),
+            context,
+          ).toBeGreaterThanOrEqual(0.7);
           expect(row.text, context).toBe(name);
-          expect(row.fontSize, context).toBe('15px');
+          expect(row.fontSize, context).toBe('13px');
           expect(row.visible, context).toBe(true);
           expect(row.tag.left, context).toBeGreaterThanOrEqual(0);
           expect(row.tag.top, context).toBeGreaterThanOrEqual(0);
           expect(row.tag.right, context).toBeLessThanOrEqual(WORLD.width);
-          expect(row.tag.bottom, context).toBeLessThan(row.hero.top);
+          expect(row.tag.bottom, context).toBeLessThanOrEqual(heroTop - 10);
           expect(row.tag.bottom, context).toBeLessThanOrEqual(WORLD.height);
           expect(row.screen.left, context).toBeGreaterThanOrEqual(row.viewport.left);
           expect(row.screen.top, context).toBeGreaterThanOrEqual(row.viewport.top);

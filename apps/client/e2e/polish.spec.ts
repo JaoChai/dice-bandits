@@ -29,7 +29,8 @@ for (const lang of ['th', 'en'] as const) {
       expect(token.right).toBeLessThanOrEqual(geometry.canvas.right);
       expect(token.top).toBeGreaterThanOrEqual(geometry.canvas.top);
       expect(token.bottom).toBeLessThanOrEqual(geometry.canvas.bottom);
-      // Feet stay in the approved four-hero row: maximum castle offset is 99px.
+      // Retain Walk B's original feet bound; the width-aware row has its
+      // stricter 155px full-bounds gate in walk-juice.spec.ts.
       const castle = geometry.tiles.find((tile) => tile.frame === 'castle')!;
       expect(
         Math.hypot(token.world.x - castle.world.x, token.world.y - castle.world.y),
