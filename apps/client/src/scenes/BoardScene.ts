@@ -597,13 +597,10 @@ export default class BoardScene extends Phaser.Scene {
           fontFamily: getComputedStyle(document.documentElement).fontFamily,
           fontSize: crowded ? '13px' : '15px',
           fontStyle: 'bold',
-          color: crowded ? colors[playerIndex]! : '#ffffff',
+          color: '#ffffff',
           stroke: '#3a1f0d',
-          strokeThickness: crowded ? 1 : 3,
-          backgroundColor: crowded
-            ? getComputedStyle(document.documentElement).getPropertyValue('--c-cream').trim() ||
-              '#f5eedc'
-            : colors[playerIndex]!,
+          strokeThickness: 3,
+          backgroundColor: colors[playerIndex]!,
           padding: crowded ? { x: 6, y: 1 } : { x: 8, y: 2 },
         })
         .setOrigin(0.5, 1)

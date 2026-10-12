@@ -436,12 +436,13 @@ describe('BoardScene layering', () => {
     const colours = ['#2E7FE0', '#3BA84A', '#6C2EBE', '#D42B3A'];
     for (const [index, name] of ['P1', 'P2', 'P3', 'P4'].entries()) {
       expect(calls.find((call) => call[2] === name)?.[3]).toMatchObject({
-        color: colours[index],
-        backgroundColor: '#f5eedc',
+        color: '#ffffff',
+        backgroundColor: colours[index],
         fontSize: '13px',
         padding: { x: 6, y: 1 },
         fontStyle: 'bold',
-        strokeThickness: 1,
+        stroke: '#3a1f0d',
+        strokeThickness: 3,
       });
     }
     scene.renderBoard({ ...state, turnSeat: 1 });
@@ -523,6 +524,19 @@ describe('BoardScene layering', () => {
     expect(
       objects.filter((o) => o.name?.startsWith('hero-name-')).every((o) => o.fontSize === '15px'),
     ).toBe(true);
+    const calls = (scene as unknown as { add: { text: ReturnType<typeof vi.fn> } }).add.text.mock
+      .calls;
+    for (const [index, name] of ['P1', 'P2', 'P3', 'P4'].entries()) {
+      expect(calls.find((call) => call[2] === name)?.[3]).toMatchObject({
+        color: '#ffffff',
+        backgroundColor: ['#2E7FE0', '#3BA84A', '#6C2EBE', '#D42B3A'][index],
+        fontSize: '15px',
+        padding: { x: 8, y: 2 },
+        fontStyle: 'bold',
+        stroke: '#3a1f0d',
+        strokeThickness: 3,
+      });
+    }
     const ovals = objects.filter((o) => o.name?.startsWith('seat-oval-'));
     expect(ovals).toHaveLength(state.players.length);
     expect(ovals.map((o) => o.fill)).toEqual([0x2e7fe0, 0x3ba84a, 0x6c2ebe, 0xd42b3a]);

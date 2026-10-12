@@ -122,6 +122,9 @@ for (const [lang, width, height] of [
                 text: tag.text,
                 background: tag.style.backgroundColor,
                 color: tag.style.color,
+                fontStyle: tag.style.fontStyle,
+                stroke: tag.style.stroke,
+                strokeThickness: tag.style.strokeThickness,
                 map: {
                   left: tag.getBounds().left,
                   right: tag.getBounds().right,
@@ -183,8 +186,11 @@ for (const [lang, width, height] of [
       expect(row.tag!.left).toBeGreaterThanOrEqual(0);
       expect(row.tag!.right).toBeLessThanOrEqual(width);
       expect(row.tag!.top).toBeGreaterThanOrEqual(0);
-      expect(row.tag!.color).toBe(['#2E7FE0', '#3BA84A', '#6C2EBE', '#D42B3A'][index]);
-      expect(row.tag!.background).toBe('#f5eedc');
+      expect(row.tag!.color).toBe('#ffffff');
+      expect(row.tag!.background).toBe(['#2E7FE0', '#3BA84A', '#6C2EBE', '#D42B3A'][index]);
+      expect(row.tag!.fontStyle).toBe('bold');
+      expect(row.tag!.stroke).toBe('#3a1f0d');
+      expect(row.tag!.strokeThickness).toBe(3);
       for (const other of geometry.slice(index + 1)) {
         const a = row.hero,
           b = other.hero;

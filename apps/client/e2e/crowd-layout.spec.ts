@@ -122,13 +122,34 @@ for (const [width, height] of [
     });
 
     for (const count of [2, 3, 4, 1]) {
-      await page.evaluate(async (count) => {
+      const styles = await page.evaluate(async (count) => {
         const game = (window as unknown as { __m5aGame: Phaser.Game }).__m5aGame;
         const scene = game.scene.getScene('BoardScene') as Board;
         const state = window.__db!.getState();
         scene.renderBoard({ ...state, players: state.players.slice(0, count) });
         await new Promise<void>((resolve) => game.events.once('postrender', resolve));
+        return [...scene.nameTags.values()].map((tag) => ({
+          color: tag.style.color,
+          background: tag.style.backgroundColor,
+          stroke: tag.style.stroke,
+          strokeThickness: tag.style.strokeThickness,
+          fontStyle: tag.style.fontStyle,
+          fontSize: tag.style.fontSize,
+          padding: { x: tag.padding.left, y: tag.padding.top },
+        }));
       }, count);
+      expect(styles).toHaveLength(count);
+      for (const [seat, style] of styles.entries()) {
+        expect(style).toEqual({
+          color: '#ffffff',
+          background: ['#2E7FE0', '#3BA84A', '#6C2EBE', '#D42B3A'][seat],
+          stroke: '#3a1f0d',
+          strokeThickness: 3,
+          fontStyle: 'bold',
+          fontSize: count === 1 ? '15px' : '13px',
+          padding: count === 1 ? { x: 8, y: 2 } : { x: 6, y: 1 },
+        });
+      }
       await page.screenshot({ path: info.outputPath(`crowd-${count}-${width}x${height}.png`) });
     }
     for (const longNames of [false, true]) {
