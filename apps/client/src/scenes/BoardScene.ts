@@ -1,9 +1,16 @@
 import Phaser from 'phaser';
 import type { GameState, GameEvent } from '@dice-bandits/engine';
-import { coinBurst, dice, shake } from '../fx';
+import { coinBurst, shake } from '../fx';
 import { reducedMotion, motionScale } from '../art/motion';
 import { seatColors, seatTint } from '../art/colors';
-import { createHeroToken, createHopPose, tokenFacing, tokenLayout } from './board/tokens';
+import {
+  createHeroToken,
+  createHopPose,
+  createRollPose,
+  tokenFacing,
+  tokenLayout,
+} from './board/tokens';
+import { createDiePop } from './board/diePop';
 import { drawRoad } from './board/road';
 import { drawTiles } from './board/tiles';
 import { drawBuildings } from './board/buildings';
@@ -41,6 +48,7 @@ export default class BoardScene extends Phaser.Scene {
   private latestState: GameState | null = null;
   private onlineMovement: ReturnType<typeof createMovementOverlay> | undefined;
   private movementReadout?: ReturnType<typeof createMovementReadout>;
+  private rollDie?: ReturnType<typeof createDiePop>;
   private localRevision = 0;
   private staticMovementCommit?: { source: GameState; seat: number; to: number };
   private localWaits = new Set<() => void>();
@@ -234,6 +242,8 @@ export default class BoardScene extends Phaser.Scene {
     this.localRevision = (this.localRevision ?? 0) + 1;
     for (const cancel of this.localWaits ?? []) cancel();
     this.localWaits?.clear();
+    this.rollDie?.destroy();
+    this.rollDie = undefined;
     this.cameraMovement?.remove();
     this.cameraMovement = undefined;
     this.walkCounter?.setVisible(false).setScale(1);
@@ -288,8 +298,9 @@ export default class BoardScene extends Phaser.Scene {
         if (!current()) return;
         const token = event.seat === null ? undefined : this.tokenObjects.get(event.seat);
         if (event.type === 'DiceRolled' && token) {
-          dice(this, token, speed);
+          const stopCue = this.startRollCue(token, event, speed, current);
           await pause(350 * speed);
+          stopCue();
         } else if (event.type === 'Moved') {
           const segment = plan.segments[segmentIndex];
           if (!segment || event.seat !== segment.seat || event.params.to !== segment.to) continue;
@@ -313,6 +324,7 @@ export default class BoardScene extends Phaser.Scene {
             const followTag = (): void => {
               this.nameTags.get(segment.seat)?.setPosition(token.x, token.y - tagLift);
               this.walkCounter?.setPosition(token.x, token.y - tagLift - 32);
+              this.rollDie?.follow();
             };
             const hop = { progress: 0 };
             await new Promise<void>((resolve) => {
@@ -621,6 +633,55 @@ export default class BoardScene extends Phaser.Scene {
     );
 
     this.applyCamera(cameraTarget(state, this.wholeMap, this.cameras.main));
+  }
+
+  /** Shares the existing roll pause; its reset is owned alongside local waits. */
+  private startRollCue(
+    token: Phaser.GameObjects.Image,
+    event: GameEvent,
+    speed: number,
+    current: () => boolean,
+  ): () => void {
+    if (speed <= 0 || reducedMotion()) return () => {};
+    this.rollDie?.destroy();
+    this.rollDie = createDiePop(
+      this,
+      token,
+      () => this.nameTags.get(event.seat ?? -1),
+      event,
+      speed,
+    );
+    const pose = createRollPose(token);
+    const tag = this.nameTags.get(event.seat ?? -1);
+    const lift = tag ? token.y - tag.y : 0;
+    const progress = { roll: 0 };
+    let alive = true;
+    const follow = (): void => {
+      tag?.setPosition(token.x, token.y - lift);
+      this.rollDie?.follow();
+    };
+    const stop = (): void => {
+      if (!alive) return;
+      alive = false;
+      tween?.remove();
+      pose.reset();
+      follow();
+      this.localWaits.delete(stop);
+    };
+    this.localWaits.add(stop);
+    const tween = this.tweens.add({
+      targets: progress,
+      roll: 1,
+      duration: 350 * speed,
+      ease: 'Linear',
+      onUpdate: () => {
+        if (!alive || !current()) return;
+        pose.update(progress.roll);
+        follow();
+      },
+      onComplete: stop,
+    });
+    return stop;
   }
 
   /** One scene-owned pill, retained through redraws and hidden on cancellation. */

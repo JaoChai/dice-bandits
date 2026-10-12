@@ -6,12 +6,13 @@ import {
   type GameEvent,
   type GameState,
 } from '@dice-bandits/engine';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import type Phaser from 'phaser';
 import { WORLD } from '../src/scenes/board/camera';
 import { observeBoardGame, startJourney, openTitleChoice } from './helpers';
 
-test.use({ video: 'on' });
+test.use({ video: { mode: 'on', size: { width: 915, height: 412 } } });
 type Board = Phaser.Scene & {
   tokenObjects: Map<number, Phaser.GameObjects.Image>;
   nameTags: Map<number, Phaser.GameObjects.Text>;
@@ -367,6 +368,294 @@ test('real human multi-space turn squeezes, leans and lands upright with dust', 
   });
   await info.attach('turning-human-video', {
     path: await page.video()!.path(),
+    contentType: 'video/webm',
+  });
+});
+
+// Instrument only real rendered state: no production hooks, invented dice or
+// frame timers. Sampling starts BEFORE Roll, including the centre overlay.
+for (const [lang, width, height] of [
+  ['th', 915, 412],
+  ['en', 1280, 720],
+] as const) {
+  test(`no-spin roll and airborne happy pose ${lang} ${width}x${height}`, async ({
+    page,
+  }, info) => {
+    const fixture = turningWalk();
+    expect(fixture.events.filter((e) => e.type === 'Moved').length).toBeGreaterThanOrEqual(3);
+    const rolled = Number(fixture.events.find((e) => e.type === 'DiceRolled')!.params.value);
+    await page.setViewportSize({ width, height });
+    await observeBoardGame(page);
+    await page.addInitScript(
+      ({ state, lang }) => {
+        localStorage.setItem('diceBandits.save', JSON.stringify({ version: 2, state }));
+        localStorage.setItem('lang', lang);
+        localStorage.setItem('dice-bandits:intro-seen', '1');
+        localStorage.setItem('dice-bandits:tips', JSON.stringify({ enabled: false, seen: [] }));
+      },
+      { state: fixture.previous, lang },
+    );
+    await page.goto('/?speed=1');
+    await openTitleChoice(page, 'continue');
+    await page.waitForFunction(() => window.__db?.art.boardReady);
+    const trace = await page.evaluate(async () => {
+      const game = (window as Probe).__m5aGame;
+      const scene = game.scene.getScene('BoardScene') as Board;
+      const activeSeat = window.__db!.getState().turnSeat;
+      const hero = scene.tokenObjects.get(activeSeat)!;
+      const trace = {
+        done: false,
+        maxAngle: 0,
+        hopFrames: [] as Array<{ k: number; frame: string }>,
+        rollFrames: [] as string[],
+        die: [] as Array<{
+          face: string;
+          top: number;
+          bottom: number;
+          tagTop: number;
+          viewTop: number;
+          above: boolean;
+          inside: boolean;
+          width: number;
+          stage: string | null;
+          at: number;
+        }>,
+        captures: {} as Record<string, string>,
+        resultAt: null as number | null,
+        rest: '',
+        dieAtRest: -1,
+      };
+      let phase = 'centre',
+        k = 0;
+      const add = scene.tweens.add.bind(scene.tweens);
+      scene.tweens.add = (config: Phaser.Types.Tweens.TweenBuilderConfig) => {
+        if (config.duration === 560 && config.progress === 1) {
+          phase = 'hop';
+          k = 0;
+          const update = config.onUpdate,
+            finish = config.onComplete;
+          config.onUpdate = (...args) => {
+            k = (config.targets as { progress: number }).progress;
+            update?.(...args);
+          };
+          config.onComplete = (...args) => {
+            phase = 'hold';
+            finish?.(...args);
+          };
+        } else if (config.duration === 350 && config.roll === 1) phase = 'roll';
+        return add(config);
+      };
+      const capture = (name: string): void => {
+        if (name in trace.captures) return;
+        trace.captures[name] = '';
+        const camera = scene.cameras.main;
+        const p = camera.getViewMatrix().transformPoint(hero.x, hero.y);
+        // Fixed crop includes the full airborne hero; no shape is resized.
+        (game.renderer as Phaser.Renderer.WebGL.WebGLRenderer).snapshotArea(
+          Math.max(0, Math.floor(p.x - 100)),
+          Math.max(0, Math.floor(p.y - 160)),
+          200,
+          180,
+          (image) => {
+            if (image instanceof HTMLImageElement) trace.captures[name] = image.src;
+          },
+        );
+      };
+      const record = () => {
+        const stage =
+          document.querySelector<HTMLElement>('[data-testid="dice-roll"]')?.dataset.stage ?? null;
+        if (stage === 'result' && trace.resultAt === null) trace.resultAt = performance.now();
+        for (const token of scene.tokenObjects.values())
+          trace.maxAngle = Math.max(trace.maxAngle, Math.abs(token.angle));
+        if (phase === 'roll') trace.rollFrames.push(String(hero.frame.name));
+        if (phase === 'hop') {
+          trace.hopFrames.push({ k, frame: String(hero.frame.name) });
+          if (k < 0.2) capture('idle-before');
+          else if (k > 0.3 && k < 0.6) capture('happy-air');
+          else if (k > 0.84 && k < 0.98) capture('idle-landing');
+        }
+        const icon = scene.children.getChildren().find((o) => o.name === 'roll-die') as
+          Phaser.GameObjects.Image | undefined;
+        if (icon && icon.alpha >= 0.8) {
+          const b = icon.getBounds();
+          const camera = scene.cameras.main;
+          const a = camera.getViewMatrix().transformPoint(b.left, b.top);
+          const z = camera.getViewMatrix().transformPoint(b.right, b.bottom);
+          const tag = scene.nameTags.get(activeSeat)!;
+          trace.die.push({
+            face: String(icon.frame.name),
+            top: b.top,
+            bottom: b.bottom,
+            tagTop: tag.getBounds().top,
+            viewTop: camera.worldView.y,
+            above: b.bottom <= tag.getBounds().top + 1,
+            inside:
+              a.x >= camera.x &&
+              a.y >= camera.y &&
+              z.x <= camera.x + camera.width &&
+              z.y <= camera.y + camera.height,
+            width: ((z.x - a.x) * game.canvas.getBoundingClientRect().width) / game.canvas.width,
+            stage,
+            at: performance.now(),
+          });
+        }
+      };
+      game.events.on('postrender', record);
+      const play = scene.playEvents.bind(scene);
+      let finish!: () => void;
+      const done = new Promise<void>((r) => {
+        finish = r;
+      });
+      scene.playEvents = async (events) => {
+        await play(events);
+        trace.done = true;
+        trace.rest = String(hero.frame.name);
+        trace.dieAtRest = scene.children.getChildren().filter((o) => o.name === 'roll-die').length;
+        game.events.off('postrender', record);
+        scene.tweens.add = add;
+        finish();
+      };
+      document.querySelector<HTMLButtonElement>('[data-action-index="0"]')!.click();
+      await done;
+      return trace;
+    });
+    expect(
+      trace.maxAngle,
+      'sample EVERY rendered frame from Roll through landing',
+    ).toBeLessThanOrEqual(15);
+    expect(trace.rollFrames).toContain('happy');
+    expect(trace.hopFrames.some((f) => f.k > 0.22 && f.k < 0.82 && f.frame === 'happy')).toBe(true);
+    expect(
+      trace.hopFrames.every((f) => f.frame === (f.k > 0.22 && f.k < 0.82 ? 'happy' : 'idle')),
+    ).toBe(true);
+    expect(trace.rest).toBe('idle');
+    expect(trace.die.length).toBeGreaterThan(0);
+    expect(trace.resultAt).not.toBeNull();
+    expect(trace.die.every((d) => d.at >= trace.resultAt! && d.stage !== 'rolling')).toBe(true);
+    expect(trace.die.every((d) => d.inside)).toBe(true);
+    expect(trace.die.some((d) => d.above)).toBe(true);
+    expect(trace.die.every((d) => d.face === (rolled <= 6 ? `dieFace${rolled}` : 'die'))).toBe(
+      true,
+    );
+    expect(Math.max(...trace.die.map((d) => d.width))).toBeGreaterThanOrEqual(24);
+    expect(trace.dieAtRest).toBe(0);
+    console.log(
+      `Walk C ${lang} ${width}x${height}: max |angle|=${trace.maxAngle.toFixed(2)}, ${trace.hopFrames.length} hop samples, die=${rolled}, no clipping, idle rest, 0 die leaks`,
+    );
+    await info.attach('walk-c-render-trace.json', {
+      body: JSON.stringify(trace),
+      contentType: 'application/json',
+    });
+    const evidence = process.env.WALK_EVIDENCE_DIR;
+    if (evidence) {
+      await mkdir(evidence, { recursive: true });
+      for (const [name, data] of Object.entries(trace.captures)) {
+        expect(data, `actual rendered ${name}`).toMatch(/^data:image\/png/);
+        await writeFile(
+          `${evidence}/${lang}-${info.project.name}-${name}.png`,
+          Buffer.from(data.split(',')[1]!, 'base64'),
+        );
+      }
+      await writeFile(
+        `${evidence}/${lang}-${info.project.name}-trace.json`,
+        JSON.stringify(trace, null, 2),
+      );
+    }
+    await page.screenshot({ path: info.outputPath(`walk-c-rest-${lang}.png`) });
+    if (process.env.AXE_SOURCE) {
+      await page.addScriptTag({ path: process.env.AXE_SOURCE });
+      const axe = await page.evaluate(async () =>
+        (
+          window as unknown as {
+            axe: { run(): Promise<{ violations: Array<{ impact: string }> }> };
+          }
+        ).axe.run(),
+      );
+      const serious = axe.violations.filter((v) => ['serious', 'critical'].includes(v.impact));
+      console.log(`axe Walk C ${lang} ${width}x${height}: ${serious.length} serious/critical`);
+      expect(serious).toEqual([]);
+      await info.attach('walk-c-axe.json', {
+        body: JSON.stringify(axe),
+        contentType: 'application/json',
+      });
+    }
+    const video = page.video()!;
+    await page.close();
+    if (evidence)
+      await video.saveAs(`${evidence}/human-${lang}-${width}x${height}-${info.project.name}.webm`);
+    await info.attach('walk-c-human-video', {
+      path: await video.path(),
+      contentType: 'video/webm',
+    });
+  });
+}
+
+test('bot replay keeps the 400ms hop with happy airborne and idle landing', async ({
+  page,
+}, info) => {
+  const fixture = turningWalk();
+  await page.setViewportSize({ width: 915, height: 412 });
+  await observeBoardGame(page);
+  await page.addInitScript((state) => {
+    localStorage.setItem('diceBandits.save', JSON.stringify({ version: 2, state }));
+    localStorage.setItem('lang', 'th');
+    localStorage.setItem('dice-bandits:intro-seen', '1');
+    localStorage.setItem('dice-bandits:tips', JSON.stringify({ enabled: false, seen: [] }));
+  }, fixture.previous);
+  await page.goto('/?speed=1');
+  await openTitleChoice(page, 'continue');
+  await page.waitForFunction(() => window.__db?.art.boardReady);
+  const result = await page.evaluate(
+    async ({ state, events }) => {
+      const game = (window as Probe).__m5aGame;
+      const scene = game.scene.getScene('BoardScene') as Board & {
+        renderBoard(state: GameState): void;
+        playEvents(events: GameEvent[], options: { mode: 'bot' }): Promise<void>;
+      };
+      scene.renderBoard(state);
+      const hero = scene.tokenObjects.get(state.turnSeat)!;
+      const frames: string[] = [],
+        durations: number[] = [];
+      const add = scene.tweens.add.bind(scene.tweens);
+      scene.tweens.add = (config) => {
+        if (config.progress === 1 && config.duration !== 350)
+          durations.push(Number(config.duration));
+        return add(config);
+      };
+      const record = () => frames.push(String(hero.frame.name));
+      game.events.on('postrender', record);
+      await scene.playEvents(events, { mode: 'bot' });
+      game.events.off('postrender', record);
+      scene.tweens.add = add;
+      return {
+        frames,
+        durations,
+        rest: String(hero.frame.name),
+        angle: hero.angle,
+        dies: scene.children.getChildren().filter((o) => o.name === 'roll-die').length,
+      };
+    },
+    { state: fixture.previous, events: fixture.events },
+  );
+  expect(result.durations.length).toBeGreaterThanOrEqual(3);
+  expect(result.durations.every((ms) => ms === 400)).toBe(true);
+  expect(result.frames).toContain('happy');
+  expect(result.rest).toBe('idle');
+  expect(result.angle).toBe(0);
+  expect(result.dies).toBe(0);
+  console.log(
+    `Walk C bot: ${result.durations.length} x 400ms hops, happy airborne, idle rest, 0 die leaks`,
+  );
+  await info.attach('walk-c-bot-trace', {
+    body: JSON.stringify(result),
+    contentType: 'application/json',
+  });
+  const video = page.video()!;
+  await page.close();
+  if (process.env.WALK_EVIDENCE_DIR)
+    await video.saveAs(`${process.env.WALK_EVIDENCE_DIR}/bot-th-915x412-${info.project.name}.webm`);
+  await info.attach('walk-c-bot-video', {
+    path: await video.path(),
     contentType: 'video/webm',
   });
 });

@@ -13,6 +13,7 @@ export function createMovementOverlay(scene: Phaser.Scene): {
   let generation: number | null = null;
   let revision = 0;
   let tween: Phaser.Tweens.Tween | undefined;
+  let pose: ReturnType<typeof createHopPose> | undefined;
   let deadline: ReturnType<typeof setTimeout> | undefined;
   const ghosts = new Map<number, Phaser.GameObjects.Image>();
   const clear = (): void => {
@@ -21,6 +22,8 @@ export function createMovementOverlay(scene: Phaser.Scene): {
     deadline = undefined;
     tween?.remove();
     tween = undefined;
+    pose?.reset();
+    pose = undefined;
     for (const ghost of ghosts.values()) ghost.destroy();
     ghosts.clear();
   };
@@ -76,7 +79,8 @@ export function createMovementOverlay(scene: Phaser.Scene): {
             .setName(`online-movement-${segment.seat}`);
           ghosts.set(segment.seat, ghost);
         }
-        const pose = createHopPose(ghost, destination.x, segment.hopMs);
+        const hopPose = createHopPose(ghost, destination.x, segment.hopMs);
+        pose = hopPose;
         const startX = ghost.x,
           startY = ghost.y;
         const hop = { progress: 0 };
@@ -90,14 +94,15 @@ export function createMovementOverlay(scene: Phaser.Scene): {
             const k = hop.progress;
             ghost.x = startX + (destination.x - startX) * k;
             ghost.y = startY + (destination.y - startY) * k - Math.sin(Math.PI * k) * 26;
-            pose.update(k);
+            hopPose.update(k);
           },
           onComplete: () => {
             if (revision !== ownedRevision || generation !== nextGeneration) return;
             ghost.x = destination.x;
             ghost.y = destination.y;
-            pose.update(1);
-            pose.reset();
+            hopPose.update(1);
+            hopPose.reset();
+            pose = undefined;
             tween = undefined;
             advance(index + 1);
           },
