@@ -8,7 +8,9 @@ import {
   createHopPose,
   createRollPose,
   tokenFacing,
-  tokenLayout,
+  crowdLayout,
+  crowdTagLayout,
+  TOKEN_HEIGHT,
 } from './board/tokens';
 import { createDiePop } from './board/diePop';
 import { drawRoad } from './board/road';
@@ -315,6 +317,22 @@ export default class BoardScene extends Phaser.Scene {
             if (!current()) return;
             this.showWalkCounter(token, 0);
           }
+          // Crowd size belongs to the static layout, not to the walk pose.
+          // Restore an absolute height once, preserving the current frame aspect.
+          if (
+            segmentIndex === 1 &&
+            previous.players.filter(
+              (p) => p.pos === previous.players.find((p) => p.seat === segment.seat)?.pos,
+            ).length > 1
+          ) {
+            const factor = segment.seat === previous.turnSeat ? 1.18 : 1;
+            if (token.texture?.has('idle')) {
+              const height = TOKEN_HEIGHT * factor;
+              token.setDisplaySize((height * token.frame.width) / token.frame.height, height);
+            } else if (token.texture?.key === '__WHITE') {
+              token.setDisplaySize(28 * factor, 28 * factor);
+            }
+          }
           this.panCameraTo(destination.x, destination.y, segment.hopMs * speed);
           if (speed > 0) {
             const startX = token.x,
@@ -530,47 +548,72 @@ export default class BoardScene extends Phaser.Scene {
 
     // Layer 4: hero tokens + selection rings, map-pixel positions.
     const colors = seatColors(state.players.map((player) => player.classId));
-    const offsets = tokenLayout(state.players.map((player) => player.pos));
+    const groups = new Map<number, GameState['players']>();
+    for (const player of state.players) {
+      const members = groups.get(player.pos) ?? [];
+      members.push(player);
+      groups.set(player.pos, members);
+      const space = spaceById.get(player.pos);
+      if (space)
+        this.tokenObjects.set(player.seat, createHeroToken(this, player.classId, space.x, space.y));
+    }
+    for (const [pos, members] of groups) {
+      const space = spaceById.get(pos);
+      if (!space || members.length < 2) continue;
+      const heroes = members.map((p) => this.tokenObjects.get(p.seat)!);
+      const placements = crowdLayout(
+        heroes.map((hero) => hero.displayWidth),
+        members.findIndex((p) => p.seat === state.turnSeat),
+      );
+      heroes.forEach((hero, i) => {
+        const at = placements[i]!;
+        hero
+          .setPosition(space.x + at.x, space.y)
+          .setScale(hero.scaleX * at.scale, hero.scaleY * at.scale)
+          .setDepth(at.depth);
+      });
+    }
     for (const [playerIndex, player] of state.players.entries()) {
-      const space = state.board.spaces.find((candidate) => candidate.id === player.pos);
-      if (!space) continue;
-      const x = space.x + offsets[playerIndex]!.x;
-      const y = space.y + offsets[playerIndex]!.y;
-      const token = createHeroToken(this, player.classId, x, y);
-      // Review 4: the seat colour is the ring, never the character art.
-      this.tokenObjects.set(player.seat, token);
-      const ring = this.add.graphics().setDepth(40);
-      ring.lineStyle(3, seatTint(colors[playerIndex]!), 1);
-      ring.strokeCircle(x, y, 14);
-      if (player.seat === state.turnSeat) {
+      const token = this.tokenObjects.get(player.seat);
+      if (!token) continue;
+      const { x, y } = token;
+      // The seat colour is the oval, never a tint on the character art.
+      const crowded = groups.get(player.pos)!.length > 1;
+      const ring = this.add.graphics().setDepth(29).setName(`seat-oval-${player.seat}`);
+      ring.fillStyle(seatTint(colors[playerIndex]!), 0.95);
+      ring.fillEllipse(x, y, 42, 15);
+      ring.lineStyle(2, 0x3a1f0d, 0.55);
+      ring.strokeEllipse(x, y, 42, 15);
+      if (player.seat === state.turnSeat && !crowded) {
         token.setDepth(36).setScale(token.scaleX * 1.18, token.scaleY * 1.18);
         this.activeShadow = this.add
           .ellipse(x, y, 48, 16, 0x3a1f0d, 0.22)
           .setDepth(29)
           .setName('active-token-shadow');
       }
-      let lift =
-        offsets[playerIndex]!.x !== 0 ||
-        state.players.filter((p) => p.pos === player.pos).length > 1
-          ? (playerIndex % 2) * 24
-          : 0;
+      let lift = 0;
       const tag = this.add
         .text(x, y - token.displayHeight - 4 - lift, player.name, {
           fontFamily: getComputedStyle(document.documentElement).fontFamily,
-          fontSize: '15px',
+          fontSize: crowded ? '13px' : '15px',
           fontStyle: 'bold',
-          color: '#ffffff',
+          color: crowded ? colors[playerIndex]! : '#ffffff',
           stroke: '#3a1f0d',
-          strokeThickness: 3,
-          backgroundColor: colors[playerIndex]!,
-          padding: { x: 8, y: 2 },
+          strokeThickness: crowded ? 1 : 3,
+          backgroundColor: crowded
+            ? getComputedStyle(document.documentElement).getPropertyValue('--c-cream').trim() ||
+              '#f5eedc'
+            : colors[playerIndex]!,
+          padding: crowded ? { x: 6, y: 1 } : { x: 8, y: 2 },
         })
         .setOrigin(0.5, 1)
         .setDepth(player.seat === state.turnSeat ? 45 : 44)
         .setName(`hero-name-${player.seat}`);
-      // Pack full labels using their rendered stroke/padding dimensions, not
-      // fixed-height rows. Prefer the alternating height, then a free row above
-      // or below it, bounded by the map top and this hero's head.
+      if (crowded) {
+        this.nameTags.set(player.seat, tag);
+        continue;
+      }
+      // Alone: retain Walk B's full-label bounds and collision packing.
       const initial = tag.getBounds();
       const height = initial.bottom - initial.top;
       const halfWidth = (initial.right - initial.left) / 2;
@@ -602,6 +645,32 @@ export default class BoardScene extends Phaser.Scene {
       lift = y - token.displayHeight - 4 - tag.y;
       this.nameTagLifts.set(player.seat, lift);
       this.nameTags.set(player.seat, tag);
+    }
+
+    // A crowd owns one measured, centred label row, not per-seat stairs.
+    // Wrap only when the complete row cannot fit inside the authored map.
+    for (const [pos, members] of groups) {
+      if (members.length < 2) continue;
+      const space = spaceById.get(pos);
+      if (!space) continue;
+      const labels = members
+        .map((player) => ({
+          seat: player.seat,
+          hero: this.tokenObjects.get(player.seat)!,
+          tag: this.nameTags.get(player.seat)!,
+        }))
+        .sort((a, b) => a.hero.x - b.hero.x);
+      const positions = crowdTagLayout(
+        labels.map(({ tag }) => tag.displayWidth),
+        Math.max(...labels.map(({ tag }) => tag.displayHeight)),
+        space.x,
+        Math.min(...labels.map(({ hero }) => hero.getBounds().top)),
+        WORLD.width,
+      );
+      labels.forEach(({ seat, hero, tag }, i) => {
+        tag.setPosition(positions[i]!.x, positions[i]!.y);
+        this.nameTagLifts.set(seat, hero.y - hero.displayHeight - 4 - tag.y);
+      });
     }
 
     // Layer 5: fork arrows while a branch choice is pending (Review Focus 3).

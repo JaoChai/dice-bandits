@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createHeroToken, tokenLayout, tokenOffsets } from '../../src/scenes/board/tokens';
 
@@ -6,21 +8,30 @@ describe('board hero tokens', () => {
     expect(tokenOffsets(1)).toEqual([{ x: 0, y: 0 }]);
   });
 
-  // Compact two-row placement makes crowded heroes indistinguishable.
-  // The approved row keeps all feet on one baseline and >=60px apart.
-  it.each([2, 3, 4])('keeps %i shared cartoon tokens distinguishable near their tile', (count) => {
+  // Use the shipped idle-frame widths, not a hypothetical 72px-wide square.
+  // Removing the compact offsets must fail the 155px row-width assertion.
+  it.each([2, 3, 4])('keeps %i shared cartoon tokens in a readable narrow row', (count) => {
     const offsets = tokenOffsets(count);
-    expect(offsets).toHaveLength(count);
-    const approved = count === 2 ? [-36, 36] : count === 3 ? [-66, 0, 66] : [-99, -33, 33, 99];
+    const approved =
+      count === 2 ? [-26, 26] : count === 3 ? [-36, 0, 36] : [-52.5, -17.5, 17.5, 52.5];
     expect(offsets).toEqual(approved.map((x) => ({ x, y: 0 })));
-    for (const offset of offsets) expect(Math.hypot(offset.x, offset.y)).toBeLessThanOrEqual(99);
+    const widths = ['knight', 'thief', 'mage', 'cleric'].map((hero) => {
+      const { w, h } = JSON.parse(
+        readFileSync(resolve(import.meta.dirname, `../../public/art/hero-${hero}.json`), 'utf8'),
+      ).frames.idle;
+      return Math.round((w / h) * 72) * 0.85;
+    });
+    const widest = Math.max(...widths);
+    expect(offsets.at(-1)!.x - offsets[0]!.x + widest).toBeLessThanOrEqual(155);
     for (let left = 0; left < offsets.length; left++) {
       for (let right = left + 1; right < offsets.length; right++) {
-        const dx = Math.abs(offsets[left]!.x - offsets[right]!.x);
-        const dy = Math.abs(offsets[left]!.y - offsets[right]!.y);
-        expect(Math.hypot(dx, dy), `pair ${left}/${right} separation`).toBeGreaterThanOrEqual(60);
-        const overlap = (Math.max(0, 72 - dx) * Math.max(0, 72 - dy)) / (72 * 72);
-        expect(overlap, `pair ${left}/${right}`).toBeLessThanOrEqual(0.35);
+        const dx = offsets[right]!.x - offsets[left]!.x;
+        for (const a of widths)
+          for (const b of widths) {
+            const overlap = Math.max(0, (a + b) / 2 - dx) / Math.min(a, b);
+            expect(overlap, `pair ${left}/${right}`).toBeLessThanOrEqual(0.35);
+            expect(1 - overlap, `unobstructed face ${left}/${right}`).toBeGreaterThanOrEqual(0.7);
+          }
       }
     }
   });

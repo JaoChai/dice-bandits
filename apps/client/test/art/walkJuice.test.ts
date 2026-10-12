@@ -227,6 +227,22 @@ function setup() {
 }
 
 describe('local walk juice and lifecycle', () => {
+  it('restores normal active size before hopping out of a crowd without adding timing', async () => {
+    const s = setup();
+    expect(s.live.latestState.players[0]!.pos).toBe(s.live.latestState.players[1]!.pos);
+    s.token.scaleX = s.token.scaleY = 0.85;
+    const done = s.board.playEvents([s.move]);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(s.token.scaleX).toBeCloseTo(1.18);
+    expect(s.token.scaleY).toBeCloseTo(1.18);
+    expect(s.configs.filter((c) => c.progress === 1).map((c) => c.duration)).toEqual([560]);
+    s.update(0.6);
+    expect(s.token.displayHeight).toBeCloseTo(72 * 1.18);
+    s.board.cancelLocalMovement();
+    await done;
+    expect(s.token.frame.name).toBe('idle');
+    expect(s.token.scaleX).toBeCloseTo(1.18);
+  });
   it('squeezes once at a genuine direction change inside the original 560ms hop', async () => {
     const s = setup();
     const done = s.board.playEvents([s.move]);
