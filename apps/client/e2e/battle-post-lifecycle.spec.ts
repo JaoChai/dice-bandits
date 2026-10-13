@@ -1,7 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
-import { legalActions, step, type GameState } from '@dice-bandits/engine';
+import { createGame, data, legalActions, step, type GameState } from '@dice-bandits/engine';
 import type Phaser from 'phaser';
-import { observeBoardGame, playOneStep, startTestGame } from './helpers';
+import {
+  observeBoardGame,
+  openTitleChoice,
+  playOneStep,
+  startTestGame,
+  waitForBattleArt,
+} from './helpers';
 
 type LifecycleWindow = Window & {
   __m5aGame: Phaser.Game;
@@ -69,18 +75,47 @@ test('multiple human and bot finales progress to gameOver without dead-canvas ca
   expect(observed.consoleErrors).toEqual([]);
 });
 
+// Prepared SAVE, not a claim of a natural first-level win. Engine replay of
+// r2-shop-165 gives a monster finale followed by seat 1's first roll into a shop.
+// Both seats are human so bot automation cannot consume the shop before the test.
+function battleBeforeShop(): GameState {
+  const state = createGame({
+    seed: 'r2-shop-165',
+    rounds: 8,
+    seats: [
+      { name: 'Ada', classId: 'knight', control: 'human', personality: null },
+      { name: 'Ben', classId: 'thief', control: 'human', personality: null },
+    ],
+  });
+  const hero = state.players[0]!;
+  hero.level = data.BALANCE.levelCap;
+  for (const key of ['maxHp', 'atk', 'def', 'spd', 'mag'] as const)
+    hero.stats[key] += data.CLASSES.knight.growth[key] * (hero.level - 1);
+  hero.hp = hero.stats.maxHp;
+  const battle = step(state, { type: 'roll' }).state;
+  expect(battle.phase.kind).toBe('battle');
+  return battle;
+}
+
 test('a later shop purchase after a finale uses the board and advances authoritative state', async ({
   page,
 }, info) => {
   const observed = errors(page);
   await observeBoardGame(page);
-  await startTestGame(page, 0);
+  await page.addInitScript((state) => {
+    localStorage.setItem('diceBandits.save', JSON.stringify({ version: 2, state }));
+  }, battleBeforeShop());
+  await page.goto('/?speed=0');
+  await openTitleChoice(page, 'continue');
+  await waitForBattleArt(page);
   await observeLifecycle(page);
   for (let actions = 0; actions < 300; actions++) {
     const current = await page.evaluate(() => window.__db!.getState());
-    if (current.phase.kind === 'gameOver') throw new Error('expected later human shop on e2e-1');
+    if (current.phase.kind === 'gameOver') throw new Error('expected shop after fixture finale');
     const log = await page.evaluate(() => (window as LifecycleWindow).__postLifecycle);
     if (current.phase.kind === 'shop' && log.finales.length > 0) {
+      expect(log.finales).toEqual([{ mode: 'human', pending: false, ready: true }]);
+      expect(current.turnSeat).toBe(1);
       const buy = legalActions(current, current.turnSeat).find(
         (action) => action.type === 'shopBuy',
       );
