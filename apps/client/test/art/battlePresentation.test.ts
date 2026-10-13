@@ -139,19 +139,19 @@ function engineBattle(
 // Mutations caught: a-always-attacks, swapped recipients, HP-delta-as-damage,
 // duplicate consequence waits, premature victory/secret reveal, and budget overruns.
 describe('pure battle presentation', () => {
-  it('plans one ordered human exchange with the approved 2220ms budget', () => {
+  it('plans one ordered human exchange with authored 2000ms and wall budget <=2220ms', () => {
     const previous = fixture();
     const plan = planBattle(previous, after(previous), [hit()], 'human', false);
     expect(plan.map(({ kind, duration }) => [kind, duration])).toEqual([
-      ['reveal', 240],
-      ['anticipation', 220],
-      ['lunge', 160],
-      ['impact', 100],
-      ['damage', 500],
-      ['drain', 350],
-      ['result', 650],
+      ['reveal', 200],
+      ['anticipation', 260],
+      ['lunge', 180],
+      ['impact', 90],
+      ['damage', 430],
+      ['drain', 300],
+      ['result', 540],
     ]);
-    expect(plan.reduce((sum, value) => sum + value.duration, 0)).toBe(2220);
+    expect(plan.reduce((sum, value) => sum + value.duration, 0)).toBe(2000);
     expect(beat(plan, 'anticipation').attacker).toBe('a');
     expect(beat(plan, 'lunge').attacker).toBe('a');
     expect(beat(plan, 'impact')).toMatchObject({ attacker: 'a', outcome: 'hit' });
@@ -217,7 +217,7 @@ describe('pure battle presentation', () => {
     expect(beat(plan, 'drain').targets).toEqual(targets);
     expect(plan.filter((value) => value.kind === 'damage')).toHaveLength(1);
     expect(plan.filter((value) => value.kind === 'drain')).toHaveLength(1);
-    expect(plan.reduce((sum, value) => sum + value.duration, 0)).toBe(2220);
+    expect(plan.reduce((sum, value) => sum + value.duration, 0)).toBe(2000);
   });
 
   it('uses event damage but authoritative next HP (not inferred damage)', () => {
@@ -448,7 +448,7 @@ describe('pure battle presentation', () => {
   it.each(['bot', 'online'] as const)('proportionally caps %s presentation at 600ms', (mode) => {
     const previous = fixture();
     const plan = planBattle(previous, after(previous), [hit()], mode, false);
-    expect(plan.map((value) => value.duration)).toEqual([64, 59, 43, 27, 135, 94, 175]);
+    expect(plan.map((value) => value.duration)).toEqual([60, 78, 54, 27, 129, 90, 162]);
     expect(plan.reduce((sum, value) => sum + value.duration, 0)).toBeLessThanOrEqual(600);
     expect(plan).toHaveLength(7);
   });
