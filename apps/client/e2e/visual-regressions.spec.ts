@@ -1,3 +1,4 @@
+import { legalActions } from '@dice-bandits/engine';
 import { expect, test } from '@playwright/test';
 import { openTitleChoice, observeBoardGame, playUntil, waitForBattleArt } from './helpers';
 
@@ -16,7 +17,10 @@ test('reward dialog frame stays inside the viewport with all choices scrollable'
     await page.locator(`[data-seat="${seat}"] select[data-field="control"]`).selectOption('bot');
   await page.locator('#setup-form button[type="submit"]').click();
   await playUntil(page, (state) => state.phase.kind === 'pvpReward');
-  const dialog = page.locator('.dialog-shade .game-dialog');
+  const state = await page.evaluate(() => window.__db!.getState());
+  const expectedChoices = legalActions(state, 0);
+  const dialog = page.locator('.battle-post .post-choice-panel');
+  await expect(dialog).toBeVisible();
   for (const lang of ['en', 'th']) {
     // The reward shade covers the board, so drive the menu with DOM clicks
     // exactly like the pre-menu spec drove the old header toggle.
@@ -31,9 +35,30 @@ test('reward dialog frame stays inside the viewport with all choices scrollable'
     expect(box, `reward dialog visible in ${lang}`).not.toBeNull();
     expect(box!.y, 'top edge').toBeGreaterThanOrEqual(0);
     expect(box!.y + box!.height, 'bottom edge').toBeLessThanOrEqual(viewport.height);
-    const buttons = dialog.locator('button');
-    await buttons.last().evaluate((button) => button.scrollIntoView());
-    await expect(buttons.last()).toBeInViewport();
+    expect(box!.x, 'left edge').toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width, 'right edge').toBeLessThanOrEqual(viewport.width);
+    // The bag and expanded prank page together must expose every legal choice.
+    const bagChoices = await dialog
+      .locator('[data-action]')
+      .evaluateAll((cards) =>
+        cards.map((card) => JSON.parse((card as HTMLElement).dataset.action!)),
+      );
+    await page.getByTestId('post-prank-expand').click();
+    const buttons = dialog.locator('[data-post-choice="prank"]');
+    expect(await buttons.count()).toBeGreaterThan(6);
+    const prankChoices = await buttons.evaluateAll((cards) =>
+      cards.map((card) => JSON.parse((card as HTMLElement).dataset.action!)),
+    );
+    expect([...bagChoices, ...prankChoices].map((choice) => JSON.stringify(choice)).sort()).toEqual(
+      expectedChoices.map((choice) => JSON.stringify(choice)).sort(),
+    );
+    for (const button of await buttons.all()) {
+      await button.evaluate((element) => element.scrollIntoView());
+      await expect(button).toBeInViewport({ ratio: 1 });
+    }
+    await page.screenshot({ path: test.info().outputPath(`reward-pranks-${lang}.png`) });
+    await dialog.locator('.post-bag-back').click();
+    await expect(page.getByTestId('post-prank-expand')).toBeVisible();
     // The panel stays open across a switch; close it before the next iteration.
     await page
       .locator('[data-testid="menu-button"]')
