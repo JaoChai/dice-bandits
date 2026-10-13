@@ -273,22 +273,33 @@ button.post-card:active:not(:disabled),
   color: var(--c-cocoa);
 }
 .post-readonly .post-card {
+  opacity: 0.55;
   filter: grayscale(1);
   background: #e0dcd3;
   box-shadow: none;
   cursor: default;
 }
 .post-readonly .post-selected {
+  opacity: 1;
   filter: none;
   background: var(--c-gold);
 }
-.post-waiting-banner {
-  font-size: max(18px, 3vh);
-  font-weight: 500;
+.post-readonly .post-heading {
+  top: 2%;
+}
+.post-readonly .post-choice-panel {
+  top: 30%;
+}
+.post-title.post-waiting-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 11vh;
+  margin-top: 8px;
+  padding: 8px 16px;
+  font-size: clamp(22px, 4.5vh, 34px);
+  font-weight: 600;
   background: var(--c-cream);
-  border: 2px solid var(--c-cocoa);
-  border-radius: 10px;
-  padding: 4px;
 }
 .post-waiting-banner::after {
   content: '';

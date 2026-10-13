@@ -216,6 +216,8 @@ export function showOnlineScreens(options: OnlineScreensOptions): void {
       renderClaim();
     } else if (message.type === 'view') {
       if (session && message.you === session.seat) {
+        // Ownership transfers to the game; this lobby must never replace #app again.
+        unsubscribeLanguage();
         options.onStartGame(socket!, session, message);
       }
     } else if (message.type === 'error') {

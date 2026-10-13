@@ -1,3 +1,4 @@
+import { data } from '@dice-bandits/engine';
 import type { PostResult } from './battlePostModel';
 import { postText } from './battlePostModel';
 import { iconStyle } from './artFrames';
@@ -7,8 +8,11 @@ export function animatePostRewards(root: HTMLElement, result: PostResult, durati
   const up = result.level > result.fromLevel;
   const fill = (xp: number, min: number, max: number) =>
     Math.min(1, Math.max(0, (xp - min) / Math.max(1, max - min)));
-  const oldMin = 0; // Cumulative XP is shown against the engine's absolute threshold.
-  root.innerHTML = `<div class="post-gold" data-testid="post-gold"><span class="post-icon" style="${iconStyle('coin')}" aria-hidden="true"></span><strong>+${result.gold}</strong><span>${postText('gold')} · <b data-testid="post-gold-total">${result.fromGold}</b></span></div><div class="post-xp" data-xp-stage="fill"><span>+${result.xp} ${postText('xp')}</span><div class="post-xp-track" role="progressbar" aria-label="${postText('xp')}" aria-valuemin="0" aria-valuemax="${result.xpGoal}" aria-valuenow="${Math.min(result.xpGoal, result.fromXp)}"><span style="transform:scaleX(${fill(result.fromXp, oldMin, result.xpGoal)})"></span></div><span class="post-xp-amount">${result.fromXp} / ${result.xpGoal} XP · Lv. ${result.fromLevel}</span>${up ? '<b class="post-level-badge">LV UP</b>' : ''}</div>`;
+  const oldMin = data.BALANCE.xpToLevel[result.fromLevel - 1] ?? 0;
+  const progressAt = (xp: number, min: number, max: number) =>
+    Math.min(Math.max(1, max - min), Math.max(0, Math.round(xp - min)));
+  const oldGoal = Math.max(1, result.xpGoal - oldMin);
+  root.innerHTML = `<div class="post-gold" data-testid="post-gold"><span class="post-icon" style="${iconStyle('coin')}" aria-hidden="true"></span><strong>+${result.gold}</strong><span>${postText('gold')} · <b data-testid="post-gold-total">${result.fromGold}</b></span></div><div class="post-xp" data-xp-stage="fill"><span>+${result.xp} ${postText('xp')}</span><div class="post-xp-track" ${result.fromLevel >= data.BALANCE.levelCap ? 'hidden' : ''} role="progressbar" aria-label="${postText('xp')}" aria-valuemin="0" aria-valuemax="${oldGoal}" aria-valuenow="${progressAt(result.fromXp, oldMin, result.xpGoal)}"><span style="transform:scaleX(${fill(result.fromXp, oldMin, result.xpGoal)})"></span></div><span class="post-xp-amount">${result.fromLevel >= data.BALANCE.levelCap ? `Lv. ${result.fromLevel}` : `${progressAt(result.fromXp, oldMin, result.xpGoal)} / ${oldGoal} XP · Lv. ${result.fromLevel}`}</span>${up ? '<b class="post-level-badge">LV UP</b>' : ''}</div>`;
   const gold = root.querySelector<HTMLElement>('[data-testid="post-gold-total"]')!;
   const xp = root.querySelector<HTMLElement>('.post-xp')!;
   const track = root.querySelector<HTMLElement>('.post-xp-track')!;
@@ -29,11 +33,20 @@ export function animatePostRewards(root: HTMLElement, result: PostResult, durati
     xp.dataset.xpStage = reset ? 'remaining' : up && progress >= 0.45 ? 'flash' : 'fill';
     xp.classList.toggle('has-level-up', up && progress >= 0.45);
     const goal = reset ? result.nextXpGoal : result.xpGoal;
+    const min = reset ? (data.BALANCE.xpToLevel[result.level - 1] ?? result.xpGoal) : oldMin;
+    const capacity = Math.max(1, goal - min);
+    const value = progressAt(current, min, goal);
     bar.style.transitionDuration = '0ms';
-    bar.style.transform = `scaleX(${fill(current, reset ? result.xpGoal : oldMin, goal)})`;
-    track.setAttribute('aria-valuemax', String(goal));
-    track.setAttribute('aria-valuenow', String(Math.min(goal, Math.round(current))));
-    label.textContent = `${Math.round(current)} / ${goal} XP · Lv. ${reset ? result.level : result.fromLevel}`;
+    bar.style.transform = `scaleX(${fill(current, min, goal)})`;
+    track.setAttribute('aria-valuemax', String(capacity));
+    track.setAttribute('aria-valuenow', String(value));
+    track.hidden = (reset ? result.level : result.fromLevel) >= data.BALANCE.levelCap;
+    label.textContent =
+      up && progress >= 0.45
+        ? `LV UP · Lv. ${result.level}`
+        : result.fromLevel >= data.BALANCE.levelCap
+          ? `Lv. ${result.fromLevel}`
+          : `${value} / ${capacity} XP · Lv. ${result.fromLevel}`;
   };
   if (duration > 0) {
     for (let i = 0; i < 7; i++) {

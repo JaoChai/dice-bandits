@@ -4,6 +4,7 @@ import { setLang } from '../src/i18n';
 beforeEach(() => setLang('th'));
 import { createBattlePost } from '../src/ui/battlePost';
 import { postResult } from '../src/ui/battlePostModel';
+import { animatePostRewards } from '../src/ui/battlePostRewards';
 
 const make = () =>
   createGame({
@@ -41,6 +42,17 @@ function reward(): {
 
 describe('B1 reward sequence', () => {
   afterEach(() => vi.useRealTimers());
+  it('shows the actual capped level without inventing a next XP threshold', () => {
+    const { previous, next, events } = reward();
+    previous.players[0]!.level = 15;
+    next.players[0]!.level = 15;
+    const root = document.createElement('div');
+    const finish = animatePostRewards(root, postResult(previous, next, events)!, 0);
+    expect(root.querySelector('.post-xp-amount')?.textContent).toBe('Lv. 15');
+    expect(root.querySelector<HTMLElement>('.post-xp-track')?.hidden).toBe(true);
+    finish();
+  });
+
   it('uses the old level, gold and actual next XP threshold', () => {
     const input = reward();
     expect(postResult(input.previous, input.next, input.events)).toMatchObject({
@@ -75,7 +87,9 @@ describe('B1 reward sequence', () => {
     expect(await play).toBe(true);
     expect(root.querySelector('[data-testid="post-gold-total"]')?.textContent).toBe('332');
     expect(root.querySelector('.post-xp-amount')?.textContent).toContain('Lv. 2');
-    expect(root.querySelector('.post-xp-amount')?.textContent).toContain('20 / 11');
+    expect(root.querySelector('.post-xp-amount')?.textContent).toBe('LV UP · Lv. 2');
+    expect(root.querySelector('.post-xp-track')?.getAttribute('aria-valuenow')).toBe('1');
+    expect(root.querySelector('.post-xp-track')?.getAttribute('aria-valuemax')).toBe('1');
     expect(root.querySelector('.post-xp')?.textContent).toContain('LV UP');
     view.destroy();
   });
@@ -118,6 +132,9 @@ describe('B1 bag and ownership', () => {
       root.querySelector('.post-choice-panel button, .post-choice-panel summary, [data-choice]'),
     ).toBeNull();
     expect(root.querySelector('[data-testid="post-waiting"]')?.textContent).toBe('รอ Ada เลือก…');
+    expect(root.querySelector('.post-title')?.textContent).toBe('รอ Ada เลือก…');
+    expect(root.querySelector('.post-title')?.classList.contains('post-waiting-banner')).toBe(true);
+    expect(root.querySelectorAll('[data-testid="post-waiting"]')).toHaveLength(1);
     const finish = view.finish(
       [{ type: 'ItemLooted', seat: 0, params: { item: 'steelSword' } }],
       false,
@@ -137,6 +154,34 @@ describe('B1 bag and ownership', () => {
     expect(root.querySelector('.battle-post')).toBeNull();
     vi.useRealTimers();
   });
+  it('recovers a detached overlay in the current language without reopening a submitted choice', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const sent: Action[] = [];
+    const view = createBattlePost(root);
+    const options = { viewer: 0, dispatch: (action: Action) => sent.push(action), reduced: true };
+    const state = bag();
+    view.mountChoices(state, options);
+    root.querySelector('.battle-post')!.remove();
+    view.mountChoices(state, options);
+    expect(root.querySelector('.battle-post')?.isConnected).toBe(true);
+    root.querySelector<HTMLButtonElement>('[data-testid="post-loot-steelSword"]')!.click();
+    setLang('en');
+    view.mountChoices(state, options);
+    expect(root.querySelector('.post-title')?.textContent).toBe('Take one reward');
+    expect(root.querySelectorAll('[data-post-choice]:not(:disabled)')).toHaveLength(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sent).toHaveLength(1);
+    root.querySelector('.battle-post')!.remove();
+    setLang('th');
+    view.mountChoices(state, options);
+    expect(root.querySelectorAll('[data-post-choice]:not(:disabled)')).toHaveLength(0);
+    expect(sent).toHaveLength(1);
+    view.destroy();
+    root.remove();
+  });
+
   it('invalidates a stale hot-seat callback after another owner mounts', () => {
     const root = document.createElement('div');
     const view = createBattlePost(root);

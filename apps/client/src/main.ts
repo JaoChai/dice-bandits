@@ -12,7 +12,7 @@ import { clearSession } from './online/session';
 import { OnlineController } from './online/onlineController';
 import type { RoomSocketStatus } from './online/socket';
 import { testHooks } from './testHooks';
-import { t } from './i18n';
+import { onLangChange, t } from './i18n';
 import { initAudio, onGameEvents, setMusic } from './audio';
 import { musicForState } from './audio/events';
 import { showOnlineScreens, type OnlineSocket } from './online/screens';
@@ -437,8 +437,7 @@ export function startOnlineGame(
         art: createArtProbe(),
       };
     }
-    window.addEventListener('dice-bandits:lang', renderOnlineHud);
-    unbindGameLanguage = () => window.removeEventListener('dice-bandits:lang', renderOnlineHud);
+    unbindGameLanguage = onLangChange(renderOnlineHud);
   });
 }
 
@@ -749,8 +748,7 @@ function startGame(
       post,
     };
   }
-  window.addEventListener('dice-bandits:lang', renderLocalHud);
-  unbindGameLanguage = () => window.removeEventListener('dice-bandits:lang', renderLocalHud);
+  unbindGameLanguage = onLangChange(renderLocalHud);
   if (!practice) saveGame(controller.state);
   return present;
 }

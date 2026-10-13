@@ -1,7 +1,7 @@
 import type { Action, GameEvent, GameState } from '@dice-bandits/engine';
 import { animatePostRewards } from './battlePostRewards';
 import { iconStyle } from './artFrames';
-import { t } from '../i18n';
+import { getLang, t } from '../i18n';
 import {
   postChoices,
   postResult,
@@ -48,6 +48,8 @@ export function createBattlePost(root: HTMLElement) {
   let active = false;
   let revision = 0;
   let signature = '';
+  let actionSignature = '';
+  let selectedAction: Action | undefined;
   let choiceActor = '';
   let skipped = false;
   let settle: (() => void) | undefined;
@@ -66,8 +68,11 @@ export function createBattlePost(root: HTMLElement) {
           settle();
         }
       });
-      (root.querySelector('.game-shell') ?? root).append(overlay);
     }
+    const parent = root.querySelector('.game-shell') ?? root;
+    if (overlay.parentElement !== parent) parent.append(overlay);
+    overlay.setAttribute('aria-label', postText('reward'));
+    overlay.querySelector('.post-skip')!.textContent = postText('skip');
     active = true;
     root.querySelector('.game-shell')?.classList.add('post-active');
     return overlay;
@@ -120,6 +125,8 @@ export function createBattlePost(root: HTMLElement) {
     overlay = undefined;
     active = false;
     signature = '';
+    actionSignature = '';
+    selectedAction = undefined;
     result = null;
     scene = undefined;
     root.querySelector('.game-shell')?.classList.remove('post-active');
@@ -129,15 +136,22 @@ export function createBattlePost(root: HTMLElement) {
     if (!choices.length) return;
     const key = JSON.stringify([
       state.phase,
-      choices,
+      choices.map((choice) => choice.action),
       options.viewer,
       options.disabled,
       options.legal,
     ]);
-    if (key === signature) return;
-    signature = key;
-    // Capture at mount, not click: detached old handlers cannot acquire a new owner.
-    const token = ++revision;
+    const localizedKey = JSON.stringify([key, getLang(), choices]);
+    if (localizedKey === signature && root.contains(overlay ?? null)) return;
+    signature = localizedKey;
+    // Only authoritative ownership/legal changes invalidate a pending pick.
+    // Locale refresh or reattachment must neither cancel nor reopen it.
+    if (key !== actionSignature) {
+      actionSignature = key;
+      selectedAction = undefined;
+      revision++;
+    }
+    const token = revision;
     const node = ensure();
     node.querySelector('.post-title')!.classList.remove('post-victory-banner');
     node.querySelectorAll('.post-confetti').forEach((item) => item.remove());
@@ -159,15 +173,20 @@ export function createBattlePost(root: HTMLElement) {
     node.querySelector('.post-kicker')!.textContent = level
       ? `${postText('level')} · ${state.players[actor]!.level}`
       : `${postText('bag')} ${state.phase.kind === 'pvpReward' ? state.players[state.phase.loser]!.name : ''}`;
-    node.querySelector('.post-title')!.textContent = level ? postText('perks') : postText('loot');
+    const heading = node.querySelector<HTMLElement>('.post-title')!;
+    heading.textContent = owner
+      ? level
+        ? postText('perks')
+        : postText('loot')
+      : `${postText('waitPrefix')}${choiceActor}${postText('waitSuffix')}`;
+    heading.classList.toggle('post-waiting-banner', !owner);
+    if (!owner) heading.dataset.testid = 'post-waiting';
+    else delete heading.dataset.testid;
     const status = node.querySelector<HTMLElement>('.post-subtitle')!;
-    status.dataset.testid = 'post-waiting';
-    status.classList.toggle('post-waiting-banner', !owner);
-    status.textContent = !owner
-      ? `${postText('waitPrefix')}${state.players[actor]!.name}${postText('waitSuffix')}`
-      : level
-        ? postText('choose')
-        : `${state.players[actor]!.name} · ${postText('loot')}`;
+    status.hidden = !owner;
+    if (owner) status.dataset.testid = 'post-waiting';
+    else delete status.dataset.testid;
+    status.textContent = level ? postText('choose') : `${choiceActor} · ${postText('loot')}`;
     const panel = node.querySelector<HTMLElement>('.post-choice-panel')!;
     panel.hidden = false;
     panel.classList.toggle('is-levelup', level);
@@ -176,17 +195,16 @@ export function createBattlePost(root: HTMLElement) {
     const grid = document.createElement('div');
     grid.className = 'post-cards';
     panel.append(grid);
-    let chosen = false;
     const select = async (choice: PostChoice, card: HTMLElement): Promise<void> => {
       if (
         token !== revision ||
-        chosen ||
+        selectedAction !== undefined ||
         !owner ||
         options.disabled ||
         (card as HTMLButtonElement).disabled
       )
         return;
-      chosen = true;
+      selectedAction = choice.action;
       panel.querySelectorAll<HTMLButtonElement>('button').forEach((item) => {
         item.disabled = true;
       });
@@ -206,6 +224,7 @@ export function createBattlePost(root: HTMLElement) {
     const cardFor = (choice: PostChoice): HTMLElement => {
       const card = document.createElement(owner ? 'button' : 'div');
       card.className = 'post-card';
+      if (!owner) card.setAttribute('aria-disabled', 'true');
       card.dataset.postChoice = choice.group;
       card.dataset.equipped = String(choice.equipped);
       card.dataset.action = JSON.stringify(choice.action);
@@ -220,6 +239,7 @@ export function createBattlePost(root: HTMLElement) {
         card.type = 'button';
         card.dataset.choice = String(choices.indexOf(choice));
         card.disabled =
+          selectedAction !== undefined ||
           options.disabled === true ||
           (options.legal !== undefined &&
             !options.legal.some(
@@ -242,13 +262,14 @@ export function createBattlePost(root: HTMLElement) {
       if (pranks.length) {
         const card = document.createElement(owner ? 'button' : 'div');
         card.className = 'post-card post-prank-category';
+        if (!owner) card.setAttribute('aria-disabled', 'true');
         card.innerHTML = `${icon('skull')}<strong>${postText('browse')}</strong><span class="post-card-detail">${postText('prank')}</span>`;
         if (card instanceof HTMLButtonElement) {
           card.type = 'button';
           card.dataset.testid = 'post-prank-expand';
-          card.disabled = options.disabled === true;
+          card.disabled = selectedAction !== undefined || options.disabled === true;
           card.addEventListener('click', () => {
-            if (token !== revision || chosen) return;
+            if (token !== revision || selectedAction !== undefined) return;
             grid.replaceChildren(...pranks.map(cardFor));
             arrange(pranks.length);
             const back = document.createElement('button');
@@ -272,6 +293,16 @@ export function createBattlePost(root: HTMLElement) {
       arrange(grid.children.length);
     };
     showBag();
+    if (selectedAction) {
+      const selected = choices.find(
+        (choice) => JSON.stringify(choice.action) === JSON.stringify(selectedAction),
+      );
+      const card = Array.from(grid.querySelectorAll<HTMLElement>('[data-action]')).find(
+        (item) => item.dataset.action === JSON.stringify(selectedAction),
+      );
+      (card ?? grid.querySelector('.post-prank-category'))?.classList.add('post-selected');
+      if (selected) status.textContent = `${postText('taken')} · ${selected.name}`;
+    }
     if (owner)
       grid
         .querySelector<HTMLButtonElement>('button:not(:disabled)')
@@ -377,7 +408,10 @@ export function createBattlePost(root: HTMLElement) {
         taken.textContent = receipt;
         target?.append(taken);
         overlay.querySelector('.post-subtitle')!.textContent = receipt;
-        overlay.querySelector('.post-subtitle')!.classList.remove('post-waiting-banner');
+        if (overlay.classList.contains('post-readonly')) {
+          overlay.querySelector('.post-title')!.textContent = receipt;
+          overlay.querySelector('.post-title')!.classList.remove('post-waiting-banner');
+        }
       }
       await waitBeat(
         'receipt',
