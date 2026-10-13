@@ -245,6 +245,23 @@ function renderer(detached = false) {
     active: () => objects.filter((obj) => !obj.destroyed && obj.name.startsWith('battle-effect-')),
   };
 }
+describe('lethal pose ownership', () => {
+  it('keeps the defeated fighter hurt through drain, result and effect cleanup', () => {
+    const r = renderer();
+    const hit = getBeat(plan([damage]), 'damage');
+    hit.targets = [{ side: 'b', amount: 12, fromHp: 12, toHp: 0 }];
+    r.effects.showBeat(hit);
+    expect(r.source.b.frame.name).toBe('hurt');
+    r.effects.showBeat({ ...hit, kind: 'drain' });
+    expect(r.source.b.frame.name).toBe('hurt');
+    r.effects.showBeat({ ...hit, kind: 'result', winner: 'a', targets: [] });
+    expect(r.source.b.frame.name).toBe('hurt');
+    r.effects.destroy();
+    expect(r.source.b.frame.name).toBe('hurt');
+    expect(r.source.a.frame.name).toBe('idle');
+  });
+});
+
 describe('Lead stronger-impact corrections', () => {
   it.each([
     ['ordinary', 0, 7],

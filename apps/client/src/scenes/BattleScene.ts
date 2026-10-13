@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { GameState } from '@dice-bandits/engine';
 import { t, onLangChange } from '../i18n';
+import type { PostResult } from '../ui/battlePostModel';
 import { drawBackdrop } from './battle/backdrop';
 import { drawDicePools, drawFighters, type BattleFighters } from './battle/fighters';
 import { createBattleEffects, playHit } from './battle/effects';
@@ -25,6 +26,143 @@ export default class BattleScene extends Phaser.Scene {
     this.cancelPresentation = undefined;
   }
 
+  private postTweens: Phaser.Tweens.Tween[] = [];
+  private postSprites: Phaser.GameObjects.Sprite[] = [];
+  private postHomes = new Map<Phaser.GameObjects.Sprite, { x: number; y: number }>();
+  private postWinner: 'a' | 'b' | null = null;
+  private postChoiceMounted = false;
+  private heldPostResult: PostResult | null = null;
+  private heldPostLevelUp = false;
+
+  /** View-only finale. The engine remains the sole source of results/rewards. */
+  postVictory(result: PostResult, duration: number): void {
+    this.settlePostEffects();
+    this.cancelBattlePresentation();
+    this.postWinner = result.winner;
+    this.heldPostResult = result;
+    this.postChoiceMounted = false;
+    this.postHomes.clear();
+    for (const child of this.children.list) {
+      const display = child as Phaser.GameObjects.Sprite;
+      if (display.depth >= 6) display.setVisible(false);
+    }
+    for (const side of ['a', 'b'] as const) {
+      const sprite = this.fighters?.[side];
+      if (!sprite) continue;
+      this.tweens.killTweensOf(sprite);
+      const home = this.layout[side === 'a' ? 'left' : 'right'];
+      sprite.setPosition(home.x, home.y).setAngle(0);
+      this.postHomes.set(sprite, { x: home.x, y: home.y });
+      const winner = side === result.winner;
+      const pose = winner ? 'happy' : result.winner ? 'hurt' : 'idle';
+      sprite.setFrame(sprite.texture.has(pose) ? pose : 'idle');
+      sprite.setAlpha(winner || !result.winner ? 1 : 0.6);
+      if (!winner && result.winner && duration > 0)
+        this.postTweens.push(
+          this.tweens.add({
+            targets: sprite,
+            y: home.y + this.layout.fighterHeight * 0.08,
+            angle: side === 'a' ? -12 : 12,
+            alpha: 0.35,
+            duration,
+            ease: 'Sine.easeIn',
+          }),
+        );
+      if (winner && duration > 0)
+        this.postTweens.push(
+          this.tweens.add({
+            targets: sprite,
+            y: home.y - this.layout.fighterHeight * 0.075,
+            duration: duration / 4,
+            yoyo: true,
+            repeat: 1,
+            ease: 'Sine.easeOut',
+          }),
+        );
+    }
+  }
+
+  postRewards(result: PostResult, duration: number): void {
+    const actor = result.winner ? this.fighters?.[result.winner] : undefined;
+    if (!actor || !result.gold || duration <= 0) return;
+    const { width, height } = this.cameras.main;
+    for (let index = 0; index < 7; index++) {
+      const coin = this.add.sprite(
+        actor.x + (index - 3) * 16,
+        actor.y - this.layout.fighterHeight * 0.5,
+        'art:icons',
+        'coin',
+      );
+      coin.setDisplaySize(height * 0.055, height * 0.055).setDepth(30);
+      this.postSprites.push(coin);
+      this.postTweens.push(
+        this.tweens.add({
+          targets: coin,
+          x: width * 0.47,
+          y: height * 0.29,
+          scaleX: coin.scaleX * 0.5,
+          scaleY: coin.scaleY * 0.5,
+          alpha: 0,
+          duration: duration * 0.72,
+          delay: index * duration * 0.03,
+          ease: 'Sine.easeInOut',
+        }),
+      );
+    }
+  }
+
+  postChoice(levelUp: boolean, reduced: boolean): void {
+    if (this.postChoiceMounted) return;
+    this.postChoiceMounted = true;
+    this.heldPostLevelUp = levelUp;
+    this.settlePostEffects();
+    const { width, height } = this.cameras.main;
+    for (const side of ['a', 'b'] as const) {
+      const sprite = this.fighters?.[side];
+      if (!sprite) continue;
+      const home = { x: width * (side === 'a' ? 0.115 : 0.885), y: height * 0.69 };
+      this.postHomes.set(sprite, home);
+      sprite.setScale(sprite.scaleX * 0.64, sprite.scaleY * 0.64);
+      if (reduced) sprite.setPosition(home.x, home.y);
+      else
+        this.postTweens.push(
+          this.tweens.add({ targets: sprite, ...home, duration: 180, ease: 'Sine.easeOut' }),
+        );
+      if (levelUp && side === this.postWinner && !reduced) {
+        for (let index = 0; index < 7; index++) {
+          const star = this.add.sprite(
+            home.x + (index - 3) * height * 0.026,
+            home.y - this.layout.fighterHeight * 0.3,
+            'art:icons',
+            'star',
+          );
+          star.setDisplaySize(height * 0.04, height * 0.04).setDepth(30);
+          this.postSprites.push(star);
+          this.postTweens.push(
+            this.tweens.add({
+              targets: star,
+              y: star.y - height * 0.3,
+              alpha: 0,
+              duration: 600,
+              delay: index * 35,
+              ease: 'Sine.easeOut',
+            }),
+          );
+        }
+      }
+    }
+  }
+
+  settlePostEffects(): void {
+    this.postTweens.forEach((tween) => tween.stop());
+    this.postTweens = [];
+    this.postSprites.forEach((sprite) => sprite.destroy());
+    this.postSprites = [];
+    this.postHomes.forEach((home, sprite) => {
+      if (sprite.active) sprite.setPosition(home.x, home.y);
+    });
+  }
+
   constructor() {
     super('BattleScene');
   }
@@ -32,7 +170,14 @@ export default class BattleScene extends Phaser.Scene {
   create(): void {
     this.layout = battleLayout(this.cameras.main.width, this.cameras.main.height);
     const onResize = (): void => {
+      const result = this.heldPostResult;
+      const choices = this.postChoiceMounted;
+      const level = this.heldPostLevelUp;
       if (this.latestState) this.renderBattle(this.latestState);
+      if (result) {
+        this.postVictory(result, 0);
+        if (choices) this.postChoice(level, true);
+      }
     };
     this.scale.on('resize', onResize);
     this.game.events.on('game-state', this.renderBattle, this);
@@ -41,6 +186,9 @@ export default class BattleScene extends Phaser.Scene {
       this.exchangeLabel?.setText(t('battle.exchange', { exchange: this.exchange }));
     });
     this.events.once('shutdown', () => {
+      this.settlePostEffects();
+      this.postHomes.clear();
+      this.heldPostResult = null;
       this.cancelBattlePresentation();
       this.scale.off('resize', onResize);
       this.game.events.off('game-state', this.renderBattle, this);
@@ -225,6 +373,11 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private renderBattle(state: GameState): void {
+    // All views commit normally. Only this scene retains its cosmetic backdrop.
+    if (this.heldPostResult && state.phase.kind !== 'battle') return;
+    this.settlePostEffects();
+    this.postHomes.clear();
+    this.heldPostResult = null;
     this.cancelBattlePresentation();
     this.latestState = state;
     const view = this.cameras.main;

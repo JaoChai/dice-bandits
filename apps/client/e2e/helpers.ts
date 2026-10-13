@@ -268,6 +268,7 @@ export async function startTestGame(page: Page, speed = 0): Promise<void> {
  */
 const ACTION_SELECTORS = [
   '.dialog-shade button:visible:enabled',
+  '[data-post-choice]:visible:enabled',
   '[data-testid^="action-"]:visible:enabled',
   '[data-testid^="pick-"]:visible:enabled',
   '[data-testid="pass-ready"]:visible:enabled',

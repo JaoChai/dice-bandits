@@ -407,7 +407,11 @@ for (const lang of ['en', 'th'] as const) {
       const sawRoll = [false, false];
       let comparisons = 0;
       const action = async (client: Page) => {
-        const dialog = client.locator('.dialog-shade button[data-choice]:visible:enabled').first();
+        const dialog = client
+          .locator(
+            '.dialog-shade button[data-choice]:visible:enabled, .battle-post button[data-choice]:visible:enabled',
+          )
+          .first();
         if (await dialog.count()) return dialog;
         return client
           .locator(

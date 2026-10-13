@@ -33,6 +33,8 @@ import { createDiceRoll, readRollResult } from './ui/diceRoll';
 import { createBattleReadout } from './ui/battleUi';
 import { crossesBattleBoundary, planBattle } from './scenes/battle/presentation';
 import { reducedMotion } from './art/motion';
+import { createBattlePost } from './ui/battlePost';
+import './ui/battlePost.css';
 import { createPractice, type PracticeSession } from './tutor/practice';
 import type { TutorialScript } from './tutor/script';
 import { mountPracticeUi, preparePractice } from './ui/practiceUi';
@@ -43,6 +45,7 @@ let game: Phaser.Game | null = null;
 let diceyGuide: ReturnType<typeof createDiceyGuide> | undefined;
 let battleReadout: ReturnType<typeof createBattleReadout> | undefined;
 let diceRoll: ReturnType<typeof createDiceRoll> | undefined;
+let battlePost: ReturnType<typeof createBattlePost> | undefined;
 let sessionGeneration = 0;
 let unbindGameLanguage: (() => void) | undefined;
 let practiceSession: PracticeSession | undefined;
@@ -53,6 +56,8 @@ let practiceRoute: TutorialScript | undefined;
 /** Phaser destroy is deferred; remove body-owned board UI synchronously. */
 function destroyGame(): void {
   sessionGeneration++;
+  battlePost?.destroy();
+  battlePost = undefined;
   practicePreparation?.destroy();
   practicePreparation = undefined;
   practiceUi?.destroy();
@@ -137,7 +142,11 @@ export function startOnlineGame(
   diceRoll = rollView;
   const readout = createBattleReadout(app);
   battleReadout = readout;
+  const post = createBattlePost(app);
+  battlePost = post;
   let displayedState = firstView.state;
+  let postOnlineReady = false;
+  let postGeneration = 0;
   let presentationBusy = false;
   let previousTipState = firstView.state;
   let tipEvents: GameEvent[] = [];
@@ -165,7 +174,18 @@ export function startOnlineGame(
       legal: controller.legal,
       online: controller.hudOnlineState,
       presentationBusy,
+      battlePost: post.active,
     });
+    if (post.active && postOnlineReady && !presentationBusy)
+      post.mountChoices(displayedState, {
+        viewer: controller.you,
+        dispatch,
+        reduced: reducedMotion() || window.diceBanditsSpeed <= 0,
+        disabled:
+          controller.hudOnlineState.awaitingView ||
+          controller.hudOnlineState.socketStatus !== 'open',
+        legal: controller.legal,
+      });
     // onEvents runs before the authoritative view updates you/seats. Wait for
     // that existing view handoff, never for a tip or a new animation/timer.
     if (tipsReady && !controller.hudOnlineState.awaitingView) {
@@ -242,12 +262,66 @@ export function startOnlineGame(
           if (!isCurrent()) return;
           presentationBusy = false;
           renderEventToast(app, events);
+          // Cosmetic ghost starts after commit, never adds an authoritative await.
+          if (
+            previous.phase.kind === 'battle' &&
+            nextState.phase.kind !== 'battle' &&
+            events.some((event) => event.type === 'BattleEnded')
+          ) {
+            postOnlineReady = false;
+            const postToken = ++postGeneration;
+            void post
+              .play({
+                previous,
+                next: nextState,
+                events,
+                mode: 'online',
+                speed: window.diceBanditsSpeed,
+                reduced: reducedMotion(),
+                viewer: controller.you,
+                scene: battleScene,
+              })
+              .then((pending) => {
+                if (!isCurrent() || postToken !== postGeneration) return;
+                postOnlineReady = true;
+                if (!pending) {
+                  post.destroy();
+                  ownedGame?.events.emit('game-state', controller.state);
+                  scene?.scene.stop('BattleScene');
+                }
+                renderOnlineHud();
+              });
+          } else if (
+            post.active &&
+            nextState.phase.kind !== 'pvpReward' &&
+            nextState.phase.kind !== 'levelUp'
+          ) {
+            postGeneration++;
+            postOnlineReady = false;
+            if (
+              events.some((event) =>
+                ['ItemLooted', 'GoldStolen', 'TownFlipped', 'PerkChosen', 'Pranked'].includes(
+                  event.type,
+                ),
+              )
+            ) {
+              // Receipt is detached from the authoritative callback: no server view waits.
+              void post
+                .finish(events, reducedMotion() || window.diceBanditsSpeed <= 0, 'online')
+                .then(() => {
+                  if (!isCurrent() || post.active || controller.state.phase.kind === 'battle')
+                    return;
+                  scene?.scene.stop('BattleScene');
+                  renderOnlineHud();
+                });
+            } else post.destroy();
+          }
           ownedGame?.registry.set('state', nextState);
           ownedGame?.events.emit('game-state', nextState);
           if (nextState.phase.kind === 'battle') {
             if (ownedGame?.scene.isActive('BoardScene') && !ownedGame.scene.isActive('BattleScene'))
               scene?.scene.launch('BattleScene');
-          } else if (ownedGame?.scene.isActive('BattleScene')) {
+          } else if (ownedGame?.scene.isActive('BattleScene') && !post.active) {
             scene?.scene.stop('BattleScene');
           }
           if (presentationGeneration === movementGeneration) {
@@ -500,12 +574,27 @@ function startGame(
   diceRoll = rollView;
   const readout = createBattleReadout(app);
   battleReadout = readout;
+  const post = createBattlePost(app);
+  battlePost = post;
   let displayedState = state;
   let presentationBusy = false;
   const isLocalHuman = (seat: number): boolean => displayedState.players[seat]?.control === 'human';
+  const postActor = (current: GameState): number =>
+    current.phase.kind === 'levelUp'
+      ? current.phase.seat
+      : current.phase.kind === 'pvpReward'
+        ? current.phase.winner
+        : current.turnSeat;
+  const postViewer = postActor;
   const renderLocalHud = (): void => {
     if (!isCurrent()) return;
-    renderHud(app, displayedState, dispatch, { presentationBusy });
+    renderHud(app, displayedState, dispatch, { presentationBusy, battlePost: post.active });
+    if (post.active && !presentationBusy)
+      post.mountChoices(displayedState, {
+        viewer: postViewer(displayedState),
+        dispatch,
+        reduced: reducedMotion() || window.diceBanditsSpeed <= 0,
+      });
     practiceUi?.update();
   };
   const present = async (events: GameEvent[], nextState: GameState): Promise<void> => {
@@ -552,6 +641,36 @@ function startGame(
               }) ?? Promise.resolve())
             : Promise.resolve(),
         ]);
+        if (!isCurrent()) return;
+        const finaleMode =
+          displayedState.phase.kind === 'battle' &&
+          (['a', 'b'] as const).some((side) => {
+            if (displayedState.phase.kind !== 'battle') return false;
+            const seat = displayedState.phase.battle[side].seat;
+            return seat !== null && isLocalHuman(seat);
+          })
+            ? 'human'
+            : displayedState.players[postActor(displayedState)]?.control === 'human'
+              ? 'human'
+              : 'bot';
+        if (events.some((event) => event.type === 'BattleEnded')) {
+          const pending = await post.play({
+            previous: displayedState,
+            next: nextState,
+            events,
+            mode: finaleMode,
+            viewer:
+              nextState.phase.kind === 'levelUp' || nextState.phase.kind === 'pvpReward'
+                ? postViewer(nextState)
+                : displayedState.turnSeat,
+            speed: window.diceBanditsSpeed,
+            reduced: reducedMotion(),
+            scene: battleScene,
+          });
+          if (!pending) post.destroy();
+        } else if (post.active) {
+          await post.finish(events, reducedMotion() || window.diceBanditsSpeed <= 0, finaleMode);
+        }
       },
       () => {
         // destroyGame settles play; its continuation must not touch a new game.
@@ -584,7 +703,7 @@ function startGame(
           // BootScene handles battle entry when atlases are still loading.
           if (ownedGame?.scene.isActive('BoardScene') && !ownedGame.scene.isActive('BattleScene'))
             scene?.scene.launch('BattleScene');
-        } else if (ownedGame?.scene.isActive('BattleScene')) {
+        } else if (ownedGame?.scene.isActive('BattleScene') && !post.active) {
           scene?.scene.stop('BattleScene');
         }
       },
@@ -627,6 +746,7 @@ function startGame(
     window.__db = {
       getState: () => controller.state,
       art: createArtProbe(),
+      post,
     };
   }
   window.addEventListener('dice-bandits:lang', renderLocalHud);
@@ -644,6 +764,7 @@ declare global {
   interface Window {
     __db?: {
       getState: () => GameState;
+      post?: ReturnType<typeof createBattlePost>;
       art: {
         readonly boardReady: boolean;
         readonly battleReady: boolean;

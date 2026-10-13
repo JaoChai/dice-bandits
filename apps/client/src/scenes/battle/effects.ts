@@ -68,8 +68,10 @@ export function createBattleEffects(
   const cream = color('--c-cream', '#f5eedc');
   let destroyed = false;
   for (const sprite of Object.values(sprites)) scene.tweens.killTweensOf(sprite);
+  const defeated = new Set<Side>();
   const pose = (side: Side, frame: string): void => {
-    if (sprites[side].texture.has(frame)) sprites[side].setFrame(frame);
+    const held = defeated.has(side) ? 'hurt' : frame;
+    if (sprites[side].texture.has(held)) sprites[side].setFrame(held);
   };
   const clear = (preserve = false): void => {
     for (const handle of tweens.splice(0)) {
@@ -312,6 +314,7 @@ export function createBattleEffects(
         const hitTargets = beat.targets.filter((target) => target.amount > 0);
         for (const target of hitTargets) {
           const pos = layout[target.side === 'a' ? 'left' : 'right'];
+          if (target.toHp <= 0) defeated.add(target.side);
           pose(target.side, 'hurt');
           if (beat.kind === 'impact') {
             // Cosmetic hold only: the existing scene beat remains the sole clock.
