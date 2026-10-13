@@ -235,12 +235,14 @@ export default class BattleScene extends Phaser.Scene {
           ? createBattleEffects(this, this.fighters, this.layout, options.mode === 'online')
           : undefined;
       let timer: Phaser.Time.TimerEvent | undefined;
+      let wallTimer: number | undefined;
       let finishWait: (() => void) | undefined;
       let cleaned = false;
       const cleanup = (): void => {
         if (cleaned) return;
         cleaned = true;
         timer?.remove(false);
+        window.clearTimeout(wallTimer);
         finishWait?.();
         effects?.destroy();
       };
@@ -270,6 +272,8 @@ export default class BattleScene extends Phaser.Scene {
               let settled = false;
               const complete = (): void => {
                 settled = true;
+                timer?.remove(false);
+                window.clearTimeout(wallTimer);
                 timer = undefined;
                 finishWait = undefined;
                 resolve();
@@ -281,6 +285,19 @@ export default class BattleScene extends Phaser.Scene {
                 const remaining = wallDeadline - performance.now();
                 if (remaining > 0) {
                   timer = this.time.delayedCall(remaining, checkHumanFloor);
+                  // Scene eligibility has already been reached. A smoothed early
+                  // callback used to round the wall-floor correction to another
+                  // frame (seven extra frames under CPU throttling). Resolve the
+                  // correction directly, retaining pause/timeScale eligibility.
+                  window.clearTimeout(wallTimer);
+                  wallTimer = window.setTimeout(() => {
+                    if (
+                      !this.time.paused &&
+                      this.time.timeScale > 0 &&
+                      (!this.sys || this.sys.isActive())
+                    )
+                      checkHumanFloor();
+                  }, remaining);
                 } else {
                   complete();
                 }

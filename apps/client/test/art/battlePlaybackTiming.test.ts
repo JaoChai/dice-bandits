@@ -136,6 +136,22 @@ function scheduler() {
   };
 }
 
+it('an early eligible scene timer settles at its wall floor without a second frame', async () => {
+  vi.useFakeTimers();
+  try {
+    const s = scheduler();
+    const playback = s.play();
+    await s.fireAt(180);
+    s.setWall(240);
+    await vi.advanceTimersByTimeAsync(60);
+    expect(s.seen.map((beat) => beat.kind)).toEqual(['reveal', 'anticipation']);
+    s.scene.cancelBattlePresentation();
+    await playback;
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('human reveal cannot advance at 180 wall ms even when its 240ms scene timer fires', async () => {
   const s = scheduler();
   const playback = s.play();
