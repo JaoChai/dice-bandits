@@ -95,6 +95,152 @@ beforeEach(async () => {
   }));
 });
 
+describe('lobby-to-game language lifecycle', () => {
+  it.each([0, 1])(
+    'keeps seat %i in the live game after a pending-choice language switch',
+    async (viewer) => {
+      const { showOnlineScreens } = await import('../src/online/screens');
+      const { saveSession } = await import('../src/online/session');
+      const { setLang } = await import('../src/i18n');
+      const { step, legalActions } = await import('@dice-bandits/engine');
+      setLang('th');
+      saveSession({ code: 'ABCDE', seat: viewer, token: 'test', name: game.players[viewer]!.name });
+      const socket = new FakeSocket();
+      showOnlineScreens({
+        initialCode: 'ABCDE',
+        socketFactory: (options) => {
+          socket.setHandlers(options);
+          return socket;
+        },
+        onStartGame: startOnlineGame,
+      });
+      socket.receive({ type: 'lobby', code: 'ABCDE', host: 0, seats: makeView().seats });
+      expect(document.querySelector('[data-testid="screen-lobby"]')).not.toBeNull();
+      const state = structuredClone(game);
+      state.phase = { kind: 'duelOffer', remaining: 1, targets: [1] };
+      const battle = step(state, { type: 'duel', target: 1 }).state;
+      socket.receive(makeView({ state: battle, you: viewer, legal: [] }));
+      await vi.waitFor(() => expect(fakeGame).toHaveBeenCalled());
+      const pending = structuredClone(battle);
+      pending.phase = { kind: 'pvpReward', winner: 0, loser: 1 };
+      pending.players[1]!.items = ['steelSword'];
+      socket.receive({
+        type: 'events',
+        turn: 24,
+        events: [{ type: 'BattleEnded', seat: 0, params: { result: 'aWin' } }],
+      });
+      const view = makeView({
+        state: pending,
+        turn: 24,
+        you: viewer,
+        legal: legalActions(pending, viewer),
+      });
+      socket.receive(view);
+      await vi.waitFor(() =>
+        expect(
+          document.querySelector(
+            '.battle-post[data-beat="choice"] .post-choice-panel:not([hidden])',
+          ),
+        ).not.toBeNull(),
+      );
+      const shell = document.querySelector('.game-shell');
+      const canvasMount = document.querySelector('#phaser-board');
+      setLang('en');
+      expect(document.querySelector('.game-shell')).toBe(shell);
+      expect(document.querySelector('#phaser-board')).toBe(canvasMount);
+      expect(document.querySelector('[data-testid="screen-lobby"]')).toBeNull();
+      expect(document.querySelector('.battle-post')?.isConnected).toBe(true);
+      expect(document.querySelector('.post-title')?.textContent).toBe(
+        viewer === 0 ? 'Take one reward' : 'Waiting for Ada to choose…',
+      );
+      socket.receive({ ...view, turn: 25 });
+      await vi.waitFor(() => expect(document.querySelector('.post-choice-panel')).not.toBeNull());
+      if (viewer === 0) {
+        const card = document.querySelector<HTMLButtonElement>(
+          '[data-testid="post-loot-steelSword"]',
+        )!;
+        card.click();
+        card.click();
+        await vi.waitFor(() =>
+          expect(socket.sent.filter((msg) => msg.type === 'action')).toHaveLength(1),
+        );
+      } else {
+        expect(
+          document.querySelector('.post-choice-panel button, .post-choice-panel [data-choice]'),
+        ).toBeNull();
+        const picked = step(pending, {
+          type: 'pvpReward',
+          reward: 'loot',
+          item: 'steelSword',
+          townId: null,
+          alias: null,
+        });
+        socket.receive({ type: 'events', turn: 26, events: picked.events });
+        socket.receive(makeView({ state: picked.state, turn: 26, you: viewer, legal: [] }));
+        await vi.waitFor(() =>
+          expect(document.querySelector('.post-selected')?.textContent).toContain('Ada took'),
+        );
+        await vi.waitFor(() => expect(document.querySelector('.battle-post')).toBeNull());
+      }
+      // Owning game subscriptions must disappear on teardown too.
+      socket.terminate(4404);
+      const error = document.querySelector('[data-testid="screen-online-error"]');
+      setLang('th');
+      expect(document.querySelector('[data-testid="screen-online-error"]')).toBe(error);
+      expect(document.querySelector('.game-shell')).toBeNull();
+    },
+  );
+});
+
+describe('online post authoritative commits', () => {
+  it('commits every view during cosmetics, then keeps a loser receipt without blocking newer views', async () => {
+    const { step } = await import('@dice-bandits/engine');
+    const state = structuredClone(game);
+    state.phase = { kind: 'duelOffer', remaining: 1, targets: [1] };
+    const battle = step(state, { type: 'duel', target: 1 }).state;
+    const emit = vi.fn();
+    const set = vi.fn();
+    fakeGame.mockImplementation(() => ({
+      destroy: vi.fn(),
+      registry: { set },
+      events: { emit, on: vi.fn() },
+      scene: { getScene: vi.fn(), isActive: () => false },
+    }));
+    const socket = new FakeSocket();
+    startOnlineGame(
+      socket,
+      { code: 'ABCDE', seat: 1, token: 'test', name: 'Lin' },
+      makeView({ state: battle, you: 1, legal: [] }),
+    );
+    await vi.waitFor(() => expect(fakeGame).toHaveBeenCalled());
+    const pending = structuredClone(battle);
+    pending.phase = { kind: 'pvpReward', winner: 0, loser: 1 };
+    pending.players[1]!.items = ['steelSword'];
+    socket.receive({
+      type: 'events',
+      turn: 24,
+      events: [{ type: 'BattleEnded', seat: 0, params: { result: 'aWin' } }],
+    });
+    socket.receive(makeView({ state: pending, turn: 24, you: 1, legal: [] }));
+    await vi.waitFor(() => expect(set).toHaveBeenCalledWith('state', pending));
+    expect(emit).toHaveBeenCalledWith('game-state', pending);
+    await vi.waitFor(() => expect(document.querySelector('.post-readonly')).not.toBeNull());
+    const picked = step(pending, {
+      type: 'pvpReward',
+      reward: 'loot',
+      item: 'steelSword',
+      townId: null,
+      alias: null,
+    });
+    socket.receive({ type: 'events', turn: 25, events: picked.events });
+    socket.receive(makeView({ state: picked.state, turn: 25, you: 1, legal: [] }));
+    await vi.waitFor(() => expect(set).toHaveBeenCalledWith('state', picked.state));
+    expect(emit).toHaveBeenCalledWith('game-state', picked.state);
+    expect(document.querySelector('.post-selected')?.textContent).toContain('Ada');
+    await vi.waitFor(() => expect(document.querySelector('.battle-post')).toBeNull());
+  });
+});
+
 describe('startOnlineGame', () => {
   it('renders the board with server legal actions and routes clicks to the room socket', async () => {
     const socket = new FakeSocket();

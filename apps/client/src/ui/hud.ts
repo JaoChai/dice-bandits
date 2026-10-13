@@ -22,7 +22,12 @@ type HudOnlineState = {
   reclaim: () => void;
 };
 
-type HudOptions = { legal?: Action[]; online?: HudOnlineState; presentationBusy?: boolean };
+type HudOptions = {
+  legal?: Action[];
+  online?: HudOnlineState;
+  presentationBusy?: boolean;
+  battlePost?: boolean;
+};
 
 const hudContexts = new WeakMap<
   HTMLElement,
@@ -288,6 +293,15 @@ export function renderHud(
         });
         itemDialogClosers.set(root, close);
       };
+  }
+  shell.classList.toggle('post-active', options?.battlePost === true);
+  if (options?.battlePost) {
+    root.querySelector('.dialog-shade')?.remove();
+    root.querySelector('.battle-hud')?.remove();
+    actionBar.hidden = true;
+    actionBar.setAttribute('inert', '');
+    actionBar.innerHTML = '';
+    return;
   }
   if (ownsModal && (!busy || hadModal)) {
     if (state.phase.kind === 'pvpReward') showActionDialog(root, modalActions, dispatch, busy);

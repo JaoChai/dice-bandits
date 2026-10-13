@@ -26,6 +26,8 @@ export const PORTRAIT_FRAMES: Record<ClassId, ArtFrame> = {
 
 /** `icons.webp` is 512×512; frames the UI uses. */
 export const ICON_FRAMES = {
+  heart: { x: 10, y: 32, w: 108, h: 96, anchorX: 54, anchorY: 96 },
+  crown: { x: 7, y: 151, w: 113, h: 105, anchorX: 56, anchorY: 105 },
   sword: { x: 271, y: 9, w: 97, h: 119, anchorX: 48, anchorY: 119 },
   shield: { x: 398, y: 13, w: 99, h: 115, anchorX: 49, anchorY: 115 },
   scroll: { x: 137, y: 136, w: 110, h: 120, anchorX: 55, anchorY: 120 },

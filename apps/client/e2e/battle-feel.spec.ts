@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   createGame,
+  legalActions,
   startBattle,
   step,
   type GameEvent,
@@ -332,6 +333,22 @@ for (const lang of ['en', 'th'])
         expect(resolved.events.some((event) => event.type === 'BattleEnded')).toBe(true);
         expect(samples[6]!.beat.result).toBe('win');
         await expect(page.locator('.battle-hud')).toHaveCount(0);
+        if (resolved.state.phase.kind === 'levelUp' || resolved.state.phase.kind === 'pvpReward') {
+          await expect(page.locator('.post-choice-panel')).toBeVisible();
+          expect(
+            await page.evaluate(() => (window as Probe).__m5aGame.scene.isActive('BattleScene')),
+          ).toBe(true);
+          const actor =
+            resolved.state.phase.kind === 'levelUp'
+              ? resolved.state.phase.seat
+              : resolved.state.phase.winner;
+          const action = legalActions(resolved.state, actor)[0]!;
+          await page.locator('[data-post-choice]').first().click();
+          await expect
+            .poll(() => page.evaluate(() => window.__db!.getState()))
+            .toEqual(step(resolved.state, action).state);
+        }
+        await expect(page.getByTestId('battle-post')).toHaveCount(0);
         expect(
           await page.evaluate(() => (window as Probe).__m5aGame.scene.isActive('BattleScene')),
         ).toBe(false);

@@ -18,7 +18,7 @@ const RETRY_DELAYS = [1000, 2000, 4000, 8000, 10000] as const;
 const TERMINAL_CLOSE_CODES = new Set([4000, 4404]);
 
 export class RoomSocket {
-  private readonly url: string;
+  private url: string;
   private onMessage: RoomSocketOptions['onMessage'];
   private onStatus: RoomSocketOptions['onStatus'];
   private onTerminal: RoomSocketOptions['onTerminal'];
@@ -98,6 +98,13 @@ export class RoomSocket {
       } catch {
         // Ignore malformed server data and keep the transport alive.
         return;
+      }
+      // First-time joins start without a token in the URL. Retain the issued
+      // credential for reconnects even after the lobby transfers the handlers.
+      if (message.type === 'welcome' && typeof message.token === 'string' && message.token) {
+        const url = new URL(this.url);
+        url.searchParams.set('token', message.token);
+        this.url = url.href;
       }
       this.onMessage(message);
     };

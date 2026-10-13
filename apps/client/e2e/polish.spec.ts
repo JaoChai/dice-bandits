@@ -54,6 +54,23 @@ for (const lang of ['th', 'en'] as const) {
     await page.locator('[data-testid="action-roll"]').click();
     await expect.poll(() => page.evaluate(() => window.__db!.getState().phase.kind)).toBe('battle');
     await playUntil(page, (state) => state.phase.kind !== 'battle');
+    await expect(banner.locator('.event-text')).toHaveText(
+      lang === 'th' ? 'การต่อสู้จบแล้ว' : 'Battle ended',
+    );
+    // The finale deliberately owns the screen until the real reward choice.
+    await expect(page.locator('.post-choice-panel')).toBeVisible();
+    const postTitle = page.locator('.battle-post .post-title');
+    await expect(postTitle).toBeVisible();
+    await expect(postTitle).toHaveText(lang === 'th' ? 'ความสามารถใหม่' : 'New perk');
+    await expect(page.getByTestId('post-waiting')).toHaveText(
+      lang === 'th' ? 'เลือกความสามารถใหม่ 1 อย่าง' : 'Choose one new perk',
+    );
+    await expect(banner).toBeHidden();
+    await playUntil(
+      page,
+      (state) => state.phase.kind !== 'levelUp' && state.phase.kind !== 'pvpReward',
+    );
+    await expect(page.getByTestId('battle-post')).toHaveCount(0);
     await expect(banner.locator('.event-text')).not.toHaveText('');
     await expect(banner).toBeVisible();
   });

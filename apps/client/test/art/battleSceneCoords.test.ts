@@ -68,7 +68,7 @@ function battleScene() {
   const created: Array<{ kind: string; x: number; y: number; object: Record<string, unknown> }> =
     [];
   let onGameState: ((state: ReturnType<typeof battlePhaseState>) => void) | undefined;
-  const scene = Object.assign(Object.create(BattleScene.prototype), {
+  const scene = Object.assign(new BattleScene(), {
     game: {
       events: {
         on: vi.fn(

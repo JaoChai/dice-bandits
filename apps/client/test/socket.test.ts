@@ -106,6 +106,21 @@ function installBrowserTimers(): void {
 }
 
 describe('RoomSocket', () => {
+  it('reconnects a newly joined player with the token issued by the server', () => {
+    const { roomSocket, timers, onMessage } = socket();
+    const joined = FakeWebSocket.instances[0]!;
+    joined.open();
+    const welcome: ServerMsg = { type: 'welcome', seat: 1, token: 'test-issued-token' };
+    joined.receive(JSON.stringify(welcome));
+    joined.disconnect();
+    timers.advance();
+    expect(FakeWebSocket.instances[1]!.url).toBe(
+      'wss://example.test/api/rooms/ABCDE/ws?token=test-issued-token',
+    );
+    expect(onMessage).toHaveBeenLastCalledWith(welcome);
+    roomSocket.close();
+  });
+
   it('reconnects with default browser timers after a non-terminal close', async () => {
     installBrowserTimers();
     FakeWebSocket.instances = [];

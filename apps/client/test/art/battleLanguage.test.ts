@@ -67,7 +67,7 @@ it('updates the canvas exchange label when switching English to Thai mid-battle'
   text.setOrigin.mockReturnValue(text);
   text.setDepth.mockReturnValue(text);
   const shutdown = vi.fn();
-  const scene = Object.assign(Object.create(BattleScene.prototype), {
+  const scene = Object.assign(new BattleScene(), {
     game: { events: { on: vi.fn(), off: vi.fn() }, registry: { get: () => state } },
     events: { once: vi.fn((_name, listener) => shutdown.mockImplementation(listener)) },
     scale: { on: vi.fn(), off: vi.fn() },
