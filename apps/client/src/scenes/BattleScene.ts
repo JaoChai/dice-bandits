@@ -36,6 +36,9 @@ export default class BattleScene extends Phaser.Scene {
 
   /** View-only finale. The engine remains the sole source of results/rewards. */
   postVictory(result: PostResult, duration: number): void {
+    // A registered scene may be unbooted or stopped during accelerated bot
+    // chains. The post DOM still works; canvas cosmetics require a live owner.
+    if (!this.sys.isActive() || !this.cameras.main) return;
     this.settlePostEffects();
     this.cancelBattlePresentation();
     this.postWinner = result.winner;
@@ -44,11 +47,11 @@ export default class BattleScene extends Phaser.Scene {
     this.postHomes.clear();
     for (const child of this.children.list) {
       const display = child as Phaser.GameObjects.Sprite;
-      if (display.depth >= 6) display.setVisible(false);
+      if (display.active && display.depth >= 6) display.setVisible(false);
     }
     for (const side of ['a', 'b'] as const) {
       const sprite = this.fighters?.[side];
-      if (!sprite) continue;
+      if (!sprite?.active) continue;
       this.tweens.killTweensOf(sprite);
       const home = this.layout[side === 'a' ? 'left' : 'right'];
       sprite.setPosition(home.x, home.y).setAngle(0);
@@ -83,8 +86,9 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   postRewards(result: PostResult, duration: number): void {
+    if (!this.sys.isActive() || !this.cameras.main) return;
     const actor = result.winner ? this.fighters?.[result.winner] : undefined;
-    if (!actor || !result.gold || duration <= 0) return;
+    if (!actor?.active || !result.gold || duration <= 0) return;
     const { width, height } = this.cameras.main;
     for (let index = 0; index < 7; index++) {
       const coin = this.add.sprite(
@@ -112,14 +116,14 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   postChoice(levelUp: boolean, reduced: boolean): void {
-    if (this.postChoiceMounted) return;
+    if (!this.sys.isActive() || !this.cameras.main || this.postChoiceMounted) return;
     this.postChoiceMounted = true;
     this.heldPostLevelUp = levelUp;
     this.settlePostEffects();
     const { width, height } = this.cameras.main;
     for (const side of ['a', 'b'] as const) {
       const sprite = this.fighters?.[side];
-      if (!sprite) continue;
+      if (!sprite?.active) continue;
       const home = { x: width * (side === 'a' ? 0.115 : 0.885), y: height * 0.69 };
       this.postHomes.set(sprite, home);
       sprite.setScale(sprite.scaleX * 0.64, sprite.scaleY * 0.64);
@@ -189,6 +193,13 @@ export default class BattleScene extends Phaser.Scene {
       this.settlePostEffects();
       this.postHomes.clear();
       this.heldPostResult = null;
+      this.heldPostLevelUp = false;
+      this.postWinner = null;
+      this.postChoiceMounted = false;
+      this.latestState = undefined;
+      this.fighters = undefined;
+      this.exchangeLabel = undefined;
+      this.combatantIds = undefined;
       this.cancelBattlePresentation();
       this.scale.off('resize', onResize);
       this.game.events.off('game-state', this.renderBattle, this);

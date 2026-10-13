@@ -279,7 +279,7 @@ export function startOnlineGame(
                 speed: window.diceBanditsSpeed,
                 reduced: reducedMotion(),
                 viewer: controller.you,
-                scene: battleScene,
+                scene: ownedGame?.scene.isActive('BattleScene') ? battleScene : undefined,
               })
               .then((pending) => {
                 if (!isCurrent() || postToken !== postGeneration) return;
@@ -664,7 +664,7 @@ function startGame(
                 : displayedState.turnSeat,
             speed: window.diceBanditsSpeed,
             reduced: reducedMotion(),
-            scene: battleScene,
+            scene: ownedGame?.scene.isActive('BattleScene') ? battleScene : undefined,
           });
           if (!pending) post.destroy();
         } else if (post.active) {
