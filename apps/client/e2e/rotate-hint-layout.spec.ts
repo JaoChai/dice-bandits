@@ -1,7 +1,8 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { createGame, startBattle } from '@dice-bandits/engine';
 import { join } from 'node:path';
-import { startJourney, waitForBattleArt } from './helpers';
+import type Phaser from 'phaser';
+import { observeBoardGame, startJourney, waitForBattleArt } from './helpers';
 
 const viewports = [
   { width: 390, height: 844 },
@@ -63,6 +64,110 @@ async function assertClear(page: Page, selectors: string, label: string, info: T
     expect
       .soft(target.rect.bottom, `${label}: ${target.name} bottom`)
       .toBeLessThanOrEqual(page.viewportSize()!.height);
+  }
+}
+
+// Moving the portrait tray into either fighter or the turn ring must fail.
+// Like town-guardian/battle-hud, project live bounds through the rendered
+// camera. Graphics has no getBounds: rasterise the ring's actual commands,
+// including its stroke, rather than duplicating production ellipse metrics.
+async function assertFightersClear(page: Page, label: string, info: TestInfo) {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as Window & { __m5aGame: Phaser.Game }).__m5aGame.scene.getScene(
+            'BattleScene',
+          ).cameras.main.zoom,
+      ),
+    )
+    .toBeCloseTo(1.12, 5);
+  const geometry = await page.evaluate(async () => {
+    const game = (window as unknown as Window & { __m5aGame: Phaser.Game }).__m5aGame;
+    await new Promise<void>((resolve) => game.events.once('postrender', resolve));
+    const scene = game.scene.getScene('BattleScene');
+    const canvas = game.canvas.getBoundingClientRect();
+    const matrix = scene.cameras.main.getViewMatrix();
+    const project = (left: number, top: number, right: number, bottom: number) => {
+      const tl = matrix.transformPoint(left, top);
+      const br = matrix.transformPoint(right, bottom);
+      return {
+        left: canvas.left + (tl.x / game.canvas.width) * canvas.width,
+        top: canvas.top + (tl.y / game.canvas.height) * canvas.height,
+        right: canvas.left + (br.x / game.canvas.width) * canvas.width,
+        bottom: canvas.top + (br.y / game.canvas.height) * canvas.height,
+      };
+    };
+    const fighters = scene.children.getChildren().filter((child) => child.type === 'Sprite');
+    const objects = fighters.map((child, side) => {
+      const sprite = child as Phaser.GameObjects.Sprite;
+      const bounds = sprite.getBounds();
+      return {
+        name: `fighter-${side}`,
+        rect: project(bounds.left, bounds.top, bounds.right, bounds.bottom),
+      };
+    });
+    const ring = scene.children.getByName('battle-picker-ring') as Phaser.GameObjects.Graphics;
+    const surface = document.createElement('canvas');
+    surface.width = Math.ceil(scene.cameras.main.width);
+    surface.height = Math.ceil(scene.cameras.main.height);
+    ring.generateTexture(surface, surface.width, surface.height);
+    const pixels = surface
+      .getContext('2d', { willReadFrequently: true })!
+      .getImageData(0, 0, surface.width, surface.height).data;
+    let left = Infinity,
+      top = Infinity,
+      right = -Infinity,
+      bottom = -Infinity;
+    for (let y = 0; y < surface.height; y++) {
+      for (let x = 0; x < surface.width; x++) {
+        if (!pixels[(y * surface.width + x) * 4 + 3]) continue;
+        left = Math.min(left, x);
+        top = Math.min(top, y);
+        right = Math.max(right, x + 1);
+        bottom = Math.max(bottom, y + 1);
+      }
+    }
+    objects.push({
+      name: 'picker-ring',
+      rect: project(left + ring.x, top + ring.y, right + ring.x, bottom + ring.y),
+    });
+    const tray = document.querySelector('.action-tray')!.getBoundingClientRect();
+    return {
+      tray: tray.toJSON(),
+      objects: objects.map((object) => ({
+        ...object,
+        intersection:
+          Math.max(
+            0,
+            Math.min(object.rect.right, tray.right) - Math.max(object.rect.left, tray.left),
+          ) *
+          Math.max(
+            0,
+            Math.min(object.rect.bottom, tray.bottom) - Math.max(object.rect.top, tray.top),
+          ),
+      })),
+      cards: [...document.querySelectorAll('.command-card')].map((card) => {
+        const { width, height } = card.getBoundingClientRect();
+        return { width, height };
+      }),
+    };
+  });
+  console.log(`fighter geometry ${label}: ${JSON.stringify(geometry)}`);
+  await info.attach(`fighters-${label}`, {
+    body: JSON.stringify(geometry, null, 2),
+    contentType: 'application/json',
+  });
+  expect(geometry.objects).toHaveLength(3);
+  for (const object of geometry.objects) {
+    expect(object.rect.right).toBeGreaterThan(object.rect.left);
+    expect(object.rect.bottom).toBeGreaterThan(object.rect.top);
+    expect.soft(object.intersection, `${label}: tray / ${object.name}`).toBe(0);
+  }
+  for (const card of geometry.cards) {
+    expect(card.height).toBeGreaterThanOrEqual(88);
+    // The face-down card must not squeeze the three commands into slivers.
+    expect(card.width).toBeGreaterThanOrEqual(88);
   }
 }
 
@@ -152,6 +257,7 @@ for (const viewport of viewports) {
             buffs: { ironSkin: false, poison: false, halveNext: false },
           },
         }).state;
+        await observeBoardGame(page);
         await page.goto('/?speed=0');
         await page.evaluate(
           (state) =>
@@ -166,6 +272,7 @@ for (const viewport of viewports) {
           // Fresh fighters offer two normal picks plus their unused Secret.
           await expect(page.locator('.command-card')).toHaveCount(3);
           await expect(page.locator('.card-description')).toHaveCount(3);
+          await assertFightersClear(page, `battle-${role}-${label}`, info);
           await assertClear(
             page,
             '.action-tray, .command-card, .card-description',
