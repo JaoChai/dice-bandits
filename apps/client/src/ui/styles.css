@@ -3502,3 +3502,28 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     animation: none;
   }
 }
+
+/* Portrait only: intrinsic rows reserve the hint's actual wrapped height
+   below the command/prompt lane. The full-bleed canvas and landscape HUD
+   keep their existing geometry; no guessed locale-specific bottom offset. */
+@media (orientation: portrait) and (max-width: 900px) {
+  .game-shell {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .game-shell:not(.battle-mode) .action-tray,
+  .game-shell.battle-mode .action-tray {
+    position: relative;
+    grid-row: 2;
+    justify-self: center;
+    inset: auto;
+    transform: none;
+  }
+  .game-shell .rotate-hint {
+    position: relative;
+    grid-row: 3;
+    inset: auto;
+    margin: 8px 8px max(8px, env(safe-area-inset-bottom, 0px));
+  }
+}
