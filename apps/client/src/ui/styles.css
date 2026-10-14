@@ -3189,12 +3189,15 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
 .battle-mode [data-testid='map-toggle'] {
   font-size: 14px;
 }
+.battle-mode .rotate-hint {
+  color: var(--c-cream);
+}
 .battle-mode .turn-ribbon {
   display: none;
 }
 .stance-banner {
   position: absolute;
-  top: 6px;
+  top: -50px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9;
@@ -3225,6 +3228,40 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   display: block;
   font-size: 14px;
   line-height: 1.25;
+}
+.stance-banner .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* Narrow portrait: size the HP row first, then flow the status below it.
+   The banner never competes with either HP card, even after text wraps. */
+@media (max-width: 600px) and (orientation: portrait) {
+  .battle-mode .battle-hud {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+  .battle-mode .battle-hp-card.right {
+    justify-self: end;
+  }
+  .battle-mode .stance-banner {
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+    grid-column: 1 / -1;
+    justify-self: center;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .stance-banner > div {
+    min-width: 0;
+  }
 }
 .stance-icon {
   width: 36px;
@@ -3432,6 +3469,9 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   }
   .battle-mode .battle-hp-card {
     gap: 2px 5px;
+    /* Retain the 14px name and 16px meter, with clearance for 3% idle rise
+       under two-line Thai names at the maximum picking zoom. */
+    padding: 4px 8px;
   }
   .battle-mode .card-label,
   .stance-banner strong {

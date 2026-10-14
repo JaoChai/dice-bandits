@@ -193,10 +193,10 @@ export function drawFighters(
     // One uniform scale per atlas: the pose cell's own aspect sets the width
     // (plan Task 8; reviewer item 1). Viewport target height ÷ the idle frame's
     // real pixel height; without frame data fall back to scale 1.
-    const idleHeight = textured
-      ? (frameHeight(probe, 'idle') ?? layout.fighterHeight)
-      : layout.fighterHeight;
-    const scale = layout.fighterHeight / idleHeight;
+    const targetHeight =
+      side === 'b' ? (layout.right.fighterHeight ?? layout.fighterHeight) : layout.fighterHeight;
+    const idleHeight = textured ? (frameHeight(probe, 'idle') ?? targetHeight) : targetHeight;
+    const scale = targetHeight / idleHeight;
     const sprite = scene.add
       .sprite(pos.x, pos.y, atlas, textured ? 'idle' : undefined)
       .setOrigin(0.5, 1)

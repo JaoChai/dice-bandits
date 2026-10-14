@@ -312,7 +312,9 @@ export function renderBattleUi(
       hud.className = 'battle-hud';
       shell.append(hud);
     }
+    const banner = hud.querySelector('[data-testid="stance-banner"]');
     hud.innerHTML = hpCard('a') + hpCard('b');
+    if (banner) hud.append(banner);
   }
 
   // The Worker's redacted pending.attack may be null while it offers legal
@@ -366,7 +368,7 @@ export function renderBattleUi(
       banner.setAttribute('role', 'status');
       banner.setAttribute('aria-live', 'polite');
       banner.setAttribute('aria-atomic', 'true');
-      shell.append(banner);
+      shell.querySelector('.battle-hud')!.append(banner);
     }
     banner.className = `stance-banner ${attacking ? 'warm' : 'cool'}`;
     const role = t(attacking ? 'battle.turnAttack' : 'battle.turnDefense');

@@ -1,7 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createGame, startBattle, data, type ClassId, type GameState } from '@dice-bandits/engine';
 import type Phaser from 'phaser';
-import { observeBoardGame, openTitleChoice, waitForBattleArt } from './helpers';
+import { observeBoardGame, openTitleChoice, startBattleJourney, waitForBattleArt } from './helpers';
+import en from '../src/i18n/en.json' with { type: 'json' };
+import th from '../src/i18n/th.json' with { type: 'json' };
 
 type Probe = Window & { __m5aGame: Phaser.Game };
 test.use({ video: 'on' });
@@ -42,6 +44,127 @@ async function load(page: Page, state: GameState, speed = 1) {
   );
   await waitForBattleArt(page);
 }
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 915, height: 412 },
+]) {
+  for (const lang of ['th', 'en']) {
+    test(`stance banner clears both HP cards ${viewport.width}x${viewport.height} ${lang}`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize(viewport);
+      await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
+      await observeBoardGame(page);
+      await load(page, fixture());
+      for (const role of ['attack', 'defense']) {
+        await page.getByTestId('pass-ready').click();
+        await page.evaluate(() => document.fonts.ready);
+        const geometry = await page.evaluate(() => {
+          const banner = document.querySelector('[data-testid="stance-banner"]')!;
+          const a = banner.getBoundingClientRect();
+          return [...document.querySelectorAll('.battle-hp-card')].map((hp) => {
+            const b = hp.getBoundingClientRect();
+            return {
+              side: hp.classList.contains('left') ? 'left' : 'right',
+              banner: a.toJSON(),
+              hp: b.toJSON(),
+              intersection:
+                Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) *
+                Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)),
+              roleFont: parseFloat(getComputedStyle(banner.querySelector('strong')!).fontSize),
+            };
+          });
+        });
+        console.log(`stance geometry ${role} ${lang}: ${JSON.stringify(geometry)}`);
+        expect(geometry).toHaveLength(2);
+        for (const result of geometry) {
+          expect.soft(result.intersection, `${role} banner / ${result.side} HP`).toBe(0);
+          expect(result.roleFont).toBeGreaterThanOrEqual(14);
+        }
+        await screenshot(page, `${role}-${lang}`, info.outputPath(`${role}-${lang}.png`));
+        await page.getByTestId(role === 'attack' ? 'pick-attack' : 'pick-defend').click();
+      }
+    });
+  }
+}
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 915, height: 412 },
+  { width: 932, height: 388 },
+]) {
+  for (const lang of ['th', 'en'] as const) {
+    test(`settled focus clears long-name HP and takeover seats ${viewport.width}x${viewport.height} ${lang}`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize(viewport);
+      await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
+      await observeBoardGame(page);
+      await startBattleJourney(page);
+      await page.evaluate(() => document.fonts.ready);
+      await expect.poll(async () => (await camera(page)).zoom).toBeCloseTo(1.12, 5);
+      await page.evaluate(
+        ({ name, takeover }) => {
+          document.querySelectorAll('.seat-card').forEach((card, seat) => {
+            const badge = document.createElement('small');
+            badge.className = 'seat-status';
+            badge.dataset.testid = `seat-takeover-${seat}`;
+            badge.textContent = takeover;
+            card.querySelector('.seat-details')!.append(badge);
+            card.querySelector('strong')!.textContent = name;
+          });
+          document.querySelectorAll('.battle-hp-card strong').forEach((label) => {
+            label.textContent = name;
+          });
+        },
+        {
+          name: (lang === 'th' ? 'ก' : 'W').repeat(18),
+          takeover: (lang === 'th' ? th : en)['online.takeover'],
+        },
+      );
+      const intersections = await page.evaluate(async () => {
+        const game = (window as unknown as Probe).__m5aGame;
+        await new Promise<void>((resolve) => game.events.once('postrender', resolve));
+        const scene = game.scene.getScene('BattleScene');
+        const canvas = game.canvas.getBoundingClientRect();
+        const obstacles = [...document.querySelectorAll('.seat-card, .battle-hp-card')];
+        return scene.children
+          .getChildren()
+          .filter((child) => child.type === 'Sprite')
+          .flatMap((child, side) => {
+            const bounds = (child as Phaser.GameObjects.Sprite).getBounds();
+            const matrix = scene.cameras.main.getViewMatrix();
+            const tl = matrix.transformPoint(bounds.left, bounds.top);
+            const br = matrix.transformPoint(bounds.right, bounds.bottom);
+            const a = {
+              left: canvas.left + (tl.x * canvas.width) / game.canvas.width,
+              right: canvas.left + (br.x * canvas.width) / game.canvas.width,
+              top: canvas.top + (tl.y * canvas.height) / game.canvas.height,
+              bottom: canvas.top + (br.y * canvas.height) / game.canvas.height,
+            };
+            return obstacles.map((element, index) => {
+              const b = element.getBoundingClientRect();
+              return {
+                side,
+                obstacle: index,
+                fighter: a,
+                overlap:
+                  Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) *
+                  Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)),
+              };
+            });
+          });
+      });
+      console.log(
+        `settled intersections ${viewport.width} ${lang}: ${JSON.stringify(intersections)}`,
+      );
+      for (const result of intersections)
+        expect.soft(result.overlap, `fighter ${result.side} / obstacle ${result.obstacle}`).toBe(0);
+      await screenshot(page, `settled-${lang}`, info.outputPath(`settled-${lang}.png`));
+    });
+  }
+}
+
 test('non-picker body pixels render at 60–70% brightness on the shipped renderer', async ({
   page,
 }) => {

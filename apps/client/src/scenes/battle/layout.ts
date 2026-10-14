@@ -14,7 +14,7 @@ export type BattleLayout = {
   groundY: number;
   exchangeY: number;
   left: { x: number; y: number };
-  right: { x: number; y: number };
+  right: { x: number; y: number; fighterHeight?: number };
   hpLeft: BattleRect;
   hpRight: BattleRect;
   dice: BattleRect;
@@ -29,6 +29,7 @@ export type BattleLayout = {
 export function battleLayout(
   width: number = BATTLE_FRAME.width,
   height: number = BATTLE_FRAME.height,
+  fullHeightGuardian = false,
 ): BattleLayout {
   const x = width / BATTLE_FRAME.width;
   const y = height / BATTLE_FRAME.height;
@@ -47,7 +48,15 @@ export function battleLayout(
     groundY,
     exchangeY: BATTLE_EXCHANGE_Y * scale,
     left: { x: ((BATTLE_FRAME.width * 17) / 64) * x, y: groundY },
-    right: { x: ((BATTLE_FRAME.width * 47) / 64) * x, y: groundY },
+    // Reserve the corner takeover lane even at 1.12 zoom + leftward pan.
+    right: fullHeightGuardian
+      ? {
+          x: width * 0.6,
+          y: groundY,
+          // Preserve the guardian's existing 330px desktop / 180px phone art.
+          fighterHeight: (width / height > 1.9 ? 315 : 330) * scale,
+        }
+      : { x: 910 * x, y: groundY },
     hpLeft: rect(40, 36, 420, 96),
     hpRight: rect(820, 36, 420, 96),
     // Leave room for the dice strip's centred 3px stroke at the canvas edge.

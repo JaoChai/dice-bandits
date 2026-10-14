@@ -480,7 +480,11 @@ export default class BattleScene extends Phaser.Scene {
     );
     this.latestState = state;
     const view = this.cameras.main;
-    this.layout = battleLayout(view.width, view.height);
+    this.layout = battleLayout(
+      view.width,
+      view.height,
+      state.phase.kind === 'battle' && state.phase.battle.b.monsterId === 'townGuardian',
+    );
     this.children.removeAll(true);
     this.fighters = undefined;
     this.exchangeLabel = undefined;

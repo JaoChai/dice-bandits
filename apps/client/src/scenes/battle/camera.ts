@@ -113,13 +113,12 @@ export function createBattleCamera(scene: Phaser.Scene) {
   };
 }
 
-/** CANVAS ignores Sprite.tint. Cache an in-memory source-atop shade instead,
- * preserving alpha and every authored frame; never regenerate shipped assets. */
+/** CANVAS ignores Sprite.tint. A black alpha silhouette follows the original
+ * sprite on both renderers without replacing its atlas, frame or mount scale. */
 function shadeFighter(scene: Phaser.Scene, sprite: Phaser.GameObjects.Sprite, tint: number) {
+  if (tint === 0xffffff) return () => {};
   const original = sprite.texture;
-  sprite.setTint(tint);
-  if (tint === 0xffffff) return () => sprite.clearTint();
-  const key = `battle-dim:${original.key}`;
+  const key = `battle-shade:${original.key}`;
   if (!scene.textures.exists(key)) {
     const image = original.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
     const canvas = document.createElement('canvas');
@@ -127,20 +126,34 @@ function shadeFighter(scene: Phaser.Scene, sprite: Phaser.GameObjects.Sprite, ti
     canvas.height = image.height;
     const context = canvas.getContext('2d')!;
     context.drawImage(image, 0, 0);
-    context.globalCompositeOperation = 'source-atop';
-    context.fillStyle = 'rgba(0, 0, 0, 0.3333333333)';
+    context.globalCompositeOperation = 'source-in';
+    context.fillStyle = '#000';
     context.fillRect(0, 0, canvas.width, canvas.height);
-    const dim = scene.textures.addCanvas(key, canvas)!;
+    const shade = scene.textures.addCanvas(key, canvas)!;
     for (const name of original.getFrameNames()) {
       const frame = original.get(name);
-      dim.add(name, 0, frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight);
+      shade.add(name, 0, frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight);
     }
   }
-  // The canvas is already shaded; leaving tint on would double-dim WebGL.
-  sprite.clearTint().setTexture(key, sprite.frame.name);
+  const overlay = scene.add.image(sprite.x, sprite.y, key, sprite.frame.name);
+  const sync = () => {
+    if (!sprite.scene || !overlay.scene) return;
+    overlay
+      .setFrame(sprite.frame.name)
+      .setPosition(sprite.x, sprite.y)
+      .setOrigin(sprite.originX, sprite.originY)
+      .setScale(sprite.scaleX, sprite.scaleY)
+      .setRotation(sprite.rotation)
+      .setFlip(sprite.flipX, sprite.flipY)
+      .setAlpha(sprite.alpha / 3)
+      .setVisible(sprite.visible)
+      .setDepth(sprite.depth + 0.1);
+  };
+  sync();
+  scene.events.on('prerender', sync);
   return () => {
-    // DisplayList can dispose sprites before our shutdown cleanup listener.
-    if (sprite.scene) sprite.setTexture(original.key, sprite.frame.name).clearTint();
+    scene.events.off('prerender', sync);
+    overlay.destroy();
   };
 }
 

@@ -206,7 +206,8 @@ describe('playHit drives the cartoon puppet poses (reviewer item 3)', () => {
       expect(sprites[0]!.y).toBe(475 - expectedHeight / 2);
       expect(sprites[1]!.y).toBe(475 - expectedHeight / 2 + 2);
       expect(textObjects[0]!.y).toBe(475 - expectedHeight - 36);
-      expect(sprites[0]!.x).toBeCloseTo((width * 47) / 64);
+      // Right anchor is inset 30 logical px to reserve the zoomed takeover lane.
+      expect(sprites[0]!.x).toBeCloseTo((width * 910) / 1280);
     },
   );
 
@@ -215,11 +216,11 @@ describe('playHit drives the cartoon puppet poses (reviewer item 3)', () => {
     const running = playCoinBurst(scene as unknown as Phaser.Scene, LAYOUT, 'b', 1);
     expect(frames).toEqual(Array.from({ length: 5 }, () => ({ key: 'art:icons', pose: 'coin' })));
     expect(sprites.map(({ x, y }) => ({ x, y }))).toEqual([
-      { x: 904, y: 420 },
-      { x: 922, y: 420 },
-      { x: 940, y: 420 },
-      { x: 958, y: 420 },
-      { x: 976, y: 420 },
+      { x: 874, y: 420 },
+      { x: 892, y: 420 },
+      { x: 910, y: 420 },
+      { x: 928, y: 420 },
+      { x: 946, y: 420 },
     ]);
     expect(tweens).toHaveLength(5);
     for (const [index, tween] of tweens.entries()) {
