@@ -3489,6 +3489,13 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     min-height: 96px;
   }
 }
+@media (max-height: 400px) and (orientation: landscape) {
+  .battle-mode .action-tray {
+    /* Reserve the full-height guardian's feet at settled 1.12 picker zoom.
+       Trim only the tray chrome; card size, type and touch targets stay intact. */
+    padding-block: 2px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .swap-beat,
   .reveal-card {
