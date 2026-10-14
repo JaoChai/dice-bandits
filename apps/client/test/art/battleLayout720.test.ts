@@ -35,8 +35,8 @@ describe('cartoon battleLayout at 1280×720 (Task 8)', () => {
 
   it('stands 280 px fighters clear of the dice band and the HP strip', () => {
     // Approved viewport-owned feet leave a bottom command lane.
-    expect(layout.left.y).toBe(528);
-    expect(layout.right.y).toBe(528);
+    expect(layout.left.y).toBe(475);
+    expect(layout.right.y).toBe(475);
     expect(layout.left.y - 280).toBeGreaterThan(layout.hpLeft.y + layout.hpLeft.height);
     expect(layout.left.y - 280).toBeGreaterThan(layout.hpRight.y + layout.hpRight.height);
     expect(layout.dice.y).toBeGreaterThanOrEqual(660 - 120);

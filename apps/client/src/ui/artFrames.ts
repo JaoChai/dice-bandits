@@ -1,4 +1,30 @@
 import type { ClassId } from '@dice-bandits/engine';
+import jellyBun from '../../public/art/monster-jellyBun.json';
+import mushroomBonk from '../../public/art/monster-mushroomBonk.json';
+import cactusPunch from '../../public/art/monster-cactusPunch.json';
+import coinScorpion from '../../public/art/monster-coinScorpion.json';
+import yetiBunny from '../../public/art/monster-yetiBunny.json';
+import penguinKnight from '../../public/art/monster-penguinKnight.json';
+import lavaImp from '../../public/art/monster-lavaImp.json';
+import maskGoon from '../../public/art/monster-maskGoon.json';
+
+const monsterFrames = {
+  jellyBun,
+  mushroomBonk,
+  cactusPunch,
+  coinScorpion,
+  yetiBunny,
+  penguinKnight,
+  lavaImp,
+  maskGoon,
+};
+/** The guardian uses the same existing penguin atlas as the scene. */
+export function monsterPortraitStyle(monsterId: string): string {
+  const id = monsterId === 'townGuardian' ? 'penguinKnight' : monsterId;
+  if (!(id in monsterFrames)) return iconStyle('shield');
+  const atlas = monsterFrames[id as keyof typeof monsterFrames];
+  return artBackground(`monster-${id}`, atlas.frames.idle, 1320, 300);
+}
 
 /**
  * M5a Task 11a: frame tables for the DOM consumers of the cartoon sheets in
@@ -48,7 +74,7 @@ export const CARD_ICON: Record<
   strike: 'star',
   secret: 'scroll',
   defend: 'shield',
-  counter: 'skull',
+  counter: 'shield',
   item: 'piggy',
 };
 

@@ -278,7 +278,7 @@ for (const lang of ['en', 'th'])
       await page.getByTestId(`pick-${first}`).click();
       await expect(page.getByTestId('pass-screen')).toBeVisible();
       await expect(page.getByTestId('battle-readout')).toHaveCount(0);
-      await expect(page.getByTestId('chosen-card')).toHaveText('?');
+      await expect(page.getByTestId('chosen-card')).toHaveCount(0);
       // No pre-reveal secret name in DOM/aria; pass flow is never bypassed.
       if (first === 'secret') {
         const html = await page.locator('#app').innerHTML();

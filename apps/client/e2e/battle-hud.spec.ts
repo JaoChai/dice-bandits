@@ -16,7 +16,7 @@ const viewports = [
   { width: 915, height: 412 },
   { width: 932, height: 388 },
 ];
-const controls = ['menu-button', 'map-toggle', 'audio-toggle', 'world-chip', 'turn-ribbon'];
+const controls = ['menu-button', 'map-toggle', 'audio-toggle', 'world-chip', 'stance-banner'];
 
 function overlap(a: Rect, b: Rect): number {
   return (
@@ -26,35 +26,17 @@ function overlap(a: Rect, b: Rect): number {
 }
 
 async function renderedExchange(page: Page) {
-  return page.evaluate(async () => {
-    const game = (window as unknown as Window & { __m5aGame: Phaser.Game }).__m5aGame;
-    await new Promise<void>((resolve) => game.events.once('postrender', resolve));
-    const scene = game.scene.getScene('BattleScene') as Phaser.Scene & {
-      exchangeLabel: Phaser.GameObjects.Text;
-    };
-    const label = scene.exchangeLabel;
-    const camera = scene.cameras.main;
-    const canvas = game.canvas.getBoundingClientRect();
-    const bounds = label.getBounds();
-    const corners = [
-      [bounds.left, bounds.top],
-      [bounds.right, bounds.top],
-      [bounds.right, bounds.bottom],
-      [bounds.left, bounds.bottom],
-    ].map(([x, y]) => {
-      const point = camera.getViewMatrix().transformPoint(x!, y!);
-      return {
-        x: canvas.left + (point.x / game.canvas.width) * canvas.width,
-        y: canvas.top + (point.y / game.canvas.height) * canvas.height,
-      };
-    });
+  // Exchange/half now belongs to the DOM stance banner, not a duplicate
+  // zoomed canvas label. Measure the actual rendered row with equal strictness.
+  return page.locator('.stance-banner div > span:not(.sr-only)').evaluate((element) => {
+    const rect = element.getBoundingClientRect();
     return {
-      left: Math.min(...corners.map((point) => point.x)),
-      right: Math.max(...corners.map((point) => point.x)),
-      top: Math.min(...corners.map((point) => point.y)),
-      bottom: Math.max(...corners.map((point) => point.y)),
-      visible: label.visible && label.alpha > 0 && camera.visible,
-      text: label.text,
+      left: rect.left,
+      right: rect.right,
+      top: rect.top,
+      bottom: rect.bottom,
+      visible: rect.width > 0 && rect.height > 0,
+      text: element.textContent ?? '',
     };
   });
 }
@@ -127,7 +109,7 @@ for (const lang of ['th', 'en'] as const) {
             .map((control) => `[data-testid="${control}"]`),
         ];
         for (const fighter of fighters) {
-          const target = viewport.height > 480 ? 330 : 180;
+          const target = viewport.height > 480 ? 305 : (230 * viewport.height) / 720;
           expect.soft(fighter.height).toBeGreaterThanOrEqual(target - 12);
           expect.soft(fighter.height).toBeLessThanOrEqual(target + 12);
           for (const selector of obstacles) {
@@ -158,7 +140,7 @@ for (const lang of ['th', 'en'] as const) {
         await expect(page.getByTestId('menu-button')).toBeVisible();
         await expect(page.getByTestId('audio-toggle')).toBeVisible();
         await expect(page.getByTestId('map-toggle')).toBeVisible();
-        const ribbon = await domRect(page, '[data-testid="turn-ribbon"]');
+        const ribbon = await domRect(page, '[data-testid="stance-banner"] strong');
         for (const control of ['menu-button', 'map-toggle', 'audio-toggle']) {
           const rect = await domRect(page, `.game-shell [data-testid="${control}"]`);
           expect(overlap(ribbon, rect), `ribbon intersects ${control}`).toBe(0);
@@ -214,7 +196,7 @@ for (const lang of ['th', 'en'] as const) {
             });
         });
         console.log(`Canvas bottom ${name}: ${JSON.stringify(bottomCanvas)}`);
-        expect(bottomCanvas).toHaveLength(1);
+        expect(bottomCanvas).toHaveLength(2); // Approved separate fighter dice pools.
         for (const strip of bottomCanvas) {
           expect
             .soft(strip.bottom, 'dice-strip stroke clipped at bottom')
@@ -273,7 +255,7 @@ for (const lang of ['th', 'en'] as const) {
               card.querySelector('.seat-details')!.append(badge);
               card.querySelector('strong')!.textContent = name;
             });
-            document.querySelector('[data-testid="turn-ribbon"]')!.textContent = ribbon;
+            document.querySelector('[data-testid="stance-banner"] strong')!.textContent = ribbon;
           },
           {
             takeover: messages['online.takeover'],
@@ -290,7 +272,7 @@ for (const lang of ['th', 'en'] as const) {
           }),
         );
         const tray = await domRect(page, '.action-tray');
-        const ribbon = await domRect(page, '[data-testid="turn-ribbon"]');
+        const ribbon = await domRect(page, '[data-testid="stance-banner"] strong');
         const measurements = [];
         const fighters = await page.evaluate(() => {
           const game = (window as unknown as Window & { __m5aGame: Phaser.Game }).__m5aGame;
@@ -349,7 +331,11 @@ for (const lang of ['th', 'en'] as const) {
         for (const result of measurements) {
           expect.soft(result.overlap, result.pair).toBe(0);
         }
-        await assertInside(page, '.seat-card:visible, [data-testid="turn-ribbon"]', '.game-shell');
+        await assertInside(
+          page,
+          '.seat-card:visible, [data-testid="stance-banner"] strong',
+          '.game-shell',
+        );
         await assertMinFont(page, '.seat-card:visible', 12);
         for (let seat = 0; seat < 4; seat++) {
           await assertInside(
@@ -389,7 +375,7 @@ for (const lang of ['th', 'en'] as const) {
         for (const size of [{ width: 1400, height: 800 }, viewport]) {
           await page.setViewportSize(size);
           const label = await renderedExchange(page);
-          const ribbon = await domRect(page, '[data-testid="turn-ribbon"]');
+          const ribbon = await domRect(page, '[data-testid="stance-banner"] strong');
           const area = overlap(label, ribbon);
           console.log(
             `Exchange ${name} at ${size.width}x${size.height}: ${JSON.stringify({ label, ribbon, overlap: area })}`,
@@ -405,8 +391,8 @@ for (const lang of ['th', 'en'] as const) {
           expect(label.top).toBeGreaterThanOrEqual(0);
           expect(label.right).toBeLessThanOrEqual(size.width);
           expect(label.bottom).toBeLessThanOrEqual(size.height);
-          await expect(page.getByTestId('turn-ribbon')).toBeVisible();
-          await assertInside(page, '[data-testid="turn-ribbon"]');
+          await expect(page.getByTestId('stance-banner')).toBeVisible();
+          await assertInside(page, '[data-testid="stance-banner"] strong');
         }
       });
     });

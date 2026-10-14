@@ -3,9 +3,9 @@ export type BattleRect = { x: number; y: number; width: number; height: number }
 export const BATTLE_FRAME = { width: 1280, height: 720 } as const;
 export const BATTLE_FIGHTER_HEIGHT = 280;
 /** Approved readable target; legacy exported metrics remain for unmigrated callers. */
-const VIEWPORT_FIGHTER_HEIGHT = 330;
+const VIEWPORT_FIGHTER_HEIGHT = 305;
 export const BATTLE_CARD = { width: 180, height: 240 } as const;
-export const BATTLE_EXCHANGE_Y = 176;
+export const BATTLE_EXCHANGE_Y = 140;
 /** Ground line the fighters stand on (their origin is feet-centred). */
 export const BATTLE_GROUND_Y = (BATTLE_FRAME.height * 11) / 12;
 export type BattleLayout = {
@@ -39,11 +39,11 @@ export function battleLayout(
     height: h * y,
   });
   const scale = Math.min(x, y);
-  const groundY = 528 * y;
+  const groundY = 475 * y;
   return {
     // Wide EXPAND stages render at phone CSS scale. Leave breathing room for
     // the existing 3% idle pose without oversizing the approved phone target.
-    fighterHeight: (width / height > 1.9 ? 320 : VIEWPORT_FIGHTER_HEIGHT) * scale,
+    fighterHeight: (width / height > 1.9 ? 230 : VIEWPORT_FIGHTER_HEIGHT) * scale,
     groundY,
     exchangeY: BATTLE_EXCHANGE_Y * scale,
     left: { x: ((BATTLE_FRAME.width * 17) / 64) * x, y: groundY },

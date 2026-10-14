@@ -230,31 +230,29 @@ export function drawFighters(
 
 export function drawDicePools(scene: Phaser.Scene, state: GameState, layout: BattleLayout): void {
   if (state.phase.kind !== 'battle') return;
-  const { dice } = layout;
-  scene.add
-    .rectangle(
-      dice.x + dice.width / 2,
-      dice.y + dice.height / 2,
-      dice.width,
-      dice.height,
-      0x5c3317,
-      0.85,
-    )
-    .setStrokeStyle(3, 0xf5c51c)
-    .setDepth(7);
   const stats = [state.phase.battle.a.stats.atk, state.phase.battle.b.stats.atk];
+  const { width, height } = scene.cameras.main;
+  const scale = layout.dice.height / 42;
   for (let side = 0; side < 2; side++) {
     const pool = Math.max(1, Math.min(5, Math.ceil(stats[side]! / 4)));
-    const half = dice.width / 2;
-    const startX = dice.x + side * half + half / 2 - (pool - 1) * 30;
+    const cx = width * (side === 0 ? 0.19 : 0.81);
+    const cy = height * 0.83;
+    scene.add
+      .rectangle(cx, cy, 190 * scale, 38 * scale, 0x5c3317, 0.9)
+      .setStrokeStyle(2, 0xf5c51c)
+      .setDepth(7)
+      .setScrollFactor(0);
     for (let die = 0; die < pool; die++) {
-      const x = startX + die * 30;
-      // Maximum of five 36px dice fits in each 340px half of the strip.
+      const x = cx + (die - (pool - 1) / 2) * 31 * scale;
       scene.add
-        .rectangle(x, dice.y + dice.height / 2, 36, 36, 0xf5eedc)
-        .setStrokeStyle(3, 0x5c3317)
-        .setDepth(8);
-      scene.add.circle(x, dice.y + dice.height / 2, 3, 0x5c3317).setDepth(9);
+        .rectangle(x, cy, 26 * scale, 26 * scale, 0xf5eedc)
+        .setStrokeStyle(2, 0x5c3317)
+        .setDepth(8)
+        .setScrollFactor(0);
+      scene.add
+        .circle(x, cy, 2 * scale, 0x5c3317)
+        .setDepth(9)
+        .setScrollFactor(0);
     }
   }
 }
