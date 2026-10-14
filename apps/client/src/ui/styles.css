@@ -1542,6 +1542,7 @@ h1 {
   min-height: 0;
   gap: 1px;
   padding: 2px;
+  font-size: 12px;
 }
 .battle-mode .seat-details .seat-status {
   grid-column: 1 / -1;
@@ -1564,6 +1565,12 @@ h1 {
   grid-row: 1;
   align-self: center;
 }
+.battle-mode .seat-stats {
+  column-gap: 4px;
+}
+.battle-mode .seat-stats .gold-pill {
+  padding: 0 2px;
+}
 .battle-mode .seat-stats,
 .battle-mode .seat-health,
 .battle-mode [data-testid^='seat-takeover-'] {
@@ -1571,7 +1578,7 @@ h1 {
 }
 .battle-mode .seat-card.corner-tl,
 .battle-mode .seat-card.corner-tr {
-  top: 108px;
+  top: 136px;
 }
 .battle-mode .seat-card.corner-bl,
 .battle-mode .seat-card.corner-br {
@@ -3169,5 +3176,329 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   .practice-root *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* Approved turn-card hybrid; original atlas artwork, no new assets. */
+.battle-mode {
+  --battle-warm: #8e371c;
+  --battle-warm-paper: #fbd7af;
+  --battle-cool: #204f79;
+  --battle-cool-paper: #c5e5f3;
+}
+.battle-mode [data-testid='map-toggle'] {
+  font-size: 14px;
+}
+.battle-mode .rotate-hint {
+  color: var(--c-cream);
+}
+.battle-mode .turn-ribbon {
+  display: none;
+}
+.stance-banner {
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 18px;
+  border: 3px solid var(--c-cocoa);
+  border-radius: 14px;
+  color: #fffdf5;
+  box-shadow: 0 4px 0 var(--c-cocoa);
+  max-width: 48vw;
+  pointer-events: none;
+}
+.stance-banner.warm {
+  background: var(--battle-warm);
+}
+.stance-banner.cool {
+  background: var(--battle-cool);
+}
+.stance-banner strong {
+  display: block;
+  font-size: 20px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.stance-banner div > span:not(.sr-only) {
+  display: block;
+  font-size: 14px;
+  line-height: 1.25;
+}
+.stance-banner .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* Narrow portrait: size the HP row first, then flow the status below it.
+   The banner never competes with either HP card, even after text wraps. */
+@media (max-width: 600px) and (orientation: portrait) {
+  .battle-mode .battle-hud {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+  .battle-mode .battle-hp-card.right {
+    justify-self: end;
+  }
+  .battle-mode .stance-banner {
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+    grid-column: 1 / -1;
+    justify-self: center;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .stance-banner > div {
+    min-width: 0;
+  }
+}
+.stance-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  background-repeat: no-repeat;
+}
+.battle-mode .battle-hp-card {
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  width: min(24vw, 280px);
+  border: 3px solid var(--c-cocoa);
+  border-radius: 12px;
+  padding: 6px 8px;
+  background: #fffdf5;
+  box-shadow: 0 4px 0 rgb(92 51 23 / 30%);
+  font-size: 14px;
+}
+.battle-mode .battle-hp-card strong {
+  grid-column: 2 / -1;
+  font-size: 16px;
+}
+.battle-portrait {
+  width: 36px;
+  height: 40px;
+  grid-row: 1 / 3;
+  background-repeat: no-repeat;
+}
+.battle-mode .battle-hp-track {
+  height: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.battle-mode .action-tray {
+  bottom: 8px;
+  gap: 8px;
+  padding: 6px 8px;
+  max-width: calc(100vw - 20px);
+  border: 3px solid var(--c-cocoa);
+  border-radius: 18px;
+  background: #fffdf5;
+  box-shadow: 0 5px 0 var(--c-cocoa);
+}
+.battle-mode .command-card,
+.battle-mode .item-card {
+  width: 156px;
+  min-height: 116px;
+  padding: 7px;
+  border: 3px solid;
+  border-radius: 12px;
+  gap: 3px;
+  box-shadow: 0 3px 0 var(--c-cocoa);
+}
+.battle-mode .command-card.warm,
+.battle-mode .item-card.warm {
+  border-color: var(--battle-warm);
+  background: var(--battle-warm-paper);
+}
+.battle-mode .command-card.cool,
+.battle-mode .item-card.cool {
+  border-color: var(--battle-cool);
+  background: var(--battle-cool-paper);
+}
+.battle-mode .card-icon {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+}
+.counter-sword {
+  position: absolute;
+  width: 65%;
+  height: 65%;
+  bottom: 0;
+  right: -10%;
+  background-repeat: no-repeat;
+}
+.battle-mode .card-label {
+  background: transparent;
+  font-size: 16px;
+  font-weight: 700;
+}
+.card-description {
+  font-size: 14px;
+  line-height: 1.15;
+  color: var(--c-cocoa);
+  white-space: nowrap;
+}
+.battle-mode .chosen-card.card-back {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 128px;
+  flex: 0 0 128px;
+  min-height: 116px;
+  padding: 6px;
+  color: #fffdf5;
+  border: 3px solid #fffdf5;
+  outline: 3px solid var(--c-cocoa);
+  border-radius: 12px;
+  background: repeating-linear-gradient(45deg, #204f79 0 7px, #2c638a 7px 14px);
+  box-shadow:
+    inset 0 0 0 3px #8fd7df,
+    0 3px 0 var(--c-cocoa);
+  pointer-events: none;
+  user-select: none;
+}
+.card-back-mark {
+  font-size: 32px;
+  line-height: 1;
+  text-shadow: 0 2px 0 var(--c-cocoa);
+}
+.card-back-caption {
+  font-size: 12px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  background: #204f79;
+  border-radius: 6px;
+  padding: 3px;
+}
+.swap-beat {
+  position: absolute;
+  z-index: 11;
+  left: 50%;
+  top: 43%;
+  transform: translate(-50%, -50%);
+  color: #fffdf5;
+  background: var(--c-cocoa);
+  border: 3px solid #f5c51c;
+  border-radius: 18px;
+  padding: 8px 24px;
+  min-height: 44px;
+  font-size: 22px;
+  font-weight: 700;
+  animation: battle-swap 180ms ease-out;
+}
+@keyframes battle-swap {
+  from {
+    opacity: 0;
+    margin-left: -28px;
+  }
+  to {
+    opacity: 1;
+    margin-left: 0;
+  }
+}
+.reveal-pair {
+  position: absolute;
+  left: 50%;
+  top: 35%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  z-index: 14;
+  pointer-events: none;
+}
+.reveal-card {
+  display: grid;
+  justify-items: center;
+  width: 100px;
+  padding: 10px;
+  border: 3px solid var(--c-cocoa);
+  border-radius: 12px;
+  background: #fffdf5;
+  color: var(--c-cocoa);
+  font-size: 16px;
+  box-shadow: 0 5px 0 var(--c-cocoa);
+  animation: battle-flip 180ms ease-out;
+}
+.reveal-card.warm {
+  background: var(--battle-warm-paper);
+  border-color: var(--battle-warm);
+}
+.reveal-card.cool {
+  background: var(--battle-cool-paper);
+  border-color: var(--battle-cool);
+}
+.reveal-card > span {
+  width: 40px;
+  height: 40px;
+  background-repeat: no-repeat;
+}
+.reveal-pair.static .reveal-card {
+  animation: none;
+}
+@keyframes battle-flip {
+  from {
+    transform: rotateY(90deg);
+    opacity: 0;
+  }
+  to {
+    transform: rotateY(0);
+    opacity: 1;
+  }
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .battle-mode .command-card,
+  .battle-mode .item-card {
+    width: 128px;
+    min-height: 96px;
+    padding: 5px;
+  }
+  .battle-mode .battle-hp-card strong {
+    font-size: 14px;
+  }
+  .battle-mode .battle-hp-card {
+    gap: 2px 5px;
+    /* Retain the 14px name and 16px meter, with clearance for 3% idle rise
+       under two-line Thai names at the maximum picking zoom. */
+    padding: 4px 8px;
+  }
+  .battle-mode .card-label,
+  .stance-banner strong {
+    font-size: 16px;
+  }
+  .battle-mode .card-icon {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+  }
+  .battle-mode .action-tray {
+    bottom: 7px;
+  }
+  .battle-mode .chosen-card.card-back {
+    min-height: 96px;
+  }
+}
+@media (max-height: 400px) and (orientation: landscape) {
+  .battle-mode .action-tray {
+    /* Reserve the full-height guardian's feet at settled 1.12 picker zoom.
+       Trim only the tray chrome; card size, type and touch targets stay intact. */
+    padding-block: 2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swap-beat,
+  .reveal-card {
+    animation: none;
   }
 }

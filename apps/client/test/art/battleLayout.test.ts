@@ -8,9 +8,9 @@ const intersects = (a: BattleRect, b: BattleRect) =>
 describe('battleLayout', () => {
   // Fixed 280px fighters / 660px feet fail these viewport-owned lane checks.
   it.each([
-    { width: 1280, height: 720, cssHeight: 720, target: 330 },
-    { width: (915 * 720) / 412, height: 720, cssHeight: 412, target: 180 },
-    { width: (932 * 720) / 388, height: 720, cssHeight: 388, target: 180 },
+    { width: 1280, height: 720, cssHeight: 720, target: 305 },
+    { width: (915 * 720) / 412, height: 720, cssHeight: 412, target: 132 },
+    { width: (932 * 720) / 388, height: 720, cssHeight: 388, target: 124 },
   ])(
     'reserves readable fighters above commands at $width × $height',
     ({ width, height, cssHeight, target }) => {

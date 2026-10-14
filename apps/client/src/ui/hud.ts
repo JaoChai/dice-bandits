@@ -272,6 +272,7 @@ export function renderHud(
     canAct,
     online !== undefined,
     busy,
+    online?.opponentPicked ?? false,
   );
   if (!isBattle) {
     actionBar.setAttribute('aria-label', t('board.actions'));

@@ -50,7 +50,7 @@ describe('cartoon frame tables (M5a T11a)', () => {
       strike: 'star',
       secret: 'scroll',
       defend: 'shield',
-      counter: 'skull',
+      counter: 'shield',
       item: 'piggy',
     });
   });

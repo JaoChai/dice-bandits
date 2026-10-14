@@ -51,7 +51,9 @@ async function publicDisplay(page: Page) {
         alpha: text.alpha,
       })),
       sprites: sprites.map((sprite) => ({
-        key: sprite.texture.key,
+        // Role shading is public and reverses at handoff. Canonical atlas,
+        // pose and position must still be identical for every private pick.
+        key: sprite.texture.key.replace(/^battle-dim:/, ''),
         frame: sprite.frame.name,
         x: sprite.x,
       })),
@@ -103,7 +105,7 @@ for (const lang of ['th', 'en'])
       const pass = await publicDisplay(page);
       expect(pass.canvas).toEqual(before.canvas);
       expect(pass.sprites).toEqual(before.sprites);
-      await expect(page.getByTestId('chosen-card')).toHaveText('?');
+      await expect(page.getByTestId('chosen-card')).toHaveCount(0);
       const secretName =
         attacker === 'a'
           ? lang === 'en'
@@ -120,7 +122,7 @@ for (const lang of ['th', 'en'])
       expect(picker.sprites).toEqual(before.sprites);
       expect(picker.html).not.toContain(secretName);
       await expect(page.getByTestId('battle-readout')).toHaveCount(0);
-      await expect(page.getByTestId('chosen-card')).toHaveText('?');
+      await expect(page.getByTestId('chosen-card').locator('.card-back-mark')).toHaveText('?');
       await page.screenshot({ path: info.outputPath(`privacy-${lang}-${attacker}-picker.png`) });
       await page.getByTestId('pick-defend').click();
       await expect

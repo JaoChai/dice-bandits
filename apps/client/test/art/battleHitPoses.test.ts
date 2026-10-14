@@ -201,12 +201,13 @@ describe('playHit drives the cartoon puppet poses (reviewer item 3)', () => {
       expect(fxY(sprites[1]!.y)).toBeGreaterThanOrEqual(heightPx / 2 - 4);
       expect(fxY(sprites[1]!.y)).toBeLessThanOrEqual(heightPx);
       expect(textObjects[0]!.y).toBeLessThan(ground - heightPx);
-      // Independent approved anchors: feet 528; wide stage 320, desktop 330.
-      const expectedHeight = width > 1280 ? 320 : 330;
-      expect(sprites[0]!.y).toBe(528 - expectedHeight / 2);
-      expect(sprites[1]!.y).toBe(528 - expectedHeight / 2 + 2);
-      expect(textObjects[0]!.y).toBe(528 - expectedHeight - 36);
-      expect(sprites[0]!.x).toBeCloseTo((width * 47) / 64);
+      // Independent hybrid anchors: feet 475; wide stage 230, desktop 305.
+      const expectedHeight = width > 1280 ? 230 : 305;
+      expect(sprites[0]!.y).toBe(475 - expectedHeight / 2);
+      expect(sprites[1]!.y).toBe(475 - expectedHeight / 2 + 2);
+      expect(textObjects[0]!.y).toBe(475 - expectedHeight - 36);
+      // Right anchor is inset 30 logical px to reserve the zoomed takeover lane.
+      expect(sprites[0]!.x).toBeCloseTo((width * 910) / 1280);
     },
   );
 
@@ -215,11 +216,11 @@ describe('playHit drives the cartoon puppet poses (reviewer item 3)', () => {
     const running = playCoinBurst(scene as unknown as Phaser.Scene, LAYOUT, 'b', 1);
     expect(frames).toEqual(Array.from({ length: 5 }, () => ({ key: 'art:icons', pose: 'coin' })));
     expect(sprites.map(({ x, y }) => ({ x, y }))).toEqual([
-      { x: 904, y: 473 },
-      { x: 922, y: 473 },
-      { x: 940, y: 473 },
-      { x: 958, y: 473 },
-      { x: 976, y: 473 },
+      { x: 874, y: 420 },
+      { x: 892, y: 420 },
+      { x: 910, y: 420 },
+      { x: 928, y: 420 },
+      { x: 946, y: 420 },
     ]);
     expect(tweens).toHaveLength(5);
     for (const [index, tween] of tweens.entries()) {

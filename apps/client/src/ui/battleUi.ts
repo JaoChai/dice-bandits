@@ -1,10 +1,63 @@
 import { type Action, type GameState } from '@dice-bandits/engine';
 import { onLangChange, t } from '../i18n';
-import { CARD_ICON, portraitStyle, iconStyle } from './artFrames';
+import { CARD_ICON, portraitStyle, monsterPortraitStyle, iconStyle } from './artFrames';
+import { reducedMotion } from '../art/motion';
+import { publishBattlePicker } from '../scenes/battle/camera';
 import { needsPassScreen, type BattleSide } from './passDevice';
 import { battleIdentity } from '../scenes/battle/presentation';
 
 const readyPasses = new Set<string>();
+const readoutModes = new WeakMap<HTMLElement, 'human' | 'bot' | 'online'>();
+const swaps = new WeakMap<HTMLElement, { half: string; cancel(): void }>();
+
+function showSwap(shell: HTMLElement, half: string, choosing: boolean): void {
+  const previous = swaps.get(shell);
+  if (!choosing) {
+    previous?.cancel();
+    return;
+  }
+  if (previous?.half === half) return;
+  previous?.cancel();
+  const cue = document.createElement('button');
+  const timer = window.setTimeout(() => cue.remove(), 200);
+  const cancel = () => {
+    window.clearTimeout(timer);
+    cue.remove();
+  };
+  const entry = { half, cancel };
+  swaps.set(shell, entry);
+  if (!previous || reducedMotion()) {
+    cancel();
+    return;
+  }
+  cue.type = 'button';
+  cue.className = 'swap-beat';
+  cue.dataset.testid = 'swap-beat';
+  cue.setAttribute('aria-label', t('battle.swapDismiss'));
+  cue.textContent = t('battle.swap');
+  cue.onclick = cancel;
+  shell.append(cue);
+}
+
+function revealCards(root: HTMLElement, beat: BattleBeat): void {
+  root.querySelector('[data-testid="reveal-pair"]')?.remove();
+  if (readoutModes.get(root) !== 'human') return;
+  if (!beat.commands || !['reveal', 'result'].includes(beat.kind)) return;
+  if (beat.kind === 'result' && beat.duration !== 0) return;
+  const pair = document.createElement('div');
+  pair.dataset.testid = 'reveal-pair';
+  pair.className = `reveal-pair${beat.duration === 0 || reducedMotion() ? ' static' : ''}`;
+  pair.setAttribute('aria-hidden', 'true');
+  pair.innerHTML = (['a', 'b'] as const)
+    .map((side) => {
+      const pick = beat.commands?.[side];
+      if (!pick) return '';
+      const role = side === beat.attacker ? 'warm' : 'cool';
+      return `<span class="reveal-card ${role}"><span class="card-icon" style="${iconStyle(CARD_ICON[pick])}"></span>${escapeHtml(t(`action.${pick}`))}</span>`;
+    })
+    .join('');
+  (root.querySelector('.game-shell') ?? root).append(pair);
+}
 
 type BattleBeat = import('../scenes/battle/presentation').BattleBeat;
 type PresentedFighter = { hp: number; maxHp: number; name: string; seat: number | null };
@@ -58,6 +111,7 @@ export function createBattleReadout(root: HTMLElement): {
   const reset = (state: GameState): void => {
     stop();
     identity = battleIdentity(state);
+    root.querySelector('[data-testid="reveal-pair"]')?.remove();
     element?.remove();
     element = null;
     if (state.phase.kind === 'battle') {
@@ -128,6 +182,7 @@ export function createBattleReadout(root: HTMLElement): {
     reset,
     showBeat(beat: BattleBeat): void {
       if (destroyed) return;
+      revealCards(root, beat);
       finishDrain?.();
       stop();
       active = true;
@@ -210,13 +265,22 @@ export function renderBattleUi(
   humanPicker = false,
   onlineMode = false,
   awaitingView = false,
+  opponentPicked = false,
 ): boolean {
   const shell = root.querySelector<HTMLElement>('.game-shell');
+  if (!awaitingView) readoutModes.set(root, onlineMode ? 'online' : humanPicker ? 'human' : 'bot');
   if (state.phase.kind !== 'battle') {
     readyPasses.clear();
-    shell?.classList.remove('battle-mode');
-    shell?.querySelector('.board-stage')?.classList.remove('battle-panel');
-    shell?.querySelector('.battle-hud')?.remove();
+    if (shell) {
+      publishBattlePicker(shell, null);
+      swaps.get(shell)?.cancel();
+      swaps.delete(shell);
+      shell.classList.remove('battle-mode', 'battle-choosing');
+      shell.querySelector('.board-stage')?.classList.remove('battle-panel');
+      shell.querySelector('.battle-hud')?.remove();
+      shell.querySelector('[data-testid="stance-banner"]')?.remove();
+      shell.querySelector('[data-testid="reveal-pair"]')?.remove();
+    }
     return false;
   }
 
@@ -225,14 +289,21 @@ export function renderBattleUi(
   const exit = shell?.querySelector<HTMLButtonElement>('.game-topline [data-action="exit"]');
   if (exit) exit.textContent = t('setup.back');
   const battle = state.phase.battle;
-  const hpCard = (side: 'a' | 'b') => {
+  const fighterName = (side: BattleSide): string => {
     const fighter = battle[side];
     const player = fighter.kind === 'player' ? state.players[fighter.seat!] : undefined;
-    const name = player?.prank?.alias ?? player?.name ?? t('battle.opponent');
+    return player?.prank?.alias ?? player?.name ?? t(`monster.${fighter.monsterId}`);
+  };
+  const hpCard = (side: BattleSide) => {
+    const fighter = battle[side];
+    const player = fighter.kind === 'player' ? state.players[fighter.seat!] : undefined;
+    const portrait = player
+      ? portraitStyle(player.classId)
+      : monsterPortraitStyle(fighter.monsterId ?? '');
     const hp = Math.max(0, Math.min(fighter.stats.maxHp, fighter.hp));
     const percent = (hp / Math.max(1, fighter.stats.maxHp)) * 100;
     const position = side === 'a' ? 'left' : 'right';
-    return `<div class="battle-hp-card frame ${position}"><strong>${escapeHtml(name)}</strong><div class="battle-hp-track" role="meter" aria-label="${escapeHtml(t('board.hp'))}" aria-valuemin="0" aria-valuemax="${fighter.stats.maxHp}" aria-valuenow="${hp}"><span style="width:${percent}%"></span></div><span class="battle-hp-value" data-testid="hp-${position}">${fighter.hp}/${fighter.stats.maxHp}</span></div>`;
+    return `<div class="battle-hp-card frame ${position}"><span class="battle-portrait" style="${portrait}" aria-hidden="true"></span><strong>${escapeHtml(fighterName(side))}</strong><div class="battle-hp-track" role="meter" aria-label="${escapeHtml(t('board.hp'))}" aria-valuemin="0" aria-valuemax="${fighter.stats.maxHp}" aria-valuenow="${hp}"><span style="width:${percent}%"></span></div><span class="battle-hp-value" data-testid="hp-${position}">${fighter.hp}/${fighter.stats.maxHp}</span></div>`;
   };
   if (shell) {
     let hud = shell.querySelector<HTMLElement>('.battle-hud');
@@ -241,10 +312,22 @@ export function renderBattleUi(
       hud.className = 'battle-hud';
       shell.append(hud);
     }
+    const banner = hud.querySelector('[data-testid="stance-banner"]');
     hud.innerHTML = hpCard('a') + hpCard('b');
+    if (banner) hud.append(banner);
   }
 
-  const side = pendingSide(state);
+  // The Worker's redacted pending.attack may be null while it offers legal
+  // defense picks. Legality owns the local side; never infer a hidden command.
+  const localPick = onlineMode ? actions.find((action) => action.type === 'battlePick') : undefined;
+  const side =
+    localPick?.type === 'battlePick'
+      ? localPick.side
+      : onlineMode && opponentPicked
+        ? battle.attackerSide === 'a'
+          ? 'b'
+          : 'a'
+        : pendingSide(state);
   const passKey = battlePassKey(state, side);
   const passNeeded =
     battleSeat !== undefined &&
@@ -253,6 +336,59 @@ export function renderBattleUi(
     !readyPasses.has(passKey);
   if (passNeeded) readouts.get(root)?.reset(state);
   else readouts.get(root)?.refresh(state);
+  const attacking = side === battle.attackerSide;
+  const picker = battle[side];
+  const player = picker.kind === 'player' ? state.players[picker.seat!] : undefined;
+  const choosing =
+    humanPicker &&
+    !awaitingView &&
+    !passNeeded &&
+    player?.control === 'human' &&
+    actions.some((action) => action.type === 'battlePick' && action.side === side);
+  const ownership =
+    passNeeded || awaitingView
+      ? 'none'
+      : choosing
+        ? 'local-human'
+        : player?.control === 'human'
+          ? 'remote-human'
+          : 'bot';
+  const locked =
+    !passNeeded &&
+    battle.pending.defense === null &&
+    (battle.pending.attack !== null ||
+      (onlineMode && opponentPicked) ||
+      (localPick?.type === 'battlePick' && !attacking));
+  const backCaption = t('battle.cardBack', { name: fighterName(battle.attackerSide) });
+  if (shell) {
+    let banner = shell.querySelector<HTMLElement>('[data-testid="stance-banner"]');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.dataset.testid = 'stance-banner';
+      banner.setAttribute('role', 'status');
+      banner.setAttribute('aria-live', 'polite');
+      banner.setAttribute('aria-atomic', 'true');
+      shell.querySelector('.battle-hud')!.append(banner);
+    }
+    banner.className = `stance-banner ${attacking ? 'warm' : 'cool'}`;
+    const role = t(attacking ? 'battle.turnAttack' : 'battle.turnDefense');
+    const caption = awaitingView
+      ? t('battle.turnReveal')
+      : choosing || passNeeded
+        ? `${role} · ${fighterName(side)}`
+        : `${role} · ${t('battle.turnWaiting', { name: fighterName(side) })}`;
+    banner.innerHTML = `<span class="stance-icon" style="${iconStyle(attacking ? 'sword' : 'shield')}" aria-hidden="true"></span><div><strong>${escapeHtml(caption)}</strong><span>${t('battle.exchange', { exchange: battle.exchange })} · ${t('battle.half', { half: battle.half })}</span>${locked ? `<span class="sr-only">${escapeHtml(backCaption)}</span>` : ''}</div>`;
+    shell.classList.toggle('battle-choosing', choosing);
+    const halfKey = `${battleIdentity(state)}:${battle.exchange}:${battle.half}:${side}`;
+    showSwap(shell, halfKey, choosing);
+    publishBattlePicker(shell, {
+      side,
+      role: attacking ? 'attack' : 'defense',
+      ownership,
+      battleId: battleIdentity(state)!,
+      halfKey,
+    });
+  }
   const shownActions = passNeeded ? [] : actions;
   const pickerActions = humanPicker
     ? shownActions.filter((action) => action.type === 'battlePick' || action.type === 'useItem')
@@ -262,19 +398,21 @@ export function renderBattleUi(
       const pick = action.type === 'battlePick' ? action.pick : 'item';
       const label = escapeHtml(actionName(action));
       const className = action.type === 'battlePick' ? 'command-card' : 'item-card';
-      return `<button type="button" class="action-button ${className}" data-testid="${battleActionTestId(action)}" data-action-index="${index}"${awaitingView ? ' disabled' : ''}><span class="card-icon" style="${iconStyle(CARD_ICON[pick])}" aria-hidden="true"></span><span class="card-label">${label}</span></button>`;
+      const colour = attacking ? 'warm' : 'cool';
+      const sword =
+        pick === 'counter'
+          ? `<span class="counter-sword" style="${iconStyle('sword')}"></span>`
+          : '';
+      return `<button type="button" class="action-button ${className} ${colour}" data-testid="${battleActionTestId(action)}" data-action-index="${index}"${awaitingView ? ' disabled' : ''}><span class="card-icon" style="${iconStyle(CARD_ICON[pick])}" aria-hidden="true">${sword}</span><span class="card-label">${label}</span><span class="card-description">${escapeHtml(t(`battle.description.${pick}`))}</span></button>`;
     })
     .join('');
-
   const actionBar = root.querySelector<HTMLElement>('.action-bar');
   if (actionBar) {
     actionBar.setAttribute('aria-label', t('board.actions'));
-    // The attack is locked while the defender chooses; show its back, not the
-    // secret pick or a selection cursor on an action no longer offered.
-    const chosen =
-      battle.pending.attack !== null && battle.pending.defense === null
-        ? '<span class="chosen-card" data-testid="chosen-card" aria-hidden="true">?</span>'
-        : '';
+    // No command identifier or class-specific Secret data crosses this back.
+    const chosen = locked
+      ? `<span class="chosen-card card-back" data-testid="chosen-card" aria-hidden="true"><span class="card-back-mark">?</span><span class="card-back-caption">${escapeHtml(backCaption)}</span></span>`
+      : '';
     const markup = chosen + (buttons || `<span>${t('board.botThinking')}</span>`);
     if (actionBar.innerHTML !== markup) actionBar.innerHTML = markup;
   }
@@ -302,7 +440,11 @@ export function renderBattleUi(
   }
   root.querySelectorAll<HTMLButtonElement>('[data-action-index]').forEach((button) => {
     const action = pickerActions[Number(button.dataset.actionIndex)];
-    if (action) button.onclick = () => dispatch(action);
+    if (action)
+      button.onclick = () => {
+        if (shell) swaps.get(shell)?.cancel();
+        dispatch(action);
+      };
   });
   return true;
 }

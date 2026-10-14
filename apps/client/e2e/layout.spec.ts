@@ -142,7 +142,7 @@ for (const lang of ['th', 'en'] as const) {
     await startBattleJourney(page);
     await page.evaluate(() => document.fonts.ready);
     const audio = page.locator('.game-topline > [data-testid="audio-toggle"]');
-    const ribbon = page.locator('[data-testid="turn-ribbon"]');
+    const ribbon = page.locator('[data-testid="stance-banner"]');
     await expect(audio).toBeVisible();
     await expect(ribbon).toBeVisible();
     const a = (await audio.boundingBox())!;
@@ -157,7 +157,7 @@ for (const lang of ['th', 'en'] as const) {
     ).toBe(false);
     await assertInside(
       page,
-      '.game-topline > [data-testid="audio-toggle"], [data-testid="turn-ribbon"]',
+      '.game-topline > [data-testid="audio-toggle"], [data-testid="stance-banner"]',
     );
   });
 }

@@ -3,9 +3,9 @@ export type BattleRect = { x: number; y: number; width: number; height: number }
 export const BATTLE_FRAME = { width: 1280, height: 720 } as const;
 export const BATTLE_FIGHTER_HEIGHT = 280;
 /** Approved readable target; legacy exported metrics remain for unmigrated callers. */
-const VIEWPORT_FIGHTER_HEIGHT = 330;
+const VIEWPORT_FIGHTER_HEIGHT = 305;
 export const BATTLE_CARD = { width: 180, height: 240 } as const;
-export const BATTLE_EXCHANGE_Y = 176;
+export const BATTLE_EXCHANGE_Y = 140;
 /** Ground line the fighters stand on (their origin is feet-centred). */
 export const BATTLE_GROUND_Y = (BATTLE_FRAME.height * 11) / 12;
 export type BattleLayout = {
@@ -14,7 +14,7 @@ export type BattleLayout = {
   groundY: number;
   exchangeY: number;
   left: { x: number; y: number };
-  right: { x: number; y: number };
+  right: { x: number; y: number; fighterHeight?: number };
   hpLeft: BattleRect;
   hpRight: BattleRect;
   dice: BattleRect;
@@ -29,6 +29,7 @@ export type BattleLayout = {
 export function battleLayout(
   width: number = BATTLE_FRAME.width,
   height: number = BATTLE_FRAME.height,
+  fullHeightGuardian = false,
 ): BattleLayout {
   const x = width / BATTLE_FRAME.width;
   const y = height / BATTLE_FRAME.height;
@@ -39,15 +40,23 @@ export function battleLayout(
     height: h * y,
   });
   const scale = Math.min(x, y);
-  const groundY = 528 * y;
+  const groundY = 475 * y;
   return {
     // Wide EXPAND stages render at phone CSS scale. Leave breathing room for
     // the existing 3% idle pose without oversizing the approved phone target.
-    fighterHeight: (width / height > 1.9 ? 320 : VIEWPORT_FIGHTER_HEIGHT) * scale,
+    fighterHeight: (width / height > 1.9 ? 230 : VIEWPORT_FIGHTER_HEIGHT) * scale,
     groundY,
     exchangeY: BATTLE_EXCHANGE_Y * scale,
     left: { x: ((BATTLE_FRAME.width * 17) / 64) * x, y: groundY },
-    right: { x: ((BATTLE_FRAME.width * 47) / 64) * x, y: groundY },
+    // Reserve the corner takeover lane even at 1.12 zoom + leftward pan.
+    right: fullHeightGuardian
+      ? {
+          x: width * 0.6,
+          y: groundY,
+          // Preserve the guardian's existing 330px desktop / 180px phone art.
+          fighterHeight: (width / height > 1.9 ? 315 : 330) * scale,
+        }
+      : { x: 910 * x, y: groundY },
     hpLeft: rect(40, 36, 420, 96),
     hpRight: rect(820, 36, 420, 96),
     // Leave room for the dice strip's centred 3px stroke at the canvas edge.

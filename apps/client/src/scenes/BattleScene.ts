@@ -8,6 +8,13 @@ import { createBattleEffects, playHit } from './battle/effects';
 import { planBattle, type BattleBeat } from './battle/presentation';
 import { reducedMotion } from '../art/motion';
 import { battleLayout } from './battle/layout';
+import { battleIdentity } from './battle/presentation';
+import {
+  createBattleCamera,
+  drawPickerAppearance,
+  observeBattlePicker,
+  type PickerSnapshot,
+} from './battle/camera';
 
 export default class BattleScene extends Phaser.Scene {
   private layout = battleLayout();
@@ -18,12 +25,42 @@ export default class BattleScene extends Phaser.Scene {
   private exchange = 0;
   private presentationRevision = 0;
   private cancelPresentation: (() => void) | undefined;
+  private turnCamera: ReturnType<typeof createBattleCamera> | undefined;
+  private picker: PickerSnapshot | null = null;
+  private focusKey = '';
+  private clearPicker: (() => void) | undefined;
+  private inBeats = false;
+
+  private focusPicker(): void {
+    const picker = this.picker;
+    const state = this.latestState;
+    if (this.inBeats || !this.fighters || !state || state.phase.kind !== 'battle') return;
+    if (!picker || picker.battleId !== battleIdentity(state)) return;
+    const battle = state.phase.battle;
+    if (
+      picker.halfKey !== `${battleIdentity(state)}:${battle.exchange}:${battle.half}:${picker.side}`
+    )
+      return;
+    this.clearPicker?.();
+    this.clearPicker = drawPickerAppearance(this, this.fighters, this.layout, picker);
+    const key = `${picker.halfKey}:${picker.ownership}`;
+    if (this.focusKey === key) return;
+    this.focusKey = key;
+    this.turnCamera?.pick(picker, reducedMotion());
+  }
 
   /** Every owner boundary settles the pending wait before killing effects. */
-  cancelBattlePresentation(): void {
+  cancelBattlePresentation(resetCamera = true): void {
     this.presentationRevision = (this.presentationRevision ?? 0) + 1;
     this.cancelPresentation?.();
     this.cancelPresentation = undefined;
+    this.inBeats = false;
+    this.clearPicker?.();
+    this.clearPicker = undefined;
+    if (resetCamera) {
+      this.turnCamera?.reset();
+      this.focusKey = '';
+    }
   }
 
   private postTweens: Phaser.Tweens.Tween[] = [];
@@ -118,6 +155,7 @@ export default class BattleScene extends Phaser.Scene {
   postChoice(levelUp: boolean, reduced: boolean): void {
     if (!this.sys.isActive() || !this.cameras.main || this.postChoiceMounted) return;
     this.postChoiceMounted = true;
+    this.turnCamera?.reset();
     this.heldPostLevelUp = levelUp;
     this.settlePostEffects();
     const { width, height } = this.cameras.main;
@@ -172,12 +210,28 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   create(): void {
+    if (typeof this.cameras.main.setZoom === 'function') this.turnCamera = createBattleCamera(this);
     this.layout = battleLayout(this.cameras.main.width, this.cameras.main.height);
+    const shell =
+      this.game.canvas?.closest<HTMLElement>('.game-shell') ??
+      document.querySelector<HTMLElement>('.game-shell');
+    const offPicker = shell
+      ? observeBattlePicker(shell, (picker) => {
+          this.picker = picker;
+          if (!picker) {
+            this.turnCamera?.reset();
+            this.clearPicker?.();
+            this.clearPicker = undefined;
+            this.focusKey = '';
+          } else this.focusPicker();
+        })
+      : () => {};
     const onResize = (): void => {
       const result = this.heldPostResult;
       const choices = this.postChoiceMounted;
       const level = this.heldPostLevelUp;
       if (this.latestState) this.renderBattle(this.latestState);
+      this.turnCamera?.reset();
       if (result) {
         this.postVictory(result, 0);
         if (choices) this.postChoice(level, true);
@@ -201,6 +255,9 @@ export default class BattleScene extends Phaser.Scene {
       this.exchangeLabel = undefined;
       this.combatantIds = undefined;
       this.cancelBattlePresentation();
+      offPicker();
+      this.picker = null;
+      this.turnCamera = undefined;
       this.scale.off('resize', onResize);
       this.game.events.off('game-state', this.renderBattle, this);
       offLang();
@@ -221,7 +278,8 @@ export default class BattleScene extends Phaser.Scene {
     },
   ): Promise<void> {
     if (options) {
-      this.cancelBattlePresentation();
+      this.cancelBattlePresentation(false);
+      this.inBeats = true;
       const revision = this.presentationRevision;
       const staticOnly = speed <= 0 || reducedMotion();
       // Reserve two 30-FPS frames from the 600ms cosmetic budget. Phaser
@@ -238,6 +296,8 @@ export default class BattleScene extends Phaser.Scene {
         duration: beat.duration * Math.min(1, Math.max(0, speed)) * cosmeticScale,
       }));
       if (!beats.length) {
+        this.inBeats = false;
+        this.turnCamera?.reset();
         options.onCancel?.();
         return;
       }
@@ -267,6 +327,10 @@ export default class BattleScene extends Phaser.Scene {
           deadline += beat.duration;
           if (revision !== this.presentationRevision) break;
           const wallDeadline = options.mode === 'human' ? performance.now() + beat.duration : 0;
+          if (beat.kind === 'reveal')
+            this.turnCamera?.reveal(staticOnly || options.mode !== 'human');
+          if (beat.kind === 'impact') this.turnCamera?.impact(options.mode, staticOnly);
+          if (beat.kind === 'result') this.turnCamera?.reset();
           options.onBeat?.(beat);
           effects?.showBeat(
             beat.kind === 'impact'
@@ -321,7 +385,12 @@ export default class BattleScene extends Phaser.Scene {
         }
       } finally {
         cleanup();
-        if (revision === this.presentationRevision) this.cancelPresentation = undefined;
+        if (revision === this.presentationRevision) {
+          this.cancelPresentation = undefined;
+          this.inBeats = false;
+          this.turnCamera?.reset();
+          this.focusKey = '';
+        }
       }
       return;
     }
@@ -406,10 +475,16 @@ export default class BattleScene extends Phaser.Scene {
     this.settlePostEffects();
     this.postHomes.clear();
     this.heldPostResult = null;
-    this.cancelBattlePresentation();
+    this.cancelBattlePresentation(
+      battleIdentity(state) !== (this.latestState ? battleIdentity(this.latestState) : null),
+    );
     this.latestState = state;
     const view = this.cameras.main;
-    this.layout = battleLayout(view.width, view.height);
+    this.layout = battleLayout(
+      view.width,
+      view.height,
+      state.phase.kind === 'battle' && state.phase.battle.b.monsterId === 'townGuardian',
+    );
     this.children.removeAll(true);
     this.fighters = undefined;
     this.exchangeLabel = undefined;
@@ -439,5 +514,7 @@ export default class BattleScene extends Phaser.Scene {
       )
       .setOrigin(0.5)
       .setDepth(8);
+    this.exchangeLabel.setVisible?.(false);
+    this.focusPicker();
   }
 }
