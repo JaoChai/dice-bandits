@@ -3579,6 +3579,7 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   .game-shell:not(.battle-mode) .game-topline {
     flex-wrap: wrap;
     row-gap: 4px;
+    column-gap: 4px;
     align-content: flex-start;
   }
   .game-shell:not(.battle-mode) .game-topline::after {
@@ -3611,5 +3612,32 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   }
   .game-shell:not(.battle-mode) .seat-hud {
     top: calc(var(--board-topline-h) + env(safe-area-inset-top, 0px));
+  }
+  /* Keep the chip and 44px buttons on row 2; the full-width event strip
+     follows them without shrinking words into fragments. portraitRail.ts
+     retains the 112px rail baseline unless the measured bar overlaps it
+     (a two-line turn ribbon plus an event), then reserves 6px clearance.
+     The expanded panel remains below the bar and inside the viewport. */
+  .game-shell:not(.battle-mode) .world-chip {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: calc(100% - 192px);
+  }
+  .game-shell:not(.battle-mode) .event-banner {
+    order: 3;
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 24px;
+    padding: 4px 8px;
+  }
+  .game-shell:not(.battle-mode) .event-banner.expanded .event-text {
+    left: 0;
+    right: auto;
+    width: max-content;
+    max-width: calc(100vw - 16px);
+  }
+  .game-shell:not(.battle-mode) .rotate-hint {
+    color: var(--c-cream);
   }
 }

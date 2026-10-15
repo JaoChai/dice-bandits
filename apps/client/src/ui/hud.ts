@@ -9,6 +9,7 @@ import { portraitStyle } from './artFrames';
 import { showActionDialog, showItemDialog, showPhaseDialog } from './dialogs';
 import { renderMenu } from './menu';
 import { showSeatDetails } from './seatDetails';
+import { syncPortraitRail } from './portraitRail';
 
 const seatDetailClosers = new WeakMap<HTMLElement, () => void>();
 const itemDialogClosers = new WeakMap<HTMLElement, () => void>();
@@ -296,6 +297,7 @@ export function renderHud(
       };
   }
   shell.classList.toggle('post-active', options?.battlePost === true);
+  syncPortraitRail(shell);
   if (options?.battlePost) {
     root.querySelector('.dialog-shade')?.remove();
     root.querySelector('.battle-hud')?.remove();
