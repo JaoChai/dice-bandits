@@ -3502,3 +3502,66 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     animation: none;
   }
 }
+
+/* Portrait only: intrinsic rows reserve the hint's actual wrapped height
+   below the command/prompt lane. The full-bleed canvas and landscape HUD
+   keep their existing geometry; no guessed locale-specific bottom offset. */
+@media (orientation: portrait) and (max-width: 900px) {
+  .game-shell {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .game-shell:not(.battle-mode) .action-tray,
+  .game-shell.battle-mode .action-tray {
+    position: relative;
+    grid-row: 2;
+    justify-self: center;
+    inset: auto;
+    transform: none;
+  }
+  .game-shell.battle-mode .action-tray {
+    /* One intrinsic row: three fresh commands must fit even at 360px.
+       Keep the canvas/camera untouched and leave fighters + turn ring clear. */
+    width: calc(100% - 20px);
+    flex-wrap: wrap;
+  }
+  .game-shell.battle-mode .chosen-card.card-back {
+    /* The hidden opponent pick is a caption strip above the commands,
+       not a fourth column that squeezes their labels into single letters. */
+    flex: 0 0 100%;
+    width: auto;
+    min-height: 40px;
+    padding: 4px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .game-shell.battle-mode .card-back-mark {
+    font-size: 26px;
+  }
+  .game-shell.battle-mode .command-card,
+  .game-shell.battle-mode .item-card {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    min-height: 88px;
+    padding: 4px;
+    gap: 2px;
+  }
+  .game-shell.battle-mode .card-icon {
+    width: 26px;
+    height: 26px;
+    flex-basis: 26px;
+  }
+  .game-shell.battle-mode .card-description {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .game-shell .rotate-hint {
+    position: relative;
+    grid-row: 3;
+    inset: auto;
+    margin: 8px 8px max(8px, env(safe-area-inset-bottom, 0px));
+  }
+}
