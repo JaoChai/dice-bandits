@@ -3613,9 +3613,10 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   .game-shell:not(.battle-mode) .seat-hud {
     top: calc(var(--board-topline-h) + env(safe-area-inset-top, 0px));
   }
-  /* Keep the chip and 44px buttons on row 2. Event text gets the full width
-     below them: a 24px strip plus the 4px row gap fits the existing 30px
-     clearance above the seat rail, without shrinking words into fragments.
+  /* Keep the chip and 44px buttons on row 2; the full-width event strip
+     follows them without shrinking words into fragments. portraitRail.ts
+     retains the 112px rail baseline unless the measured bar overlaps it
+     (a two-line turn ribbon plus an event), then reserves 6px clearance.
      The expanded panel remains below the bar and inside the viewport. */
   .game-shell:not(.battle-mode) .world-chip {
     flex: 1 1 0;

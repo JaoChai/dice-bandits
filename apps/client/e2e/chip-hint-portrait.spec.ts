@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { startJourney } from './helpers';
+import { openTitleChoice, startJourney } from './helpers';
 
 /** Portrait board chip+hint: every world-rule label must fit inside the world
  * chip in at most two lines while the top bar stays clear of the seat cards,
@@ -518,5 +519,257 @@ for (const viewport of viewports) {
         );
       });
     });
+  }
+}
+
+// A legal setup name that actually makes the EN 360px turn ribbon take two
+// lines. A fixed rail offset must fail when this ribbon and the banner coexist;
+// moving the rail unconditionally must fail the default-name/cleared checks.
+const wideName = 'WWWWWWWWWWWWWWWWWW';
+
+async function settledLayout(page: Page): Promise<void> {
+  // ResizeObserver delivers after layout; measure a subsequent painted frame,
+  // rather than racing it or sleeping an arbitrary number of milliseconds.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+}
+
+async function measureRail(page: Page) {
+  return page.evaluate(() => {
+    const box = (element: Element): Box => {
+      const r = element.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom };
+    };
+    const visible = (element: Element): boolean => {
+      const r = element.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(element).visibility !== 'hidden';
+    };
+    const hit = (a: Box, b: Box): number =>
+      Math.max(0, Math.min(a.right, b.right) - Math.max(a.x, b.x)) *
+      Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.y, b.y));
+    const bar = box(document.querySelector('.game-topline')!);
+    const cards = [...document.querySelectorAll('.seat-hud .seat-card')].map(box);
+    const obstacles = [
+      ...document.querySelectorAll(
+        '.game-shell button:not(.game-topline button):not(.seat-card button), .action-tray, .action-tray > span, .rotate-hint',
+      ),
+    ]
+      .filter(visible)
+      .map((element) => ({
+        name: element.getAttribute('data-testid') ?? element.className.toString(),
+        rect: box(element),
+      }));
+    const chip = document.querySelector<HTMLElement>('[data-testid="world-chip"]')!;
+    const range = document.createRange();
+    range.selectNodeContents(chip);
+    const chipLines = Math.round(
+      range.getBoundingClientRect().height / parseFloat(getComputedStyle(chip).lineHeight),
+    );
+    return {
+      bar,
+      ribbon: box(document.querySelector('[data-testid="turn-ribbon"]')!),
+      cards,
+      obstacles,
+      chipLines,
+      chipTop: box(chip).y,
+      barCardIntersections: cards.map((card) => hit(bar, card)),
+      cardControlIntersections: cards
+        .flatMap((card, seat) =>
+          obstacles.map((obstacle) => ({
+            seat,
+            control: obstacle.name,
+            area: hit(card, obstacle.rect),
+          })),
+        )
+        .filter((collision) => collision.area > 0),
+      // Roll deliberately lives inside the tray. The hint must touch neither.
+      hintControlIntersections: obstacles
+        .filter((o) => o.name === 'rotate-hint')
+        .flatMap((hint) =>
+          obstacles
+            .filter((o) => o !== hint)
+            .map((o) => ({ control: o.name, area: hit(hint.rect, o.rect) })),
+        )
+        .filter((collision) => collision.area > 0),
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    };
+  });
+}
+
+for (const viewport of viewports) {
+  for (const lang of ['th', 'en'] as const) {
+    for (const names of ['default', 'wide-name'] as const) {
+      const label = `${viewport.width}x${viewport.height}-${lang}-${names}`;
+      test(`real setup rail follows the bar only when needed ${label}`, async ({ page }, info) => {
+        await page.setViewportSize(viewport);
+        await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
+        await page.goto('/?seed=m5ab-1&speed=0');
+        await openTitleChoice(page, 'new');
+        for (let seat = 1; seat < 4; seat += 1) {
+          await page
+            .locator(`[data-seat="${seat}"] select[data-field="control"]`)
+            .selectOption('bot');
+        }
+        await page.locator('[data-seat="0"] select[data-field="classId"]').selectOption('knight');
+        if (names === 'wide-name') {
+          const input = page.locator('[data-seat="0"] input[data-field="name"]');
+          await input.fill(wideName);
+          await expect(input).toHaveValue(wideName);
+        }
+        await page.locator('#setup-form button[type="submit"]').click();
+        await expect(page.getByTestId('action-roll')).toBeVisible();
+        if (names === 'wide-name')
+          await expect(page.getByTestId('turn-ribbon')).toContainText(wideName);
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+          await document.fonts.load('600 12px Mitr');
+          await document.fonts.load('700 14px Mitr');
+        });
+        const readings = [];
+        for (const event of ['empty', ...eventKeys, 'cleared'] as const) {
+          for (const rule of ruleKeys) {
+            const text = translations[lang][`event.${event}`] ?? '';
+            await page.evaluate(
+              ({ eventText, ruleText }) => {
+                const banner = document.querySelector('.event-banner')!;
+                banner.classList.remove('expanded');
+                banner.querySelector('.event-text')!.textContent = eventText;
+                document.querySelector('[data-testid="world-chip"]')!.textContent = ruleText;
+              },
+              { eventText: text, ruleText: translations[lang][`worldRule.${rule}`] },
+            );
+            await settledLayout(page);
+            const geometry = await measureRail(page);
+            const context = `${label}/${event}/${rule}`;
+            readings.push({ event, rule, ...geometry });
+            expect.soft(geometry.cards, `${context}: all four cards`).toHaveLength(4);
+            expect
+              .soft(geometry.bar.bottom, `${context}: bar bottom / first card top`)
+              .toBeLessThanOrEqual(geometry.cards[0]!.y);
+            expect
+              .soft(geometry.barCardIntersections, `${context}: actual bar/card intersections`)
+              .toEqual([0, 0, 0, 0]);
+            expect
+              .soft(geometry.cardControlIntersections, `${context}: cards clear of controls`)
+              .toEqual([]);
+            expect
+              .soft(
+                geometry.hintControlIntersections,
+                `${context}: hint clear of tray, roll and prompt`,
+              )
+              .toEqual([]);
+            expect.soft(geometry.chipLines, `${context}: chip <=2 lines`).toBeLessThanOrEqual(2);
+            expect.soft(geometry.chipLines, `${context}: chip populated`).toBeGreaterThan(0);
+            if (names === 'default' || event === 'empty' || event === 'cleared') {
+              expect
+                .soft(geometry.cards[0]!.y, `${context}: unchanged/restored card top`)
+                .toBe(112);
+            }
+            if (lang === 'en' && viewport.width === 360 && names === 'wide-name') {
+              expect.soft(geometry.ribbon.h, `${context}: fixture really takes two lines`).toBe(40);
+              if (text)
+                expect
+                  .soft(geometry.cards[0]!.y, `${context}: 6px clearance after shift`)
+                  .toBe(136);
+            }
+            expect
+              .soft(geometry.scrollWidth, `${context}: no page overflow`)
+              .toBe(geometry.clientWidth);
+            expect(
+              geometry.obstacles.some((o) => o.name === 'action-roll'),
+              `${context}: real roll measured`,
+            ).toBe(true);
+            expect(
+              geometry.obstacles.some((o) => o.name === 'action-tray'),
+              `${context}: real tray measured`,
+            ).toBe(true);
+            expect(
+              geometry.obstacles.some((o) => o.name === 'rotate-hint'),
+              `${context}: real hint measured`,
+            ).toBe(true);
+            for (const target of [
+              ...geometry.cards.map((rect, seat) => ({ name: `seat${seat}`, rect })),
+              ...geometry.obstacles,
+            ]) {
+              expect
+                .soft(target.rect.x, `${context}/${target.name}: left inside viewport`)
+                .toBeGreaterThanOrEqual(0);
+              expect
+                .soft(target.rect.y, `${context}/${target.name}: top inside viewport`)
+                .toBeGreaterThanOrEqual(0);
+              expect
+                .soft(target.rect.right, `${context}/${target.name}: right inside viewport`)
+                .toBeLessThanOrEqual(viewport.width);
+              expect
+                .soft(target.rect.bottom, `${context}/${target.name}: bottom inside viewport`)
+                .toBeLessThanOrEqual(viewport.height);
+            }
+            for (const button of await measureToplineButtons(page)) {
+              expect
+                .soft(button.width, `${context}/${button.name}: width`)
+                .toBeGreaterThanOrEqual(44);
+              expect
+                .soft(button.height, `${context}/${button.name}: height`)
+                .toBeGreaterThanOrEqual(44);
+              expect
+                .soft(button.top, `${context}/${button.name}: row top`)
+                .toBeGreaterThanOrEqual(geometry.chipTop - 2);
+              expect
+                .soft(button.top, `${context}/${button.name}: row bottom`)
+                .toBeLessThanOrEqual(geometry.chipTop + 12);
+            }
+            if (text) {
+              const banner = await measureCollapsedBanner(page, text, lang);
+              const outside = banner.chars.filter((char) => {
+                const overhang =
+                  Math.max(0, Math.ceil(char.bottom - char.top) - banner.lineHeight) + 1;
+                return (
+                  char.top < banner.textBox.top - overhang ||
+                  char.bottom > banner.textBox.bottom + overhang ||
+                  char.left < banner.textBox.left - 1.5 ||
+                  char.right > banner.textBox.right + 1.5
+                );
+              });
+              expect.soft(outside, `${context}: full event text inside box`).toEqual([]);
+              // Every required event fits one line at these widths. This is
+              // stricter than allowing word-boundary breaks: none can split.
+              expect
+                .soft(
+                  new Set(banner.chars.map((c) => Math.round(c.top))).size,
+                  `${context}: whole words on one line`,
+                )
+                .toBe(1);
+            }
+            if (
+              process.env.CHIP_HINT_EVIDENCE_DIR &&
+              rule === 'slipperyRoads' &&
+              ['empty', 'FrenzyStarted', 'cleared'].includes(event)
+            ) {
+              await page.waitForFunction(() => window.__db?.art.boardReady);
+              await page.screenshot({
+                path: join(
+                  process.env.CHIP_HINT_EVIDENCE_DIR,
+                  `${info.project.name}-${label}-${event}.png`,
+                ),
+              });
+            }
+          }
+        }
+        const hint = await measureHint(page);
+        expect
+          .soft(Math.min(hint.contrastOverBlack, hint.contrastOverWhite), `${label}: hint contrast`)
+          .toBeGreaterThanOrEqual(4.5);
+        console.log(`real setup geometry ${label}: ${JSON.stringify(readings)}`);
+        await info.attach(`real-setup-${label}`, {
+          body: JSON.stringify(readings, null, 2),
+          contentType: 'application/json',
+        });
+      });
+    }
   }
 }
