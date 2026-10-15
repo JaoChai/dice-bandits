@@ -26,6 +26,12 @@ const ruleKeys = [
   'cursedCapital',
 ] as const;
 
+// The four toasts a real game shows while the collapsed banner is on screen:
+// the frenzy line from round 10 plus the event toasts. The collapsed banner
+// must render each of them in whole words — no mid-word fragment like the
+// 44px lane's "Final / Frenz" or "ศึก / เดือด".
+const eventKeys = ['FrenzyStarted', 'GoldStolen', 'TownClaimed', 'BattleEnded'] as const;
+
 // Per the card, each rule is forced by setting the chip's text to the app's
 // own translated label (a real seeded game is still started first, so the
 // bar, rail, tray and hint are the live portrait layout).
@@ -47,6 +53,15 @@ type ChipReading = {
 };
 
 type ButtonReading = { name: string; width: number; height: number; top: number };
+
+type CollapsedBannerReading = {
+  expanded: boolean;
+  textBox: { top: number; bottom: number; left: number; right: number };
+  lineHeight: number;
+  bannerWidth: number;
+  chars: Array<{ index: number; top: number; bottom: number; left: number; right: number }>;
+  wordStarts: number[];
+};
 
 type HintReading = {
   color: string;
@@ -107,6 +122,69 @@ async function measureToplineButtons(page: Page): Promise<ButtonReading[]> {
           top: box.top,
         };
       }),
+  );
+}
+
+/**
+ * Collapses the banner (never `.expanded`), puts one real event toast into
+ * `.event-text` and measures where every character actually rendered: its
+ * line (rounded rect top) and its rect, plus the banner's own boxes. The
+ * browser's own Intl.Segmenter supplies the word-start offsets, because Thai
+ * has no spaces and the dictionary — not whitespace — defines word
+ * boundaries.
+ */
+async function measureCollapsedBanner(
+  page: Page,
+  text: string,
+  lang: 'en' | 'th',
+): Promise<CollapsedBannerReading> {
+  await page.evaluate((value) => {
+    const banner = document.querySelector<HTMLElement>('[data-testid="event-banner"]')!;
+    banner.classList.remove('expanded');
+    banner.querySelector<HTMLElement>('.event-text')!.textContent = value;
+  }, text);
+  await expect(page.getByTestId('event-banner')).toBeVisible();
+  return page.evaluate(
+    ({ value, locale }) => {
+      const banner = document.querySelector<HTMLElement>('[data-testid="event-banner"]')!;
+      const et = banner.querySelector<HTMLElement>('.event-text')!;
+      const box = et.getBoundingClientRect();
+      const chars: CollapsedBannerReading['chars'] = [];
+      const node = et.firstChild;
+      if (node instanceof Text) {
+        const range = document.createRange();
+        for (let i = 0; i < node.length; i += 1) {
+          range.setStart(node, i);
+          range.setEnd(node, i + 1);
+          const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+          const first = rects[0];
+          if (!first) continue; // combining marks carry no box of their own
+          chars.push({
+            index: i,
+            top: first.top,
+            bottom: first.bottom,
+            left: first.left,
+            right: first.right,
+          });
+        }
+      }
+      const wordStarts: number[] = [];
+      if ('Segmenter' in Intl) {
+        const segmenter = new Intl.Segmenter(locale, { granularity: 'word' });
+        for (const segment of segmenter.segment(value)) {
+          if (segment.isWordLike) wordStarts.push(segment.index);
+        }
+      }
+      return {
+        expanded: banner.classList.contains('expanded'),
+        textBox: { top: box.top, bottom: box.bottom, left: box.left, right: box.right },
+        lineHeight: parseFloat(getComputedStyle(et).lineHeight) || 0,
+        bannerWidth: Math.round(banner.getBoundingClientRect().width),
+        chars,
+        wordStarts,
+      };
+    },
+    { value: text, locale: lang },
   );
 }
 
@@ -294,6 +372,124 @@ for (const viewport of viewports) {
               `${label}: ${button.name} not wrapped to a third row (banner visible)`,
             )
             .toBeLessThanOrEqual(chipTop + 12);
+        }
+      });
+
+      // The collapsed banner is what a player reads during the last rounds:
+      // every character must stay inside the banner's box (nothing clamped
+      // away) and every rendered line break must land on a word boundary —
+      // whole words only, never a mid-word fragment like "Final / Frenz"
+      // or "ศึก / เดือด". Word boundaries come from the browser's own
+      // Intl.Segmenter (Thai has no spaces) plus whitespace runs for English.
+      test(`collapsed event banner shows whole words with no mid-word split ${label}`, async ({
+        page,
+      }, info) => {
+        for (const key of eventKeys) {
+          const text = translations[lang][`event.${key}`];
+          const reading = await measureCollapsedBanner(page, text, lang);
+          // Chromium's per-glyph range rects use the font's ascent/descent,
+          // which hangs a couple of pixels above and below the 16px line box
+          // (measured: rect 85-104 vs box 87-103 in Mitr 12px). Only a rect
+          // that reaches a whole line past the box is really clamped away.
+          const outside = reading.chars.filter((char) => {
+            const overhang =
+              Math.max(0, Math.ceil(char.bottom - char.top) - reading.lineHeight) + 1;
+            return (
+              char.bottom > reading.textBox.bottom + overhang ||
+              char.top < reading.textBox.top - overhang ||
+              char.left < reading.textBox.left - 1.5 ||
+              char.right > reading.textBox.right + 1.5
+            );
+          });
+          // A rendered break between consecutive characters must land where
+          // a word may start: whitespace or a dictionary word start. Gaps
+          // wider than one index are combining marks, not breaks.
+          const validStarts = new Set(reading.wordStarts);
+          for (const match of text.matchAll(/\S+/g)) validStarts.add(match.index);
+          const badBreaks: Array<{ at: number; context: string }> = [];
+          const sorted = [...reading.chars].sort((a, b) => a.index - b.index);
+          for (let i = 1; i < sorted.length; i += 1) {
+            const prev = sorted[i - 1]!;
+            const curr = sorted[i]!;
+            if (curr.index - prev.index > 3) continue;
+            if (Math.round(prev.top) === Math.round(curr.top)) continue;
+            const at = curr.index;
+            const boundary = at >= text.length || /\s/.test(text[at] ?? '') || validStarts.has(at);
+            if (!boundary) {
+              badBreaks.push({ at, context: text.slice(Math.max(0, at - 8), at + 8) });
+            }
+          }
+          const lineTops = new Set(reading.chars.map((char) => Math.round(char.top)));
+          console.log(
+            `collapsed banner ${label} ${key}: banner ${reading.bannerWidth}px, box ${Math.round(reading.textBox.right - reading.textBox.left)}x${Math.round(reading.textBox.bottom - reading.textBox.top)}, lines ${lineTops.size}, charsOutside ${outside.length}, badBreaks ${JSON.stringify(badBreaks)}`,
+          );
+          await info.attach(`collapsed-banner-${label}-${key}`, {
+            body: JSON.stringify(reading, null, 2),
+            contentType: 'application/json',
+          });
+          expect.soft(reading.expanded, `${label}: ${key} banner stays collapsed`).toBe(false);
+          expect
+            .soft(
+              outside.map((char) => char.index),
+              `${label}: ${key} every rendered character stays inside the banner box`,
+            )
+            .toEqual([]);
+          expect
+            .soft(
+              badBreaks.map((bad) => bad.at),
+              `${label}: ${key} no rendered line break lands mid-word`,
+            )
+            .toEqual([]);
+          // Every event shares space with every world rule, not only frenzy.
+          const chips = await measureChips(page, lang);
+          for (const chip of chips) {
+            expect.soft(chip.lines, `${label}: ${key} / ${chip.label}`).toBeLessThanOrEqual(2);
+            expect.soft(chip.overlap, `${label}: ${key} bar/card overlap`).toBe(0);
+          }
+          const chipTop = await page
+            .getByTestId('world-chip')
+            .evaluate((chip) => chip.getBoundingClientRect().top);
+          const buttons = await measureToplineButtons(page);
+          expect(buttons.length).toBeGreaterThanOrEqual(3);
+          for (const button of buttons) {
+            expect
+              .soft(button.width, `${label}: ${key} / ${button.name} width`)
+              .toBeGreaterThanOrEqual(44);
+            expect
+              .soft(button.height, `${label}: ${key} / ${button.name} height`)
+              .toBeGreaterThanOrEqual(44);
+            expect
+              .soft(button.top, `${label}: ${key} / ${button.name} row top`)
+              .toBeGreaterThanOrEqual(chipTop - 2);
+            expect
+              .soft(button.top, `${label}: ${key} / ${button.name} row bottom`)
+              .toBeLessThanOrEqual(chipTop + 12);
+          }
+          await page.getByTestId('event-banner').click();
+          await expect(page.getByTestId('event-banner')).toHaveClass(/expanded/);
+          const panel = await page.locator('.event-banner .event-text').evaluate((text) => {
+            const rect = text.getBoundingClientRect();
+            const bar = document.querySelector('.game-topline')!.getBoundingClientRect();
+            const top = document.elementFromPoint(
+              rect.x + rect.width / 2,
+              rect.y + rect.height / 2,
+            );
+            return {
+              left: rect.left,
+              right: rect.right,
+              top: rect.top,
+              barBottom: bar.bottom,
+              onTop: top === text || (top !== null && text.contains(top)),
+            };
+          });
+          expect.soft(panel.left, `${label}: ${key} expanded left`).toBeGreaterThanOrEqual(0);
+          expect
+            .soft(panel.right, `${label}: ${key} expanded right`)
+            .toBeLessThanOrEqual(viewport.width);
+          expect
+            .soft(panel.top, `${label}: ${key} expanded below bar`)
+            .toBeGreaterThanOrEqual(panel.barBottom);
+          expect.soft(panel.onTop, `${label}: ${key} expanded panel is not obscured`).toBe(true);
         }
       });
 

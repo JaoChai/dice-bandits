@@ -3613,28 +3613,22 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   .game-shell:not(.battle-mode) .seat-hud {
     top: calc(var(--board-topline-h) + env(safe-area-inset-top, 0px));
   }
-  /* The world chip grows into the spare row-2 width instead of a fixed 24%,
-     so every world-rule label wraps within two lines. The frenzy banner gets
-     a fixed 44px lane and the chip absorbs everything above it: two growing
-     row mates split the lane 50/50, which shrank the chip to 67px and pushed
-     "Snow slides you forward" to four lines once the frenzy banner showed
-     from round 10. The tighter column gap buys back 16px so the chip still
-     reaches ~99px at 360 — the measured two-line floor for "Black market is
-     open" is 98px with the banner present. The 44px controls keep their
-     flex-basis, so the chip only ever takes width the row does not need.
-     The expanded banner panel hugs its content instead of the 44px lane, so
-     click-to-expand stays readable. The board rotate hint gets battle mode's
-     cream text: without a colour the 93% cocoa background left the inherited
-     cocoa text at ~1:1 contrast. */
+  /* Keep the chip and 44px buttons on row 2. Event text gets the full width
+     below them: a 24px strip plus the 4px row gap fits the existing 30px
+     clearance above the seat rail, without shrinking words into fragments.
+     The expanded panel remains below the bar and inside the viewport. */
   .game-shell:not(.battle-mode) .world-chip {
     flex: 1 1 0;
     min-width: 0;
     max-width: calc(100% - 192px);
   }
   .game-shell:not(.battle-mode) .event-banner {
-    flex: 0 0 44px;
-    min-width: 44px;
-    max-width: 44px;
+    order: 3;
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 24px;
+    padding: 4px 8px;
   }
   .game-shell:not(.battle-mode) .event-banner.expanded .event-text {
     left: 0;
