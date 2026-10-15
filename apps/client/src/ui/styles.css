@@ -3612,4 +3612,21 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   .game-shell:not(.battle-mode) .seat-hud {
     top: calc(var(--board-topline-h) + env(safe-area-inset-top, 0px));
   }
+  /* The world chip grows into the spare row-2 width instead of a fixed 24%,
+     so every world-rule label wraps within two lines. A zero flex basis keeps
+     the row-2 line fitting (the chip's one-line content width can otherwise
+     push the 78px map button to a third row), and the cap reserves room for
+     the frenzy banner sharing the lane from round 10. The 44px controls keep
+     their flex-basis, so the chip only ever takes width the row does not
+     need. The board rotate hint gets battle mode's cream text: without a
+     colour the 93% cocoa background left the inherited cocoa text at ~1:1
+     contrast. */
+  .game-shell:not(.battle-mode) .world-chip {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: calc(100% - 192px);
+  }
+  .game-shell:not(.battle-mode) .rotate-hint {
+    color: var(--c-cream);
+  }
 }
