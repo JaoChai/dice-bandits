@@ -3641,3 +3641,16 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     color: var(--c-cream);
   }
 }
+
+/* The one-row board bar must stay above the fixed seat rail. Preserve the
+   full status text for assistive technology; only its visual lines clamp. */
+@media not ((orientation: portrait) and (max-width: 900px)) {
+  .game-shell:not(.battle-mode) .turn-ribbon {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: normal;
+  }
+}
