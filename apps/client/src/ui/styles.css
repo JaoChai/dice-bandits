@@ -3565,3 +3565,51 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     margin: 8px 8px max(8px, env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* B1 portrait board bar: round + turn share the first row at full width so
+   the turn text wraps like a sentence instead of collapsing into a mid-word
+   column, the chips/buttons keep their own second row, and the seat rail
+   starts below the bar's real two-row height via --board-topline-h instead
+   of the fixed 64px lane. Landscape/desktop and battle mode keep the
+   single-row U2a bar untouched. */
+@media (orientation: portrait) and (max-width: 900px) {
+  .game-shell:not(.battle-mode) {
+    --board-topline-h: 112px;
+  }
+  .game-shell:not(.battle-mode) .game-topline {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    align-content: flex-start;
+  }
+  .game-shell:not(.battle-mode) .game-topline::after {
+    content: '';
+    order: 1;
+    flex-basis: 100%;
+    height: 0;
+  }
+  .game-shell:not(.battle-mode) .round-label {
+    flex: 0 0 auto;
+    max-width: none;
+  }
+  .game-shell:not(.battle-mode) .turn-ribbon {
+    flex: 1 1 0;
+    max-width: none;
+    min-width: 0;
+    padding-left: 0;
+    border-left: 0;
+    /* Normal sentence wrapping: the turn text breaks at spaces like any
+       label instead of the portrait break-all column. */
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+  .game-shell:not(.battle-mode) .event-banner,
+  .game-shell:not(.battle-mode) .world-chip,
+  .game-shell:not(.battle-mode) .menu-slot,
+  .game-shell:not(.battle-mode) .game-topline > .text-button,
+  .game-shell:not(.battle-mode) .game-topline > .audio-toggle {
+    order: 2;
+  }
+  .game-shell:not(.battle-mode) .seat-hud {
+    top: calc(var(--board-topline-h) + env(safe-area-inset-top, 0px));
+  }
+}
