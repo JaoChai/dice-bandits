@@ -222,6 +222,81 @@ for (const viewport of viewports) {
         }
       });
 
+      // The frenzy state is the real chip-row-sharing case: from round 10 the
+      // game itself puts t('event.FrenzyStarted') into .event-text, and the
+      // banner stops hiding itself (:has(.event-text:empty) no longer
+      // matches). Populate it exactly like topline-portrait.spec.ts does, so
+      // the chip is measured against a live row mate, not an empty lane.
+      test(`world chip fits every rule label in two lines with the frenzy banner visible ${label}`, async ({
+        page,
+      }, info) => {
+        await page.evaluate((frenzy) => {
+          const text = document.querySelector<HTMLElement>(
+            '[data-testid="event-banner"] .event-text',
+          )!;
+          text.textContent = frenzy;
+        }, translations[lang]['event.FrenzyStarted']);
+        await expect(page.getByTestId('event-banner')).toBeVisible();
+        const rowMate = await page.evaluate(() => {
+          const banner = document
+            .querySelector('[data-testid="event-banner"]')!
+            .getBoundingClientRect();
+          const chip = document
+            .querySelector('[data-testid="world-chip"]')!
+            .getBoundingClientRect();
+          return { bannerWidth: Math.round(banner.width), chipWidth: Math.round(chip.width) };
+        });
+        const readings = await measureChips(page, lang);
+        console.log(
+          `chip geometry banner-visible ${label} (banner ${rowMate.bannerWidth}px, chip ${rowMate.chipWidth}px): ${JSON.stringify(readings)}`,
+        );
+        await info.attach(`chip-banner-${label}`, {
+          body: JSON.stringify({ rowMate, readings }, null, 2),
+          contentType: 'application/json',
+        });
+        for (const reading of readings) {
+          expect
+            .soft(
+              reading.lines,
+              `${label}: ${reading.label} fits two lines with the banner visible`,
+            )
+            .toBeLessThanOrEqual(2);
+          expect
+            .soft(
+              reading.overlap,
+              `${label}: ${reading.label} bar stays above the first card with the banner visible`,
+            )
+            .toBe(0);
+        }
+        // The 44px controls stay on the chip's row: nothing wraps to a third
+        // row just because the banner joined it.
+        const chipTop = await page.evaluate(
+          () => document.querySelector('[data-testid="world-chip"]')!.getBoundingClientRect().top,
+        );
+        const buttons = await measureToplineButtons(page);
+        expect(
+          buttons.length,
+          `${label}: topline buttons rendered (banner visible)`,
+        ).toBeGreaterThanOrEqual(3);
+        for (const button of buttons) {
+          expect
+            .soft(button.width, `${label}: ${button.name} width (banner visible)`)
+            .toBeGreaterThanOrEqual(44);
+          expect
+            .soft(button.height, `${label}: ${button.name} height (banner visible)`)
+            .toBeGreaterThanOrEqual(44);
+          expect
+            .soft(button.top, `${label}: ${button.name} on the chip's row (banner visible)`)
+            .toBeGreaterThanOrEqual(chipTop - 2);
+          expect
+            .soft(
+              button.top,
+              `${label}: ${button.name} not wrapped to a third row (banner visible)`,
+            )
+            .toBeLessThanOrEqual(chipTop + 12);
+        }
+      });
+
       test(`rotate hint is readable and clear of controls ${label}`, async ({ page }, info) => {
         const reading = await measureHint(page);
         console.log(`hint geometry ${label}: ${JSON.stringify(reading)}`);
