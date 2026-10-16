@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { step, type GameState } from '@dice-bandits/engine';
 import type { ServerMsg } from '@dice-bandits/room';
 import type Phaser from 'phaser';
@@ -7,9 +7,47 @@ import { openTitleChoice, observeBoardGame } from './helpers';
 type ProbeWindow = Window & { __m5aGame?: Phaser.Game };
 type Frame = Extract<ServerMsg, { type: 'events' | 'view' }>;
 
+// Keep Node-side observations so a test timeout cannot erase the last poll.
+const diagnostics = new Map<TestInfo, { timeline: unknown[]; clients: Map<Page, unknown> }>();
+function mark(info: TestInfo, detail: object) {
+  let log = diagnostics.get(info);
+  if (!log) diagnostics.set(info, (log = { timeline: [], clients: new Map() }));
+  log.timeline.push({ at: Date.now(), ...detail });
+}
+test.afterEach(async ({ page }, info) => {
+  const log = diagnostics.get(info);
+  if (!log) return;
+  mark(info, { step: 'afterEach', hostClosed: page.isClosed() });
+  await info.attach('online-handoff-diagnostics.json', {
+    body: JSON.stringify({ timeline: log.timeline, clients: [...log.clients.values()] }),
+    contentType: 'application/json',
+  });
+  diagnostics.delete(info);
+});
+
+async function recordSnapshot(page: Page, info: TestInfo, previous?: GameState) {
+  const result = await snapshot(page);
+  const observation = result.observation;
+  diagnostics.get(info)!.clients.set(page, {
+    client: page.url(),
+    ...observation,
+    phase: result.controller.phase.kind,
+    controllerChanged: previous
+      ? JSON.stringify(result.controller) !== JSON.stringify(previous)
+      : null,
+    boardMatches: JSON.stringify(result.board) === JSON.stringify(result.controller),
+    state: result,
+  });
+  return result;
+}
+
 async function snapshot(page: Page) {
   return page.evaluate(() => {
-    const game = (window as ProbeWindow).__m5aGame!;
+    const probe = window as ProbeWindow & {
+      __onlineFrames?: Array<{ at: number; message: Frame }>;
+      __movementCommits?: Array<{ at: number; state: GameState }>;
+    };
+    const game = probe.__m5aGame!;
     const scene = game.scene.getScene('BoardScene') as Phaser.Scene & {
       latestState: GameState;
     };
@@ -17,6 +55,12 @@ async function snapshot(page: Page) {
       controller: window.__db!.getState(),
       registry: game.registry.get('state') as GameState,
       board: scene.latestState,
+      observation: {
+        at: Date.now(),
+        browserAt: performance.now(),
+        frames: probe.__onlineFrames?.slice(-10),
+        commits: probe.__movementCommits?.slice(-10),
+      },
     };
   });
 }
@@ -25,6 +69,7 @@ test('online speed-1 movement commits both views before ghost playback finishes'
   page: host,
   browser,
 }, info) => {
+  mark(info, { step: 'setup' });
   const context = await browser.newContext({
     storageState: 'e2e/storage-state.json',
     viewport: info.project.use.viewport,
@@ -114,6 +159,13 @@ test('online speed-1 movement commits both views before ghost playback finishes'
           ? leave
           : actor.locator(selector).first();
       const previous = (await snapshot(actor)).controller;
+      mark(info, {
+        step: 'action',
+        action,
+        actor: actor === host ? 'Alice' : 'Bob',
+        testid: await button.getAttribute('data-testid'),
+        phase: previous.phase.kind,
+      });
       const moving = ['action-roll', 'action-chooseBranch', 'action-endTurn'].includes(
         (await button.getAttribute('data-testid')) ?? '',
       );
@@ -133,11 +185,12 @@ test('online speed-1 movement commits both views before ghost playback finishes'
           moving ? 1 : 0,
         );
       await button.click();
+      mark(info, { step: 'click completed' });
       for (const page of pages)
         await expect
           .poll(
             async () => {
-              const probe = await snapshot(page);
+              const probe = await recordSnapshot(page, info, previous);
               return (
                 JSON.stringify(probe.controller) !== JSON.stringify(previous) &&
                 JSON.stringify(probe.board) === JSON.stringify(probe.controller)
@@ -232,7 +285,9 @@ test('online speed-1 movement commits both views before ghost playback finishes'
       contentType: 'application/json',
     });
   } finally {
+    mark(info, { step: 'guest context close' });
     await context.close();
+    mark(info, { step: 'guest context closed' });
   }
 });
 
@@ -241,6 +296,7 @@ for (const language of ['th', 'en']) {
     page: host,
     browser,
   }, info) => {
+    mark(info, { step: 'setup', language });
     // Private worker RNG can require several real two-browser turns to reach
     // explicit End Turn. CI traces took 24–28s in prep, before context cleanup;
     // allow that setup, not a slower handoff (the scene deadline stays 2000ms).
@@ -257,6 +313,25 @@ for (const language of ['th', 'en']) {
       for (const [index, page] of pages.entries()) {
         await observeBoardGame(page);
         await page.addInitScript((lang) => localStorage.setItem('lang', lang), language);
+        await page.addInitScript(() => {
+          const NativeWebSocket = window.WebSocket;
+          const probe = window as unknown as Window & {
+            __onlineFrames: Array<{ at: number; message: Frame }>;
+          };
+          probe.__onlineFrames = [];
+          window.WebSocket = class extends NativeWebSocket {
+            constructor(url: string | URL, protocols?: string | string[]) {
+              super(url, protocols);
+              this.addEventListener('message', (event) => {
+                const message = JSON.parse(String(event.data)) as ServerMsg;
+                if (message.type === 'events' || message.type === 'view') {
+                  probe.__onlineFrames.push({ at: performance.now(), message });
+                  probe.__onlineFrames = probe.__onlineFrames.slice(-10);
+                }
+              });
+            }
+          };
+        });
         page.on('pageerror', (error) => errors.push(error.message));
         page.on('console', (message) => {
           if (message.type() === 'error') errors.push(message.text());
@@ -276,6 +351,7 @@ for (const language of ['th', 'en']) {
       // Bob may act during preparation, but stays idle after the tested handoff.
       // Never fabricate RNG, server frames or game state.
       for (let room = 0; room < 6 && !reached; room++) {
+        mark(info, { step: 'room setup', room });
         await host.goto('http://127.0.0.1:8787/?speed=0');
         await openTitleChoice(host, 'online-create');
         await host.getByTestId('online-name').fill('Alice');
@@ -290,6 +366,18 @@ for (const language of ['th', 'en']) {
         await Promise.all(
           pages.map((page) => page.waitForFunction(() => window.__db?.art.boardReady)),
         );
+        for (const page of pages)
+          await page.evaluate(() => {
+            const probe = window as ProbeWindow & {
+              __onlineFrames?: Array<{ at: number; message: Frame }>;
+              __movementCommits?: Array<{ at: number; state: GameState }>;
+            };
+            probe.__movementCommits = [];
+            probe.__m5aGame!.events.on('game-state', (state: GameState) => {
+              probe.__movementCommits!.push({ at: performance.now(), state });
+              probe.__movementCommits = probe.__movementCommits!.slice(-10);
+            });
+          });
         // Initial/welcome views have no event batch. They must commit without
         // inventing a roll/toast or leaving presentationBusy blocking actions.
         await expect(host.getByTestId('action-roll')).toBeEnabled();
@@ -303,7 +391,8 @@ for (const language of ['th', 'en']) {
           expect(initial.board).toEqual(initial.controller);
         }
         for (let action = 0; action < 80; action++) {
-          const state = (await snapshot(host)).controller;
+          const state = (await recordSnapshot(host, info)).controller;
+          mark(info, { step: 'preparation', room, action, phase: state.phase.kind });
           // A finished room cannot supply the empty handoff; try the next room.
           if (state.phase.kind === 'gameOver') break;
           if (state.turnSeat === 0 && state.phase.kind === 'endOfTurn') {
@@ -345,7 +434,15 @@ for (const language of ['th', 'en']) {
             : (await leave.count())
               ? leave
               : buttons[actor]!;
+          mark(info, {
+            step: 'click',
+            actor,
+            action,
+            testid: await button.getAttribute('data-testid'),
+            phase: state.phase.kind,
+          });
           await button.click();
+          mark(info, { step: 'click completed' });
           await expect
             .poll(() => frames[actor]!.filter((message) => message.type === 'view').length, {
               intervals: [10, 25, 50],
@@ -362,6 +459,7 @@ for (const language of ['th', 'en']) {
       expect((await snapshot(guest)).controller).toEqual(before.controller);
       const offsets = frames.map((messages) => messages.length);
       const handoffStarted = performance.now();
+      mark(info, { step: 'empty handoff' });
       await host.getByTestId('action-endTurn').click();
       await expect
         .poll(() => frames.every((messages, index) => messages.length >= offsets[index]! + 2))
@@ -375,7 +473,7 @@ for (const language of ['th', 'en']) {
         await expect
           .poll(
             async () => {
-              const state = await snapshot(page);
+              const state = await recordSnapshot(page, info, before.controller);
               return {
                 phase: state.controller.phase.kind,
                 turnSeat: state.controller.turnSeat,
@@ -403,8 +501,11 @@ for (const language of ['th', 'en']) {
       expect((await snapshot(host)).controller).toEqual((await snapshot(guest)).controller);
       await expect(guest.getByTestId('action-roll')).toBeEnabled();
       expect(errors).toEqual([]);
+      mark(info, { step: 'assertions complete' });
     } finally {
+      mark(info, { step: 'guest context close' });
       await guestContext.close();
+      mark(info, { step: 'guest context closed' });
     }
   });
 }
