@@ -527,78 +527,142 @@ for (const viewport of viewports) {
 // moving the rail unconditionally must fail the default-name/cleared checks.
 const wideName = 'WWWWWWWWWWWWWWWWWW';
 
-async function settledLayout(page: Page): Promise<void> {
-  // ResizeObserver delivers after layout; measure a subsequent painted frame,
-  // rather than racing it or sleeping an arbitrary number of milliseconds.
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
+/** One browser round trip per event/rule: keep the real ResizeObserver and
+ * double-rAF settling, but don't pay tracing/protocol costs for each read.
+ * All assertions stay in Node; only DOM mutations and measurements are batched. */
+async function measureRailStep(
+  page: Page,
+  eventText: string,
+  ruleText: string,
+  locale: 'en' | 'th',
+) {
+  return page.evaluate(
+    async ({ eventText, ruleText, locale }) => {
+      const eventBanner = document.querySelector<HTMLElement>('.event-banner')!;
+      eventBanner.classList.remove('expanded');
+      eventBanner.querySelector('.event-text')!.textContent = eventText;
+      document.querySelector('[data-testid="world-chip"]')!.textContent = ruleText;
+      // ResizeObserver delivers after layout; measure a subsequent painted frame,
+      // rather than racing it or sleeping an arbitrary number of milliseconds.
+      await new Promise<void>((resolve) =>
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      ),
+      );
+      const box = (element: Element): Box => {
+        const r = element.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom };
+      };
+      const visible = (element: Element): boolean => {
+        const r = element.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && getComputedStyle(element).visibility !== 'hidden';
+      };
+      const hit = (a: Box, b: Box): number =>
+        Math.max(0, Math.min(a.right, b.right) - Math.max(a.x, b.x)) *
+        Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.y, b.y));
+      const bar = box(document.querySelector('.game-topline')!);
+      const cards = [...document.querySelectorAll('.seat-hud .seat-card')].map(box);
+      const obstacles = [
+        ...document.querySelectorAll(
+          '.game-shell button:not(.game-topline button):not(.seat-card button), .action-tray, .action-tray > span, .rotate-hint',
+        ),
+      ]
+        .filter(visible)
+        .map((element) => ({
+          name: element.getAttribute('data-testid') ?? element.className.toString(),
+          rect: box(element),
+        }));
+      const chip = document.querySelector<HTMLElement>('[data-testid="world-chip"]')!;
+      const range = document.createRange();
+      range.selectNodeContents(chip);
+      const chipLines = Math.round(
+        range.getBoundingClientRect().height / parseFloat(getComputedStyle(chip).lineHeight),
+      );
+      const geometry = {
+        bar,
+        ribbon: box(document.querySelector('[data-testid="turn-ribbon"]')!),
+        cards,
+        obstacles,
+        chipLines,
+        chipTop: box(chip).y,
+        barCardIntersections: cards.map((card) => hit(bar, card)),
+        cardControlIntersections: cards
+          .flatMap((card, seat) =>
+            obstacles.map((obstacle) => ({
+              seat,
+              control: obstacle.name,
+              area: hit(card, obstacle.rect),
+            })),
+          )
+          .filter((collision) => collision.area > 0),
+        // Roll deliberately lives inside the tray. The hint must touch neither.
+        hintControlIntersections: obstacles
+          .filter((o) => o.name === 'rotate-hint')
+          .flatMap((hint) =>
+            obstacles
+              .filter((o) => o !== hint)
+              .map((o) => ({ control: o.name, area: hit(hint.rect, o.rect) })),
+          )
+          .filter((collision) => collision.area > 0),
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      };
+      const buttons = [...document.querySelectorAll<HTMLElement>('.game-topline button')]
+        .filter((element) => {
+          const box = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return box.width > 0 && box.height > 0 && style.visibility !== 'hidden';
+        })
+        .map((element) => {
+          const box = element.getBoundingClientRect();
+          return {
+            name: element.getAttribute('data-testid') ?? element.className.toString(),
+            width: Math.round(box.width),
+            height: Math.round(box.height),
+            top: box.top,
+          };
+        });
+      let banner: CollapsedBannerReading | null = null;
+      if (eventText) {
+        const et = eventBanner.querySelector<HTMLElement>('.event-text')!;
+        const box = et.getBoundingClientRect();
+        const chars: CollapsedBannerReading['chars'] = [];
+        const node = et.firstChild;
+        if (node instanceof Text) {
+          const range = document.createRange();
+          for (let i = 0; i < node.length; i += 1) {
+            range.setStart(node, i);
+            range.setEnd(node, i + 1);
+            const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+            const first = rects[0];
+            if (!first) continue; // combining marks carry no box of their own
+            chars.push({
+              index: i,
+              top: first.top,
+              bottom: first.bottom,
+              left: first.left,
+              right: first.right,
+            });
+          }
+        }
+        const wordStarts: number[] = [];
+        if ('Segmenter' in Intl) {
+          const segmenter = new Intl.Segmenter(locale, { granularity: 'word' });
+          for (const segment of segmenter.segment(eventText)) {
+            if (segment.isWordLike) wordStarts.push(segment.index);
+          }
+        }
+        banner = {
+          expanded: eventBanner.classList.contains('expanded'),
+          textBox: { top: box.top, bottom: box.bottom, left: box.left, right: box.right },
+          lineHeight: parseFloat(getComputedStyle(et).lineHeight) || 0,
+          bannerWidth: Math.round(eventBanner.getBoundingClientRect().width),
+          chars,
+          wordStarts,
+        };
+      }
+      return { geometry, buttons, banner };
+    },
+    { eventText, ruleText, locale },
   );
-}
-
-async function measureRail(page: Page) {
-  return page.evaluate(() => {
-    const box = (element: Element): Box => {
-      const r = element.getBoundingClientRect();
-      return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom };
-    };
-    const visible = (element: Element): boolean => {
-      const r = element.getBoundingClientRect();
-      return r.width > 0 && r.height > 0 && getComputedStyle(element).visibility !== 'hidden';
-    };
-    const hit = (a: Box, b: Box): number =>
-      Math.max(0, Math.min(a.right, b.right) - Math.max(a.x, b.x)) *
-      Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.y, b.y));
-    const bar = box(document.querySelector('.game-topline')!);
-    const cards = [...document.querySelectorAll('.seat-hud .seat-card')].map(box);
-    const obstacles = [
-      ...document.querySelectorAll(
-        '.game-shell button:not(.game-topline button):not(.seat-card button), .action-tray, .action-tray > span, .rotate-hint',
-      ),
-    ]
-      .filter(visible)
-      .map((element) => ({
-        name: element.getAttribute('data-testid') ?? element.className.toString(),
-        rect: box(element),
-      }));
-    const chip = document.querySelector<HTMLElement>('[data-testid="world-chip"]')!;
-    const range = document.createRange();
-    range.selectNodeContents(chip);
-    const chipLines = Math.round(
-      range.getBoundingClientRect().height / parseFloat(getComputedStyle(chip).lineHeight),
-    );
-    return {
-      bar,
-      ribbon: box(document.querySelector('[data-testid="turn-ribbon"]')!),
-      cards,
-      obstacles,
-      chipLines,
-      chipTop: box(chip).y,
-      barCardIntersections: cards.map((card) => hit(bar, card)),
-      cardControlIntersections: cards
-        .flatMap((card, seat) =>
-          obstacles.map((obstacle) => ({
-            seat,
-            control: obstacle.name,
-            area: hit(card, obstacle.rect),
-          })),
-        )
-        .filter((collision) => collision.area > 0),
-      // Roll deliberately lives inside the tray. The hint must touch neither.
-      hintControlIntersections: obstacles
-        .filter((o) => o.name === 'rotate-hint')
-        .flatMap((hint) =>
-          obstacles
-            .filter((o) => o !== hint)
-            .map((o) => ({ control: o.name, area: hit(hint.rect, o.rect) })),
-        )
-        .filter((collision) => collision.area > 0),
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    };
-  });
 }
 
 for (const viewport of viewports) {
@@ -634,17 +698,12 @@ for (const viewport of viewports) {
         for (const event of ['empty', ...eventKeys, 'cleared'] as const) {
           for (const rule of ruleKeys) {
             const text = translations[lang][`event.${event}`] ?? '';
-            await page.evaluate(
-              ({ eventText, ruleText }) => {
-                const banner = document.querySelector('.event-banner')!;
-                banner.classList.remove('expanded');
-                banner.querySelector('.event-text')!.textContent = eventText;
-                document.querySelector('[data-testid="world-chip"]')!.textContent = ruleText;
-              },
-              { eventText: text, ruleText: translations[lang][`worldRule.${rule}`] },
+            const { geometry, buttons, banner } = await measureRailStep(
+              page,
+              text,
+              translations[lang][`worldRule.${rule}`],
+              lang,
             );
-            await settledLayout(page);
-            const geometry = await measureRail(page);
             const context = `${label}/${event}/${rule}`;
             readings.push({ event, rule, ...geometry });
             expect.soft(geometry.cards, `${context}: all four cards`).toHaveLength(4);
@@ -709,7 +768,7 @@ for (const viewport of viewports) {
                 .soft(target.rect.bottom, `${context}/${target.name}: bottom inside viewport`)
                 .toBeLessThanOrEqual(viewport.height);
             }
-            for (const button of await measureToplineButtons(page)) {
+            for (const button of buttons) {
               expect
                 .soft(button.width, `${context}/${button.name}: width`)
                 .toBeGreaterThanOrEqual(44);
@@ -724,7 +783,9 @@ for (const viewport of viewports) {
                 .toBeLessThanOrEqual(geometry.chipTop + 12);
             }
             if (text) {
-              const banner = await measureCollapsedBanner(page, text, lang);
+              await expect(page.getByTestId('event-banner')).toBeVisible();
+              // A non-empty event always returns its measured text box.
+              if (!banner) throw new Error(`${context}: missing banner measurement`);
               const outside = banner.chars.filter((char) => {
                 const overhang =
                   Math.max(0, Math.ceil(char.bottom - char.top) - banner.lineHeight) + 1;
