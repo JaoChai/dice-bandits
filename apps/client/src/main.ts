@@ -286,7 +286,8 @@ export function startOnlineGame(
                 postOnlineReady = true;
                 if (!pending) {
                   post.destroy();
-                  ownedGame?.events.emit('game-state', controller.state);
+                  // Only the authoritative onEvents commit below owns scene state.
+                  // This cosmetic completion can precede the controller handoff.
                   scene?.scene.stop('BattleScene');
                 }
                 renderOnlineHud();
