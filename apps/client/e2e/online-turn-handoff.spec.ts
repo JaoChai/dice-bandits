@@ -1,8 +1,14 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Page, type TestInfo } from '@playwright/test';
+import { test } from './online-context';
 import { step, type GameState } from '@dice-bandits/engine';
 import type { ServerMsg } from '@dice-bandits/room';
 import type Phaser from 'phaser';
 import { openTitleChoice, observeBoardGame } from './helpers';
+import {
+  emptyBobTurnPossible,
+  observePreparation,
+  preparationChoice,
+} from './online-handoff-preparation';
 
 type ProbeWindow = Window & { __m5aGame?: Phaser.Game };
 type Frame = Extract<ServerMsg, { type: 'events' | 'view' }>;
@@ -291,221 +297,266 @@ test('online speed-1 movement commits both views before ghost playback finishes'
   }
 });
 
+test('online guest cleanup discards passed recordings after hooks', async ({
+  page: host,
+  guestContext,
+}, info) => {
+  const guest = await guestContext.newPage();
+  await guest.setContent('<p>Guest trace lifecycle probe</p>');
+  let hostExportStarted = false;
+  const hostStopChunk = host.context().tracing.stopChunk.bind(host.context().tracing);
+  host.context().tracing.stopChunk = async (options) => {
+    hostExportStarted = true;
+    await hostStopChunk(options);
+  };
+  const stopChunk = guestContext.tracing.stopChunk.bind(guestContext.tracing);
+  guestContext.tracing.stopChunk = async (options) => {
+    // Sequential failure exports share the same fixed teardown budget.
+    await expect.poll(() => hostExportStarted).toBe(true);
+    await stopChunk(options);
+    // Inspect the real runner's export request, not a timing threshold or mock.
+    // An explicitly retained diagnostic run must still export its recording.
+    const trace = info.project.use.trace;
+    const mode = typeof trace === 'object' ? trace.mode : trace;
+    if (info.status === 'passed' && mode === 'retain-on-failure')
+      expect(options?.path, 'a passed guest must not archive inside the test body').toBeUndefined();
+    expect(host.isClosed(), 'stop both live canvases before exporting').toBe(true);
+    expect(guest.isClosed()).toBe(true);
+  };
+});
+
+test('handoff preparation abandons a skipped Bob turn before playing more battles', () => {
+  // Narrow public fields from the naturally reached main-mobile repeat 4,
+  // room 0: round 2/taxHoliday, Bob skipTurns=1, no town owned by Bob.
+  expect(
+    emptyBobTurnPossible({
+      round: 2,
+      worldRule: 'taxHoliday',
+      players: [{ skipTurns: 0 }, { skipTurns: 1 }],
+      towns: [{ owner: null, value: 200 }],
+    }),
+  ).toBe(false);
+  expect(
+    emptyBobTurnPossible({
+      round: 3,
+      worldRule: 'cursedCapital',
+      players: [{ skipTurns: 0 }, { skipTurns: 0 }],
+      towns: [{ owner: 1, value: 200 }],
+    }),
+  ).toBe(false);
+  expect(
+    emptyBobTurnPossible({
+      round: 3,
+      worldRule: 'taxHoliday',
+      players: [{ skipTurns: 0 }, { skipTurns: 0 }],
+      towns: [{ owner: 1, value: 200 }],
+    }),
+  ).toBe(true);
+});
+
 for (const language of ['th', 'en']) {
   test(`empty-events Alice to idle Bob handoff commits both real scenes (${language})`, async ({
     page: host,
-    browser,
+    guestContext,
   }, info) => {
     mark(info, { step: 'setup', language });
     // Private worker RNG can require several real two-browser turns to reach
     // explicit End Turn. CI traces took 24–28s in prep, before context cleanup;
     // allow that setup, not a slower handoff (the scene deadline stays 2000ms).
     test.slow();
-    const guestContext = await browser.newContext({
-      storageState: 'e2e/storage-state.json',
-      viewport: info.project.use.viewport,
-    });
-    try {
-      const guest = await guestContext.newPage();
-      const pages = [host, guest];
-      const frames: Frame[][] = [[], []];
-      const errors: string[] = [];
-      for (const [index, page] of pages.entries()) {
-        await observeBoardGame(page);
-        await page.addInitScript((lang) => localStorage.setItem('lang', lang), language);
-        await page.addInitScript(() => {
-          const NativeWebSocket = window.WebSocket;
-          const probe = window as unknown as Window & {
-            __onlineFrames: Array<{ at: number; message: Frame }>;
-          };
-          probe.__onlineFrames = [];
-          window.WebSocket = class extends NativeWebSocket {
-            constructor(url: string | URL, protocols?: string | string[]) {
-              super(url, protocols);
-              this.addEventListener('message', (event) => {
-                const message = JSON.parse(String(event.data)) as ServerMsg;
-                if (message.type === 'events' || message.type === 'view') {
-                  probe.__onlineFrames.push({ at: performance.now(), message });
-                  probe.__onlineFrames = probe.__onlineFrames.slice(-10);
-                }
-              });
-            }
-          };
-        });
-        page.on('pageerror', (error) => errors.push(error.message));
-        page.on('console', (message) => {
-          if (message.type() === 'error') errors.push(message.text());
-        });
-        // Observe only real frames; never fabricate/rewrite worker traffic.
-        // Do not retain welcome/session-token messages.
-        page.on('websocket', (socket) => {
-          socket.on('framereceived', ({ payload }) => {
-            const message = JSON.parse(String(payload)) as ServerMsg;
-            if (message.type === 'events' || message.type === 'view') frames[index]!.push(message);
-          });
-        });
-      }
-      let reached = false;
-      // Worker seeds/RNG are private. Ordinary spaces/Leave auto-end turns;
-      // advance actual legal choices until Alice has explicit empty End Turn.
-      // Bob may act during preparation, but stays idle after the tested handoff.
-      // Never fabricate RNG, server frames or game state.
-      for (let room = 0; room < 6 && !reached; room++) {
-        mark(info, { step: 'room setup', room });
-        await host.goto('http://127.0.0.1:8787/?speed=0');
-        await openTitleChoice(host, 'online-create');
-        await host.getByTestId('online-name').fill('Alice');
-        await host.getByTestId('online-create-submit').click();
-        await expect(host.getByTestId('screen-lobby')).toBeVisible();
-        const code = (await host.locator('.room-code strong').textContent())!.trim();
-        await guest.goto(`http://127.0.0.1:8787/r/${code}?speed=0`);
-        await guest.getByTestId('online-name').fill('Bob');
-        await guest.getByTestId('online-join-submit').click();
-        await expect(guest.getByTestId('screen-lobby')).toBeVisible();
-        await host.getByTestId('lobby-start').click();
-        await Promise.all(
-          pages.map((page) => page.waitForFunction(() => window.__db?.art.boardReady)),
-        );
-        for (const page of pages)
-          await page.evaluate(() => {
-            const probe = window as ProbeWindow & {
-              __onlineFrames?: Array<{ at: number; message: Frame }>;
-              __movementCommits?: Array<{ at: number; state: GameState }>;
-            };
-            probe.__movementCommits = [];
-            probe.__m5aGame!.events.on('game-state', (state: GameState) => {
-              probe.__movementCommits!.push({ at: performance.now(), state });
-              probe.__movementCommits = probe.__movementCommits!.slice(-10);
-            });
-          });
-        // Initial/welcome views have no event batch. They must commit without
-        // inventing a roll/toast or leaving presentationBusy blocking actions.
-        await expect(host.getByTestId('action-roll')).toBeEnabled();
-        for (const page of pages) {
-          await expect(page.getByTestId('dice-roll')).toHaveCount(0);
-          await expect(page.getByTestId('last-roll-chip')).toHaveCount(0);
-          await expect(page.locator('[data-testid="event-banner"] .event-text')).toHaveText('');
-          await expect(page.locator('.game-toast')).toHaveCount(0);
-          const initial = await snapshot(page);
-          expect(initial.registry).toEqual(initial.controller);
-          expect(initial.board).toEqual(initial.controller);
-        }
-        for (let action = 0; action < 80; action++) {
-          const state = (await recordSnapshot(host, info)).controller;
-          mark(info, { step: 'preparation', room, action, phase: state.phase.kind });
-          // A finished room cannot supply the empty handoff; try the next room.
-          if (state.phase.kind === 'gameOver') break;
-          if (state.turnSeat === 0 && state.phase.kind === 'endOfTurn') {
-            const next = step(state, { type: 'endTurn' });
-            reached = next.events.length === 0 && next.state.turnSeat === 1;
-            // Taxes/skipped turns are not this regression; use another room.
-            break;
-          }
-          const buttons = pages.map((page) =>
-            page
-              .locator(
-                'button[data-choice]:visible:enabled, button[data-action-index]:visible:enabled',
-              )
-              .first(),
-          );
-          await expect
-            .poll(
-              async () =>
-                (await host.evaluate(() => window.__db!.getState().phase.kind === 'gameOver')) ||
-                (await Promise.all(buttons.map((button) => button.count()))).some(Boolean),
-              {
-                intervals: [10, 25, 50],
-              },
-            )
-            .toBe(true);
-          // The final view can arrive while the action-availability poll runs.
-          if (await host.evaluate(() => window.__db!.getState().phase.kind === 'gameOver')) break;
-          const actor = (await buttons[0]!.count()) ? 0 : 1;
-          const page = pages[actor]!;
-          const received = frames[actor]!.filter((message) => message.type === 'view').length;
-          const attack = page.getByTestId('pick-attack');
-          const leave = page
-            .locator(
-              '[data-testid^="shop-leave-"]:visible:enabled, [data-testid="action-leave"]:visible:enabled, [data-testid="action-duel"]:visible:enabled',
-            )
-            .first();
-          const button = (await attack.isVisible())
-            ? attack
-            : (await leave.count())
-              ? leave
-              : buttons[actor]!;
-          mark(info, {
-            step: 'click',
-            actor,
-            action,
-            testid: await button.getAttribute('data-testid'),
-            phase: state.phase.kind,
-          });
-          await button.click();
-          mark(info, { step: 'click completed' });
-          await expect
-            .poll(() => frames[actor]!.filter((message) => message.type === 'view').length, {
-              intervals: [10, 25, 50],
-            })
-            .toBeGreaterThan(received);
-        }
-      }
-      expect(reached, 'reached an actual Alice to Bob empty End Turn').toBe(true);
-      await expect(host.getByTestId('action-endTurn')).toBeEnabled();
-      const before = await snapshot(host);
-      expect(before.controller).toMatchObject({ turnSeat: 0, phase: { kind: 'endOfTurn' } });
-      expect(before.registry).toEqual(before.controller);
-      expect(before.board).toEqual(before.controller);
-      expect((await snapshot(guest)).controller).toEqual(before.controller);
-      const offsets = frames.map((messages) => messages.length);
-      const handoffStarted = performance.now();
-      mark(info, { step: 'empty handoff' });
-      await host.getByTestId('action-endTurn').click();
-      await expect
-        .poll(() => frames.every((messages, index) => messages.length >= offsets[index]! + 2))
-        .toBe(true);
-      await info.attach('handoff-frames.json', {
-        body: JSON.stringify(frames.map((messages, index) => messages.slice(offsets[index]))),
-        contentType: 'application/json',
-      });
 
-      for (const [index, page] of pages.entries()) {
+    const guest = await guestContext.newPage();
+    const pages = [host, guest];
+    const frames: Frame[][] = [[], []];
+    const errors: string[] = [];
+    for (const [index, page] of pages.entries()) {
+      await observeBoardGame(page);
+      await page.addInitScript((lang) => localStorage.setItem('lang', lang), language);
+      await page.addInitScript(() => {
+        const NativeWebSocket = window.WebSocket;
+        const probe = window as unknown as Window & {
+          __onlineFrames: Array<{ at: number; message: Frame }>;
+        };
+        probe.__onlineFrames = [];
+        window.WebSocket = class extends NativeWebSocket {
+          constructor(url: string | URL, protocols?: string | string[]) {
+            super(url, protocols);
+            this.addEventListener('message', (event) => {
+              const message = JSON.parse(String(event.data)) as ServerMsg;
+              if (message.type === 'events' || message.type === 'view') {
+                probe.__onlineFrames.push({ at: performance.now(), message });
+                probe.__onlineFrames = probe.__onlineFrames.slice(-10);
+              }
+            });
+          }
+        };
+      });
+      page.on('pageerror', (error) => errors.push(error.message));
+      page.on('console', (message) => {
+        if (message.type() === 'error') errors.push(message.text());
+      });
+      // Observe only real frames; never fabricate/rewrite worker traffic.
+      // Do not retain welcome/session-token messages.
+      page.on('websocket', (socket) => {
+        socket.on('framereceived', ({ payload }) => {
+          const message = JSON.parse(String(payload)) as ServerMsg;
+          if (message.type === 'events' || message.type === 'view') frames[index]!.push(message);
+        });
+      });
+    }
+    let reached = false;
+    // Worker seeds/RNG are private. Ordinary spaces/Leave auto-end turns;
+    // advance actual legal choices until Alice has explicit empty End Turn.
+    // Bob may act during preparation, but stays idle after the tested handoff.
+    // Never fabricate RNG, server frames or game state.
+    for (let room = 0; room < 6 && !reached; room++) {
+      mark(info, { step: 'room setup', room });
+      await host.goto('http://127.0.0.1:8787/?speed=0');
+      await openTitleChoice(host, 'online-create');
+      await host.getByTestId('online-name').fill('Alice');
+      await host.getByTestId('online-create-submit').click();
+      await expect(host.getByTestId('screen-lobby')).toBeVisible();
+      const code = (await host.locator('.room-code strong').textContent())!.trim();
+      await guest.goto(`http://127.0.0.1:8787/r/${code}?speed=0`);
+      await guest.getByTestId('online-name').fill('Bob');
+      await guest.getByTestId('online-join-submit').click();
+      await expect(guest.getByTestId('screen-lobby')).toBeVisible();
+      await host.getByTestId('lobby-start').click();
+      await Promise.all(
+        pages.map((page) => page.waitForFunction(() => window.__db?.art.boardReady)),
+      );
+      for (const page of pages)
+        await page.evaluate(() => {
+          const probe = window as ProbeWindow & {
+            __onlineFrames?: Array<{ at: number; message: Frame }>;
+            __movementCommits?: Array<{ at: number; state: GameState }>;
+          };
+          probe.__movementCommits = [];
+          probe.__m5aGame!.events.on('game-state', (state: GameState) => {
+            probe.__movementCommits!.push({ at: performance.now(), state });
+            probe.__movementCommits = probe.__movementCommits!.slice(-10);
+          });
+        });
+      // Initial/welcome views have no event batch. They must commit without
+      // inventing a roll/toast or leaving presentationBusy blocking actions.
+      await expect(host.getByTestId('action-roll')).toBeEnabled();
+      for (const page of pages) {
+        await expect(page.getByTestId('dice-roll')).toHaveCount(0);
+        await expect(page.getByTestId('last-roll-chip')).toHaveCount(0);
+        await expect(page.locator('[data-testid="event-banner"] .event-text')).toHaveText('');
+        await expect(page.locator('.game-toast')).toHaveCount(0);
+        const initial = await snapshot(page);
+        expect(initial.registry).toEqual(initial.controller);
+        expect(initial.board).toEqual(initial.controller);
+      }
+      for (let action = 0; action < 80; action++) {
+        let observations: Awaited<ReturnType<typeof observePreparation>>[] = [];
         await expect
           .poll(
             async () => {
-              const state = await recordSnapshot(page, info, before.controller);
-              return {
-                phase: state.controller.phase.kind,
-                turnSeat: state.controller.turnSeat,
-                registryMatches:
-                  JSON.stringify(state.registry) === JSON.stringify(state.controller),
-                boardMatches: JSON.stringify(state.board) === JSON.stringify(state.controller),
-              };
+              observations = await Promise.all(pages.map(observePreparation));
+              return (
+                observations[0]!.state.phase.kind === 'gameOver' ||
+                observations.some((observation) => observation.buttons.length > 0)
+              );
             },
-            { timeout: 2000 },
+            {
+              intervals: [10, 25, 50],
+            },
           )
-          .toEqual({ phase: 'awaitRoll', turnSeat: 1, registryMatches: true, boardMatches: true });
-        console.log(
-          `empty handoff ${language} client ${index}: ${(performance.now() - handoffStarted).toFixed(1)} ms (existing 2000 ms deadline)`,
-        );
-        const received = frames[index]!.slice(offsets[index]);
-        expect(received.map((message) => message.type)).toEqual(['events', 'view']);
-        expect(received[0]).toMatchObject({ type: 'events', events: [] });
-        expect(received[1]).toMatchObject({
-          type: 'view',
-          state: { turnSeat: 1, phase: { kind: 'awaitRoll' } },
+          .toBe(true);
+        const state = observations[0]!.state;
+        mark(info, {
+          step: 'preparation',
+          room,
+          action,
+          phase: state.phase.kind,
+          turnSeat: state.turnSeat,
+          round: state.round,
+          bobSkipped: state.players[1]!.skipTurns,
+          bobTowns: state.towns.filter((town) => town.owner === 1).length,
         });
-        await expect(page.getByTestId('turn-ribbon')).toContainText('Bob');
-        await page.screenshot({ path: info.outputPath(`handoff-${index}.png`) });
+        // A finished or already unsuitable room cannot supply this regression.
+        // Leave before spending dozens of real battle actions finding that out
+        // at Alice's next level-up. This never changes the server/game state.
+        if (state.phase.kind === 'gameOver' || !emptyBobTurnPossible(state)) break;
+        if (state.turnSeat === 0 && state.phase.kind === 'endOfTurn') {
+          const next = step(state, { type: 'endTurn' });
+          reached = next.events.length === 0 && next.state.turnSeat === 1;
+          // Taxes/skipped turns are not this regression; use another room.
+          break;
+        }
+        const actor = observations[0]!.buttons.length ? 0 : 1;
+        const page = pages[actor]!;
+        const received = frames[actor]!.filter((message) => message.type === 'view').length;
+        const choice = preparationChoice(observations[actor]!.buttons);
+        const button = page.locator(`button${choice.selector}:visible:enabled`).first();
+        mark(info, {
+          step: 'click',
+          actor,
+          action,
+          testid: choice.testid,
+          phase: state.phase.kind,
+        });
+        await button.click();
+        mark(info, { step: 'click completed' });
+        await expect
+          .poll(() => frames[actor]!.filter((message) => message.type === 'view').length, {
+            intervals: [10, 25, 50],
+          })
+          .toBeGreaterThan(received);
       }
-      expect((await snapshot(host)).controller).toEqual((await snapshot(guest)).controller);
-      await expect(guest.getByTestId('action-roll')).toBeEnabled();
-      expect(errors).toEqual([]);
-      mark(info, { step: 'assertions complete' });
-    } finally {
-      mark(info, { step: 'guest context close' });
-      await guestContext.close();
-      mark(info, { step: 'guest context closed' });
     }
+    expect(reached, 'reached an actual Alice to Bob empty End Turn').toBe(true);
+    await expect(host.getByTestId('action-endTurn')).toBeEnabled();
+    const before = await snapshot(host);
+    expect(before.controller).toMatchObject({ turnSeat: 0, phase: { kind: 'endOfTurn' } });
+    expect(before.registry).toEqual(before.controller);
+    expect(before.board).toEqual(before.controller);
+    expect((await snapshot(guest)).controller).toEqual(before.controller);
+    const offsets = frames.map((messages) => messages.length);
+    const handoffStarted = performance.now();
+    mark(info, { step: 'empty handoff' });
+    await host.getByTestId('action-endTurn').click();
+    await expect
+      .poll(() => frames.every((messages, index) => messages.length >= offsets[index]! + 2))
+      .toBe(true);
+    await info.attach('handoff-frames.json', {
+      body: JSON.stringify(frames.map((messages, index) => messages.slice(offsets[index]))),
+      contentType: 'application/json',
+    });
+
+    for (const [index, page] of pages.entries()) {
+      await expect
+        .poll(
+          async () => {
+            const state = await recordSnapshot(page, info, before.controller);
+            return {
+              phase: state.controller.phase.kind,
+              turnSeat: state.controller.turnSeat,
+              registryMatches: JSON.stringify(state.registry) === JSON.stringify(state.controller),
+              boardMatches: JSON.stringify(state.board) === JSON.stringify(state.controller),
+            };
+          },
+          { timeout: 2000 },
+        )
+        .toEqual({ phase: 'awaitRoll', turnSeat: 1, registryMatches: true, boardMatches: true });
+      console.log(
+        `empty handoff ${language} client ${index}: ${(performance.now() - handoffStarted).toFixed(1)} ms (existing 2000 ms deadline)`,
+      );
+      const received = frames[index]!.slice(offsets[index]);
+      expect(received.map((message) => message.type)).toEqual(['events', 'view']);
+      expect(received[0]).toMatchObject({ type: 'events', events: [] });
+      expect(received[1]).toMatchObject({
+        type: 'view',
+        state: { turnSeat: 1, phase: { kind: 'awaitRoll' } },
+      });
+      await expect(page.getByTestId('turn-ribbon')).toContainText('Bob');
+      await page.screenshot({ path: info.outputPath(`handoff-${index}.png`) });
+    }
+    expect((await snapshot(host)).controller).toEqual((await snapshot(guest)).controller);
+    await expect(guest.getByTestId('action-roll')).toBeEnabled();
+    expect(errors).toEqual([]);
+    mark(info, { step: 'assertions complete' });
   });
 }
