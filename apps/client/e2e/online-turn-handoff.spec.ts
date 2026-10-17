@@ -4,6 +4,11 @@ import { step, type GameState } from '@dice-bandits/engine';
 import type { ServerMsg } from '@dice-bandits/room';
 import type Phaser from 'phaser';
 import { openTitleChoice, observeBoardGame } from './helpers';
+import {
+  emptyBobTurnPossible,
+  observePreparation,
+  preparationChoice,
+} from './online-handoff-preparation';
 
 type ProbeWindow = Window & { __m5aGame?: Phaser.Game };
 type Frame = Extract<ServerMsg, { type: 'events' | 'view' }>;
@@ -298,8 +303,16 @@ test('online guest cleanup discards passed recordings after hooks', async ({
 }, info) => {
   const guest = await guestContext.newPage();
   await guest.setContent('<p>Guest trace lifecycle probe</p>');
+  let hostExportStarted = false;
+  const hostStopChunk = host.context().tracing.stopChunk.bind(host.context().tracing);
+  host.context().tracing.stopChunk = async (options) => {
+    hostExportStarted = true;
+    await hostStopChunk(options);
+  };
   const stopChunk = guestContext.tracing.stopChunk.bind(guestContext.tracing);
   guestContext.tracing.stopChunk = async (options) => {
+    // Sequential failure exports share the same fixed teardown budget.
+    await expect.poll(() => hostExportStarted).toBe(true);
     await stopChunk(options);
     // Inspect the real runner's export request, not a timing threshold or mock.
     // An explicitly retained diagnostic run must still export its recording.
@@ -310,6 +323,35 @@ test('online guest cleanup discards passed recordings after hooks', async ({
     expect(host.isClosed(), 'stop both live canvases before exporting').toBe(true);
     expect(guest.isClosed()).toBe(true);
   };
+});
+
+test('handoff preparation abandons a skipped Bob turn before playing more battles', () => {
+  // Narrow public fields from the naturally reached main-mobile repeat 4,
+  // room 0: round 2/taxHoliday, Bob skipTurns=1, no town owned by Bob.
+  expect(
+    emptyBobTurnPossible({
+      round: 2,
+      worldRule: 'taxHoliday',
+      players: [{ skipTurns: 0 }, { skipTurns: 1 }],
+      towns: [{ owner: null, value: 200 }],
+    }),
+  ).toBe(false);
+  expect(
+    emptyBobTurnPossible({
+      round: 3,
+      worldRule: 'cursedCapital',
+      players: [{ skipTurns: 0 }, { skipTurns: 0 }],
+      towns: [{ owner: 1, value: 200 }],
+    }),
+  ).toBe(false);
+  expect(
+    emptyBobTurnPossible({
+      round: 3,
+      worldRule: 'taxHoliday',
+      players: [{ skipTurns: 0 }, { skipTurns: 0 }],
+      towns: [{ owner: 1, value: 200 }],
+    }),
+  ).toBe(true);
 });
 
 for (const language of ['th', 'en']) {
@@ -408,54 +450,52 @@ for (const language of ['th', 'en']) {
         expect(initial.board).toEqual(initial.controller);
       }
       for (let action = 0; action < 80; action++) {
-        const state = (await recordSnapshot(host, info)).controller;
-        mark(info, { step: 'preparation', room, action, phase: state.phase.kind });
-        // A finished room cannot supply the empty handoff; try the next room.
-        if (state.phase.kind === 'gameOver') break;
+        let observations: Awaited<ReturnType<typeof observePreparation>>[] = [];
+        await expect
+          .poll(
+            async () => {
+              observations = await Promise.all(pages.map(observePreparation));
+              return (
+                observations[0]!.state.phase.kind === 'gameOver' ||
+                observations.some((observation) => observation.buttons.length > 0)
+              );
+            },
+            {
+              intervals: [10, 25, 50],
+            },
+          )
+          .toBe(true);
+        const state = observations[0]!.state;
+        mark(info, {
+          step: 'preparation',
+          room,
+          action,
+          phase: state.phase.kind,
+          turnSeat: state.turnSeat,
+          round: state.round,
+          bobSkipped: state.players[1]!.skipTurns,
+          bobTowns: state.towns.filter((town) => town.owner === 1).length,
+        });
+        // A finished or already unsuitable room cannot supply this regression.
+        // Leave before spending dozens of real battle actions finding that out
+        // at Alice's next level-up. This never changes the server/game state.
+        if (state.phase.kind === 'gameOver' || !emptyBobTurnPossible(state)) break;
         if (state.turnSeat === 0 && state.phase.kind === 'endOfTurn') {
           const next = step(state, { type: 'endTurn' });
           reached = next.events.length === 0 && next.state.turnSeat === 1;
           // Taxes/skipped turns are not this regression; use another room.
           break;
         }
-        const buttons = pages.map((page) =>
-          page
-            .locator(
-              'button[data-choice]:visible:enabled, button[data-action-index]:visible:enabled',
-            )
-            .first(),
-        );
-        await expect
-          .poll(
-            async () =>
-              (await host.evaluate(() => window.__db!.getState().phase.kind === 'gameOver')) ||
-              (await Promise.all(buttons.map((button) => button.count()))).some(Boolean),
-            {
-              intervals: [10, 25, 50],
-            },
-          )
-          .toBe(true);
-        // The final view can arrive while the action-availability poll runs.
-        if (await host.evaluate(() => window.__db!.getState().phase.kind === 'gameOver')) break;
-        const actor = (await buttons[0]!.count()) ? 0 : 1;
+        const actor = observations[0]!.buttons.length ? 0 : 1;
         const page = pages[actor]!;
         const received = frames[actor]!.filter((message) => message.type === 'view').length;
-        const attack = page.getByTestId('pick-attack');
-        const leave = page
-          .locator(
-            '[data-testid^="shop-leave-"]:visible:enabled, [data-testid="action-leave"]:visible:enabled, [data-testid="action-duel"]:visible:enabled',
-          )
-          .first();
-        const button = (await attack.isVisible())
-          ? attack
-          : (await leave.count())
-            ? leave
-            : buttons[actor]!;
+        const choice = preparationChoice(observations[actor]!.buttons);
+        const button = page.locator(`button${choice.selector}:visible:enabled`).first();
         mark(info, {
           step: 'click',
           actor,
           action,
-          testid: await button.getAttribute('data-testid'),
+          testid: choice.testid,
           phase: state.phase.kind,
         });
         await button.click();

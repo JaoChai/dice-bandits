@@ -16,7 +16,10 @@ export const test = base.extend<{ guestContext: BrowserContext }>({
       try {
         await Promise.all([page, ...guestContext.pages()].map((page) => page.close()));
       } finally {
-        await guestContext.close();
+        // Failed recordings can each be hundreds of MB. Export both closed
+        // contexts together instead of serialising them in the fixed teardown
+        // budget; the runner's later host-context close is idempotent.
+        await Promise.all([guestContext.close(), page.context().close()]);
       }
     }
   },
