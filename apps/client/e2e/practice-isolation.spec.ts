@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { withHeroNames } from '../src/tutor/heroNames';
 import { TUTORIAL_SCRIPT } from '../src/tutor/script';
 import { writeFile } from 'node:fs/promises';
 import { openTitleChoice, assertInside, assertNoEllipsis, startBattleJourney } from './helpers';
@@ -71,6 +72,10 @@ test('real saved game survives completion, replay, exit, setup Back and Continue
 }, info) => {
   test.setTimeout(120_000);
   const lang = info.project.name === 'mobile-landscape' ? 'th' : 'en';
+  // Practice heroes render localized names; the expected config uses them too.
+  const heroes =
+    lang === 'th' ? { mage: 'โอปอล์', thief: 'มินต์' } : { mage: 'Opal', thief: 'Mint' };
+  const tutorialConfig = withHeroNames(TUTORIAL_SCRIPT.config, heroes);
   const errors: string[] = [];
   const connections: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -160,9 +165,7 @@ test('real saved game survives completion, replay, exit, setup Back and Continue
   await capture(page, 'saved-game-completion', info);
   await page.getByTestId('practice-replay').click();
   await expect(page.locator('.practice-track')).toHaveAttribute('aria-valuenow', '0');
-  expect((await page.evaluate(() => window.__db!.getState())).config).toEqual(
-    TUTORIAL_SCRIPT.config,
-  );
+  expect((await page.evaluate(() => window.__db!.getState())).config).toEqual(tutorialConfig);
   await unchanged();
   await complete(page, unchanged);
   await page.getByTestId('practice-setup').click();

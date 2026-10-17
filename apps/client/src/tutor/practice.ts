@@ -18,7 +18,7 @@ export interface PracticeSession {
   readonly completed: boolean;
   readonly error: Error | null;
   allowedActions(): Action[];
-  dispatch(action: Action): Promise<void>;
+  dispatch(action: Action): Promise<boolean>;
   restart(): void;
   destroy(): void;
 }
@@ -168,7 +168,7 @@ export function createPractice(
     },
     allowedActions,
     async dispatch(action) {
-      if (!allowedActions().some((allowed) => sameAction(allowed, action))) return;
+      if (!allowedActions().some((allowed) => sameAction(allowed, action))) return false;
       busy = true;
       const ownGeneration = generation;
       const index = cursor;
@@ -190,6 +190,9 @@ export function createPractice(
       } finally {
         if (ownGeneration === generation) busy = false;
       }
+      // Accepted even when the presentation later fails: the error dialog, not
+      // the wrong-tap nudge, owns that outcome.
+      return true;
     },
     restart() {
       if (destroyed) return;

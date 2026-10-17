@@ -723,8 +723,11 @@ function startGame(
   function dispatch(action: Action): void {
     if (!isCurrent() || presentationBusy) return;
     if (practice) {
-      void practice.dispatch(action).then(() => {
-        if (isCurrent()) renderLocalHud();
+      void practice.dispatch(action).then((accepted) => {
+        if (!isCurrent()) return;
+        // Canvas fork taps bypass the muted DOM controls; a rejected one nudges.
+        if (!accepted && action.type === 'chooseBranch') practiceUi?.nudge();
+        renderLocalHud();
       });
     } else void controller.dispatch(action);
   }
