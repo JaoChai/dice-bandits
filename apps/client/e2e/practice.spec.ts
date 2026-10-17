@@ -10,6 +10,7 @@ import {
 } from '@dice-bandits/engine';
 import type Phaser from 'phaser';
 import { writeFile } from 'node:fs/promises';
+import { withHeroNames } from '../src/tutor/heroNames';
 import { TUTORIAL_SCRIPT } from '../src/tutor/script';
 import { openTitleChoice, assertInside, assertNoEllipsis, observeBoardGame } from './helpers';
 
@@ -138,6 +139,10 @@ async function runJourney(
 ): Promise<void> {
   const speed = 0;
   const lang = short || info.project.name === 'mobile-landscape' ? 'th' : 'en';
+  // Practice heroes render localized names; expected engine states use them too.
+  const heroes =
+    lang === 'th' ? { mage: 'โอปอล์', thief: 'มินต์' } : { mage: 'Opal', thief: 'Mint' };
+  const tutorialConfig = withHeroNames(TUTORIAL_SCRIPT.config, heroes);
   if (short) await page.setViewportSize({ width: 932, height: 388 });
   await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
   const errors: string[] = [];
@@ -168,9 +173,7 @@ async function runJourney(
   await expect(page.getByTestId('practice-begin')).toBeVisible();
   await page.getByTestId('practice-begin').click();
   await page.waitForFunction(() => window.__db?.art.boardReady);
-  expect(await page.evaluate(() => window.__db!.getState())).toEqual(
-    createGame(TUTORIAL_SCRIPT.config),
-  );
+  expect(await page.evaluate(() => window.__db!.getState())).toEqual(createGame(tutorialConfig));
   await observeResults(page);
   await snapshot(page, 'first-roll', info);
   await expect(page.getByTestId('action-roll')).toBeFocused();
@@ -186,7 +189,7 @@ async function runJourney(
     ).toBe('none');
   }
 
-  let state = createGame(TUTORIAL_SCRIPT.config);
+  let state = createGame(tutorialConfig);
   const expected = TUTORIAL_SCRIPT.replay.map((entry) => {
     expect(legalActions(state, entry.seat)).toContainEqual(entry.action);
     if (entry.seat === 1) expect(chooseAction(state, entry.seat)).toEqual(entry.action);
@@ -212,7 +215,7 @@ async function runJourney(
       { timeout: 20_000 },
     );
     await expect(page.getByTestId('practice-retry')).toHaveCount(0);
-    const before = index ? expected[index - 1]!.state : createGame(TUTORIAL_SCRIPT.config);
+    const before = index ? expected[index - 1]!.state : createGame(tutorialConfig);
     expect(await page.evaluate(() => window.__db!.getState())).toEqual(before);
     const highlight = page.locator('.practice-highlight');
     await expect(highlight).toHaveCount(1);
@@ -234,7 +237,9 @@ async function runJourney(
       if (!frames.has('battle')) {
         // A visible legal but noncanonical pick must not bypass the coach.
         const prior = await page.evaluate(() => JSON.stringify(window.__db!.getState()));
-        await page.getByTestId('pick-attack').click();
+        // Practice mutes the noncanonical control (aria-disabled); a pointer
+        // tap still lands on it, so force the click like a real finger would.
+        await page.getByTestId('pick-attack').click({ force: true });
         expect(await page.evaluate(() => JSON.stringify(window.__db!.getState()))).toBe(prior);
         await expect(highlight).toHaveAttribute('data-testid', 'pick-secret');
       }
@@ -336,9 +341,7 @@ async function runJourney(
   );
   await page.getByTestId('practice-replay').click();
   await expect(page.locator('.practice-track')).toHaveAttribute('aria-valuenow', '0');
-  expect(await page.evaluate(() => window.__db!.getState())).toEqual(
-    createGame(TUTORIAL_SCRIPT.config),
-  );
+  expect(await page.evaluate(() => window.__db!.getState())).toEqual(createGame(tutorialConfig));
   await page.getByTestId('practice-exit').click();
   await page.getByTestId('practice-leave').click();
   await expect(page.getByTestId('title-practice')).toBeFocused();

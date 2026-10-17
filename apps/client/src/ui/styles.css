@@ -2902,6 +2902,23 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   background: var(--c-gold) !important;
   color: var(--c-cocoa) !important;
 }
+.practice-root .practice-muted,
+.practice-root .practice-muted:hover,
+.practice-root .practice-muted:focus-visible {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.practice-nudge {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--c-blue);
+}
+.practice-nudge[hidden] {
+  display: none;
+}
 .practice-root .action-button {
   min-width: 112px;
   min-height: 52px;
