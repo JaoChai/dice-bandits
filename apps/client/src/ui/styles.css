@@ -3681,27 +3681,35 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
 @media (orientation: portrait) and (max-width: 700px) {
   #app.practice-root {
     --practice-rail: 0px;
-    display: flex;
-    flex-direction: column;
+    /* Round-2 review: a grid, not a flex column. A content-sized scrim in
+       the flex column took the shell's space and Phaser EXPAND then resized
+       the board to a degenerate shape (canvas 5 px tall, 51840x720 backing
+       store). Rows header / board / tutor bar: .game-shell and the scrim
+       share the board row, so a dialog overlays the stage and reserves no
+       space — the canvas keeps the roll lesson's size in every lesson. */
+    display: grid;
+    grid-template-columns: 100%;
+    grid-template-rows: var(--practice-header) minmax(0, 1fr) auto;
     /* #app centers its children (place-items: center); the portrait practice
-       stack must stretch full width instead. */
+       cells must stretch full width instead. */
     align-items: stretch;
+    justify-items: stretch;
   }
   #app.practice-root .practice-topbar {
     position: relative;
     inset: auto;
-    /* The shell mounts before the topbar in the DOM; paint the bar on top. */
-    order: -1;
-    flex: 0 0 var(--practice-header);
+    grid-row: 1;
+    grid-column: 1;
     min-width: 0;
   }
   #app.practice-root .game-shell {
     position: relative;
     inset: auto;
     width: 100%;
-    height: auto;
-    flex: 1 1 0;
+    height: 100%;
     min-height: 0;
+    grid-row: 2;
+    grid-column: 1;
   }
   .practice-topbar {
     gap: 8px;
@@ -3732,7 +3740,8 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     min-height: 168px;
     max-height: 200px;
     /* Below the shop/perk scrim in the portrait column (see .dialog-shade). */
-    order: 2;
+    grid-row: 3;
+    grid-column: 1;
     border-left: 0;
     border-top: 3px solid var(--c-cocoa);
     flex-direction: row;
@@ -3740,18 +3749,19 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     gap: 10px;
     padding: 10px 12px max(10px, env(safe-area-inset-bottom));
   }
-  /* Round-1 review: shop/perk dialogs share the board's stage. As a flex item
-     the scrim sits between the shell and the tutor bar, so it can never cover
-     the bar — however tall the bar grows for a nudge line — and the dialog
-     (perk cards included) always fits above it. The scrim is content-sized:
-     the lesson list shows every choice (no scrolling), the scrim-covered
-     board takes the rest. */
+  /* Round-1 review: shop/perk dialogs share the board's stage. Round-2
+     review: the scrim overlays the board row (shared grid cell with
+     .game-shell) instead of sitting between the shell and the tutor bar —
+     it covers exactly the stage from the top bar's bottom to the coach top
+     and takes no flow space, so the canvas never resizes under a dialog. */
   #app.practice-root .dialog-shade {
-    position: static;
+    position: relative;
     inset: auto;
-    order: 1;
-    flex: 0 1 auto;
+    width: 100%;
+    height: 100%;
     min-height: 0;
+    grid-row: 2;
+    grid-column: 1;
   }
   /* The landscape 232px choice cap scrolls items out of view; their boxes
      would then reach into the tutor bar's band. Show the whole list instead. */

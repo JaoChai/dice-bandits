@@ -35,6 +35,10 @@ const CONTROL_SELECTORS = [
 type Geometry = {
   viewport: { width: number; height: number };
   canvas: Rect | null;
+  // Backing-store size of the board canvas. In EXPAND scale mode this equals
+  // Phaser's scale.gameSize and is the number mobile canvas-area caps bound.
+  canvasBacking: { width: number; height: number } | null;
+  shade: Rect | null;
   coach: Rect | null;
   highlight: (Rect & { hit: boolean }) | null;
   exit: (Rect & { insideViewport: boolean; insideTopbar: boolean }) | null;
@@ -83,6 +87,7 @@ async function measurePractice(page: Page): Promise<Geometry> {
     };
     const viewport = { width: innerWidth, height: innerHeight };
     const canvasElement = document.querySelector('canvas');
+    const shadeElement = visible('.dialog-shade');
     const coachElement = document.querySelector('[data-testid="practice-coach"]');
     const coach = coachElement ? rectOf(coachElement) : null;
     const cardElement = document.querySelector('.practice-coach-card');
@@ -138,6 +143,10 @@ async function measurePractice(page: Page): Promise<Geometry> {
     return {
       viewport,
       canvas: canvasElement ? rectOf(canvasElement) : null,
+      canvasBacking: canvasElement
+        ? { width: canvasElement.width, height: canvasElement.height }
+        : null,
+      shade: shadeElement ? rectOf(shadeElement) : null,
       coach,
       highlight,
       exit: exit
@@ -177,7 +186,11 @@ async function measurePractice(page: Page): Promise<Geometry> {
   }, CONTROL_SELECTORS);
 }
 
-function assertPortraitGeometry(geometry: Geometry, label: string) {
+function assertPortraitGeometry(
+  geometry: Geometry,
+  label: string,
+  expectedCanvasHeight: number | null = null,
+) {
   const { viewport } = geometry;
   // Board takes the full width and ends above the tutor bar.
   expect.soft(geometry.canvas, `${label}: canvas present`).not.toBeNull();
@@ -188,6 +201,31 @@ function assertPortraitGeometry(geometry: Geometry, label: string) {
   expect
     .soft(geometry.canvas!.y + geometry.canvas!.height, `${label}: canvas bottom <= coach top`)
     .toBeLessThanOrEqual(geometry.coach!.y + 0.5);
+  // Round-2 review: opening a dialog must never resize the board — a
+  // content-sized scrim shrank .game-shell and Phaser EXPAND then blew the
+  // backing store up to a degenerate size. Every state after the roll lesson
+  // keeps the roll lesson's canvas height.
+  if (expectedCanvasHeight !== null) {
+    expect
+      .soft(
+        Math.abs(geometry.canvas!.height - expectedCanvasHeight),
+        `${label}: canvas height matches the roll lesson`,
+      )
+      .toBeLessThanOrEqual(1);
+  }
+  // Round-2 review: the scrim overlays the board stage only — its top edge is
+  // the top bar's bottom and its bottom edge never reaches into the tutor bar.
+  if (geometry.shade) {
+    expect
+      .soft(
+        Math.abs(geometry.shade.y - (geometry.topbar!.y + geometry.topbar!.height)),
+        `${label}: shade top == top bar bottom`,
+      )
+      .toBeLessThanOrEqual(1);
+    expect
+      .soft(geometry.shade.y + geometry.shade.height, `${label}: shade bottom <= coach top + 1`)
+      .toBeLessThanOrEqual(geometry.coach!.y + 1);
+  }
   // The coach never covers a control the player must tap.
   for (const entry of geometry.intersections) {
     expect.soft(entry.area, `${label}: coach / ${entry.name}`).toBe(0);
@@ -333,13 +371,19 @@ for (const viewport of VIEWPORTS) {
         await openPractice(page, lang, viewport);
 
         const captured = new Set<string>();
+        let rollCanvasHeight: number | null = null;
         for (let step = 0; step < 90 && captured.size < 6; step += 1) {
           await page.locator('.practice-highlight').waitFor({ state: 'visible', timeout: 20_000 });
           await expect(page.locator('.practice-highlight')).toBeEnabled({ timeout: 20_000 });
           const kind = await classifyHighlight(page);
           if (kind && !captured.has(kind)) {
             const geometry = await measurePractice(page);
-            assertPortraitGeometry(geometry, `${label}-${kind}`);
+            assertPortraitGeometry(
+              geometry,
+              `${label}-${kind}`,
+              kind === 'roll' ? null : rollCanvasHeight,
+            );
+            if (kind === 'roll') rollCanvasHeight = geometry.canvas!.height;
             await saveEvidence(page, info, `${label}-${kind}`, geometry);
             captured.add(kind);
             if (kind === 'battlePick') {
