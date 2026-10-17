@@ -17,7 +17,15 @@ jobs:
       - run: npm run sim -- --games 200 --players 4
       - run: npm run sim:room -- --games 200
       - run: npx playwright install --with-deps chromium
-      - run: npm run e2e
+      - name: E2E functional
+        run: npm run e2e -w @dice-bandits/client -- --grep-invert "cadence CPU 4 human half"
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/functional
+      - name: E2E CPU-4 cadence
+        if: ${{ !cancelled() }}
+        run: npm run e2e -w @dice-bandits/client -- e2e/battle-impact.spec.ts --grep "cadence CPU 4 human half" --workers=1 --retries=0
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/cadence
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
