@@ -51,6 +51,15 @@ test('muted fork control nudges in Thai, the correct tap advances, exit clears',
   ).toBeLessThanOrEqual(0.5);
   await expect(page.locator('.practice-track')).toHaveAttribute('aria-valuenow', '2');
 
+  // Hero names are asserted at the fork lesson, before the correct tap: the
+  // board (not the bot's battle overlay) is on screen, so the seat HUD and
+  // turn ribbon are deterministically visible. After the tap the battle HUD
+  // replaces the seat cards, which is where a body-wide snapshot raced.
+  await expect(page.locator('.seat-hud')).toContainText('โอปอล์');
+  await expect(page.locator('.seat-hud')).toContainText('มินต์');
+  await expect(page.getByTestId('turn-ribbon')).toContainText(/โอปอล์|มินต์/);
+  await expect(page.getByTestId('screen-board')).not.toContainText(/Learner|Bandit/);
+
   // A real pointer tap still lands on an aria-disabled control (only
   // assistive tech and Playwright actionability refuse it), which is exactly
   // the wrong tap this card wants the nudge for.
@@ -70,11 +79,6 @@ test('muted fork control nudges in Thai, the correct tap advances, exit clears',
   await expect(page.locator('.practice-track')).toHaveAttribute('aria-valuenow', '4');
   await expect(page.locator('.practice-muted')).toHaveCount(0);
   await expect(page.locator(MUTED_ARIA)).toHaveCount(0);
-
-  const text = await page.locator('body').innerText();
-  expect(text).toContain('โอปอล์');
-  expect(text).toContain('มินต์');
-  expect(text).not.toMatch(/Learner|Bandit/);
 
   await page.getByTestId('practice-exit').click();
   await page.getByTestId('practice-leave').click();
