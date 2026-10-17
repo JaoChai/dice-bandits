@@ -3731,12 +3731,58 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     height: auto;
     min-height: 168px;
     max-height: 200px;
+    /* Below the shop/perk scrim in the portrait column (see .dialog-shade). */
+    order: 2;
     border-left: 0;
     border-top: 3px solid var(--c-cocoa);
     flex-direction: row;
     align-items: center;
     gap: 10px;
     padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+  }
+  /* Round-1 review: shop/perk dialogs share the board's stage. As a flex item
+     the scrim sits between the shell and the tutor bar, so it can never cover
+     the bar — however tall the bar grows for a nudge line — and the dialog
+     (perk cards included) always fits above it. The scrim is content-sized:
+     the lesson list shows every choice (no scrolling), the scrim-covered
+     board takes the rest. */
+  #app.practice-root .dialog-shade {
+    position: static;
+    inset: auto;
+    order: 1;
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+  /* The landscape 232px choice cap scrolls items out of view; their boxes
+     would then reach into the tutor bar's band. Show the whole list instead. */
+  #app.practice-root .dialog-shade .phase-choices {
+    max-height: none;
+  }
+  /* Round-1 review, level-up lesson: three 123px perk cards scroll inside the
+     landscape-sized panel at 360x780, and the scrolled card's box reaches
+     under the tutor bar. Compact the cards (the same pattern the landscape
+     480px rules already use) and widen the panel's bottom so every card stays
+     visible above the bar; the panel top keeps the base 34% so the wrapped
+     TH lesson title above it is never covered. */
+  #app.practice-root .battle-post .post-choice-panel.is-levelup {
+    bottom: 2%;
+  }
+  #app.practice-root .battle-post .post-choice-panel.is-levelup .post-cards {
+    gap: 8px;
+  }
+  #app.practice-root .battle-post .post-choice-panel.is-levelup .post-card {
+    min-height: 96px;
+    padding: 5px;
+    gap: 3px;
+    border-width: 2px;
+  }
+  #app.practice-root .battle-post .post-choice-panel.is-levelup .post-card .post-icon {
+    width: 28px;
+    height: 28px;
+  }
+  /* The end-of-practice overlay replaces the stage entirely. */
+  #app.practice-root:has(.practice-scrim) .dialog-shade {
+    display: none;
   }
   .practice-coach-heading {
     flex: 0 0 76px;

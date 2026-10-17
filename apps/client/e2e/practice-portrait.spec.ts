@@ -4,9 +4,11 @@ import { openTitleChoice } from './helpers';
 test.use({ storageState: { cookies: [], origins: [] } });
 
 // Approved mockup A (owner, 2026-10-17): in portrait practice the tutor becomes
-// a bottom bar and the board takes the full width above it. Every assertion
-// here is scoped to `#app.practice-root` portrait phones; landscape, desktop
-// and the normal (non-practice) game must not move by a pixel.
+// a bottom bar and the board takes the full width above it. Round-1 review
+// extends coverage to the shop (buy + leave) and level-up lessons, whose
+// dialogs must share the board's stage above the bar. Every assertion here is
+// scoped to `#app.practice-root` portrait phones; landscape, desktop and the
+// normal (non-practice) game must not move by a pixel.
 const VIEWPORTS = [
   { width: 390, height: 844 },
   { width: 360, height: 780 },
@@ -22,6 +24,12 @@ const CONTROL_SELECTORS = [
   '[data-testid="map-toggle"]',
   '[data-testid^="hp-"]',
   '[data-testid^="seat-cards-"]',
+  // Round-1 review: shop/perk overlays share the board's stage — the scrim,
+  // the dialog and every shop/perk button must stay above the tutor bar.
+  '.dialog-shade',
+  '.game-dialog',
+  '[data-testid^="shop-"]',
+  '[data-testid^="perk-"]',
 ];
 
 type Geometry = {
@@ -32,6 +40,7 @@ type Geometry = {
   exit: (Rect & { insideViewport: boolean; insideTopbar: boolean }) | null;
   topbar: Rect | null;
   intersections: { name: string; area: number }[];
+  coachHit: boolean | null;
   coachSmallText: string[];
   coachOverflow: { coach: boolean; card: boolean; coachDelta: number; cardDelta: number };
   ribbonLines: number | null;
@@ -52,8 +61,10 @@ async function measurePractice(page: Page): Promise<Geometry> {
         height: bounds.height,
       };
     };
-    const visible = (selector: string): Element | null =>
-      [...document.querySelectorAll(selector)].find((element) => {
+    // Round-1 review: hp-*/seat-cards-*/shop-*/perk-* render several elements;
+    // every visible match must be measured, not just the first.
+    const visibleAll = (selector: string): Element[] =>
+      [...document.querySelectorAll(selector)].filter((element) => {
         const style = getComputedStyle(element);
         const bounds = element.getBoundingClientRect();
         return (
@@ -62,7 +73,8 @@ async function measurePractice(page: Page): Promise<Geometry> {
           style.display !== 'none' &&
           style.visibility !== 'hidden'
         );
-      }) ?? null;
+      });
+    const visible = (selector: string): Element | null => visibleAll(selector)[0] ?? null;
     const intersectArea = (a: Rect | null, b: Rect | null): number => {
       if (!a || !b) return 0;
       const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
@@ -91,14 +103,26 @@ async function measurePractice(page: Page): Promise<Geometry> {
           })(),
         }
       : null;
-    const intersections = controlSelectors
-      .map((selector) => {
-        const element = visible(selector);
-        return element
-          ? { name: selector, area: intersectArea(coach, rectOf(element)) }
-          : { name: selector, area: 0 };
-      })
-      .filter((entry) => entry.area > 0 || controlSelectors.includes(entry.name));
+    const intersections = controlSelectors.flatMap((selector) =>
+      visibleAll(selector).map((element, index) => {
+        const testid = (element as HTMLElement).dataset.testid;
+        const name = testid ? `${selector} #${testid}` : `${selector} [${index}]`;
+        return { name, area: intersectArea(coach, rectOf(element)) };
+      }),
+    );
+    // Round-1 review, shop lesson: the scrim covered the bar, so probe the
+    // bar's centre too — a zero-overlap coach that sits under an overlay is
+    // still untappable.
+    const coachHit =
+      coachElement && coach
+        ? (() => {
+            const probe = document.elementFromPoint(
+              coach.x + coach.width / 2,
+              coach.y + coach.height / 2,
+            );
+            return !!probe && (probe === coachElement || coachElement.contains(probe));
+          })()
+        : null;
     const coachSmallText = [
       ...((coachElement ?? document).querySelectorAll<HTMLElement>('*') ?? []),
     ]
@@ -134,6 +158,7 @@ async function measurePractice(page: Page): Promise<Geometry> {
         : null,
       topbar,
       intersections,
+      coachHit,
       coachSmallText,
       coachOverflow: {
         coach: coachElement ? coachElement.scrollHeight > coachElement.clientHeight + 1 : false,
@@ -197,6 +222,7 @@ function assertPortraitGeometry(geometry: Geometry, label: string) {
   expect.soft(geometry.exit!.height, `${label}: exit height <= 48`).toBeLessThanOrEqual(48);
   // The bottom bar stays readable and never clips its own content.
   expect.soft(geometry.coach, `${label}: coach present`).not.toBeNull();
+  expect.soft(geometry.coachHit, `${label}: coach centre hit by elementFromPoint`).toBe(true);
   expect.soft(geometry.coach!.height, `${label}: coach bar height`).toBeLessThanOrEqual(200);
   expect.soft(geometry.coachSmallText.length, `${label}: coach text below 14px`).toBe(0);
   expect
@@ -221,6 +247,11 @@ function classifyHighlight(page: Page): Promise<string | null> {
     if (id.startsWith('action-roll')) return 'roll';
     if (id.startsWith('action-chooseBranch')) return 'chooseBranch';
     if (id.startsWith('pick-')) return 'battlePick';
+    // Round-1 review: the shop (buy + leave) and level-up lessons put their
+    // controls inside dialogs; measure those states too. Buy and leave are
+    // different dialogs, so they are captured as separate states.
+    if (id.startsWith('shop-')) return id.includes('leave') ? 'shopLeave' : 'shop';
+    if (id.startsWith('perk-')) return 'levelUp';
     return null;
   });
 }
@@ -302,7 +333,7 @@ for (const viewport of VIEWPORTS) {
         await openPractice(page, lang, viewport);
 
         const captured = new Set<string>();
-        for (let step = 0; step < 90 && captured.size < 3; step += 1) {
+        for (let step = 0; step < 90 && captured.size < 6; step += 1) {
           await page.locator('.practice-highlight').waitFor({ state: 'visible', timeout: 20_000 });
           await expect(page.locator('.practice-highlight')).toBeEnabled({ timeout: 20_000 });
           const kind = await classifyHighlight(page);
@@ -348,8 +379,11 @@ for (const viewport of VIEWPORTS) {
           await advanceCoach(page);
         }
         expect
-          .soft([...captured].sort(), `${label}: roll/chooseBranch/battlePick all measured`)
-          .toEqual(['battlePick', 'chooseBranch', 'roll']);
+          .soft(
+            [...captured].sort(),
+            `${label}: roll/chooseBranch/battlePick/shop/shopLeave/levelUp all measured`,
+          )
+          .toEqual(['battlePick', 'chooseBranch', 'levelUp', 'roll', 'shop', 'shopLeave']);
         expect(errors).toEqual([]);
       });
     });
