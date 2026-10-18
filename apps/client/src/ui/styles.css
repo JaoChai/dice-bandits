@@ -959,7 +959,7 @@ h1 {
   width: min(100%, 860px);
   max-height: 100%;
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 280px minmax(0, 1fr);
   align-content: center;
   gap: 8px 14px;
 }
@@ -1137,6 +1137,10 @@ h1 {
   gap: 8px;
 }
 .results-honour {
+  /* min-width: 0 kills the flex item's automatic minimum so a long nowrap
+     badge name shrinks to the available width and the text ellipsizes,
+     instead of its min-content widening the whole grid track. */
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1178,7 +1182,7 @@ h1 {
 /* Portrait phones: the winner card stacks on top. */
 @media (orientation: portrait), (max-width: 640px) {
   .results-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
   }
   /* Portrait stacks the hero on top of the panel; the hero card is opaque,

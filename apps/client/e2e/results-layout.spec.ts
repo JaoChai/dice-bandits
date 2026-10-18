@@ -110,6 +110,46 @@ async function expectResultsLayoutFits(page: Page, label: string): Promise<void>
       }
     }
 
+    // 2c. Nothing spills past the viewport or out of the card. The card
+    // clips its content (overflow hidden), so document.scrollWidth alone
+    // stays clean while content is silently cut — assert element edges
+    // directly: left >= 0 and right <= innerWidth for the layout root, the
+    // language pills, the winner card, every rank row, honour badge and the
+    // score line, and every one of them inside the card's visible box.
+    if (document.documentElement.scrollWidth > innerWidth + 0.5) {
+      problems.push(
+        `document scrolls horizontally (${document.documentElement.scrollWidth} > ${innerWidth})`,
+      );
+    }
+    for (const selector of [
+      '.results-layout',
+      '.results-langs',
+      '.results-winner',
+      '.results-rank',
+      '.results-honour',
+      '.results-scoreline',
+    ]) {
+      document.querySelectorAll(selector).forEach((element) => {
+        const rect = element.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+        const where = JSON.stringify({
+          left: rect.left,
+          right: rect.right,
+          viewport: innerWidth,
+        });
+        if (rect.left < -0.5) problems.push(`${selector} crosses the left edge ${where}`);
+        if (rect.right > innerWidth + 0.5) {
+          problems.push(`${selector} crosses the right edge ${where}`);
+        }
+        const insideCard =
+          rect.left >= cardBox.left - 0.5 &&
+          rect.top >= cardBox.top - 0.5 &&
+          rect.right <= cardBox.right + 0.5 &&
+          rect.bottom <= cardBox.bottom + 0.5;
+        if (!insideCard) problems.push(`${selector} sits outside the card box ${where}`);
+      });
+    }
+
     // 3. Readability: no text under 14px, every portrait painted.
     for (const element of [card, ...card.querySelectorAll<HTMLElement>('*')]) {
       if (
