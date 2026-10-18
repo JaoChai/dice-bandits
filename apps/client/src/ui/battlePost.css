@@ -223,6 +223,13 @@ button.post-card:hover:not(:disabled) {
   transform: translateY(-3px);
   box-shadow: 0 7px 0 rgb(92 51 23 / 30%);
 }
+/* mobile-fill 932x388 TH: a transform on the card moves its hit box off the
+   resting cursor, so :hover flips on/off every frame (box oscillates y
+   215.9 <-> 218.9) and a Playwright click never sees a stable box. Inside
+   the level-up card the hover cue is shadow-only; the box never moves. */
+.battle-post.post-levelup button.post-card:hover:not(:disabled) {
+  transform: none;
+}
 button.post-card:focus-visible {
   outline: 4px solid var(--c-blue);
   outline-offset: 2px;

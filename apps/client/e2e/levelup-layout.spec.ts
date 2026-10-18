@@ -37,7 +37,10 @@ const DETAIL_KEYS = [
   'grudgeHolder',
 ] as const;
 
-const SHOT_DIR = '/home/jaochai/.hermes/qa-evidence/endscreens/level-head';
+// Owner evidence shots are written only when LEVELUP_EVIDENCE_DIR is set
+// (same pattern as PORTRAIT_EVIDENCE_DIR in practice-portrait.spec.ts).
+// CI runs with it unset and must never touch a host path.
+const SHOT_DIR = process.env.LEVELUP_EVIDENCE_DIR;
 
 async function winningPick(page: Page) {
   for (let i = 0; i < 50; i++) {
@@ -285,7 +288,7 @@ for (const lang of ['th', 'en'] as const) {
         false,
       );
       expect(required.badge, 'no LV UP badge element').toBe(false);
-      if (shots.includes(index))
+      if (shots.includes(index) && SHOT_DIR)
         await page.screenshot({
           path: `${SHOT_DIR}/level-${vp.width}x${vp.height}-${lang}.png`,
         });
@@ -357,7 +360,7 @@ for (const lang of ['th', 'en'] as const) {
         await bannerCount(page),
         `${vp.width}x${vp.height}: readonly still says the level once`,
       ).toBe(1);
-      if (lang === 'th' && index === 0)
+      if (lang === 'th' && index === 0 && SHOT_DIR)
         await page.screenshot({
           path: `${SHOT_DIR}/level-readonly-${vp.width}x${vp.height}-${lang}.png`,
         });
