@@ -7,6 +7,7 @@ import {
   type GameEvent,
 } from '@dice-bandits/engine';
 import type { PracticeSession } from '../tutor/practice';
+import { withHeroNames } from '../tutor/heroNames';
 import type { TutorialScript } from '../tutor/script';
 import { getLang, onLangChange, setLang, t } from '../i18n';
 import atlas from '../../public/art/tutor/dicey.json';
@@ -15,6 +16,12 @@ import { markPracticeComplete } from './titleProgress';
 type Topic = TutorialScript['lessons'][number]['topic'];
 const topics: Topic[] = ['roll', 'move', 'fork', 'chest', 'battle', 'shop', 'town', 'steal'];
 type DialogKind = 'invite' | 'loading' | 'error' | 'empty' | 'complete' | 'exit';
+
+/** Every action control practice may mute while the human turn waits.
+ * Buttons only: prefix-matched containers (e.g. the action tray) would pass
+ * aria-disabled down to the allowed control. */
+const MUTED_SELECTOR =
+  'button[data-testid^="action-"], button[data-testid^="pick-"], button[data-testid^="perk-"], button[data-testid^="shop-"], .reward-dialog [data-choice]';
 
 function portrait(pose: keyof typeof atlas.frames, width: number): string {
   const frame = atlas.frames[pose];
@@ -155,12 +162,18 @@ export function preparePractice(
     const ownGeneration = ++generation;
     show('loading');
     try {
-      const script = await load();
+      const loaded = await load();
       if (destroyed || ownGeneration !== generation) return;
-      if (!script || script.lessons?.length === 0) {
+      if (!loaded || loaded.lessons?.length === 0) {
         show('empty');
         return;
       }
+      // Hero names resolve once at practice start; a later language switch
+      // keeps these names for the whole session.
+      const script: TutorialScript = {
+        ...loaded,
+        config: withHeroNames(loaded.config, { mage: t('hero.mage'), thief: t('hero.thief') }),
+      };
       // Preflight with the ordinary engine only; no saving controller is made.
       if (
         script.id !== 'm8-route-v1' ||
@@ -235,7 +248,7 @@ export function mountPracticeUi(
   root: HTMLElement,
   session: PracticeSession,
   options?: { learned?: () => number },
-): { update(events?: GameEvent[]): void; destroy(): void } {
+): { update(events?: GameEvent[]): void; nudge(): void; destroy(): void } {
   root.classList.add('practice-root');
   const shell = root.querySelector<HTMLElement>('.game-shell');
   const initialInert = shell?.inert ?? false;
@@ -254,6 +267,26 @@ export function mountPracticeUi(
   let instructionKey = '';
   let highlighted: HTMLElement | undefined;
   let priorDescription: string | null = null;
+  let nudgeTimer: ReturnType<typeof setTimeout> | undefined;
+  const mutedControls = new Set<HTMLElement>();
+  const clearMuted = (): void => {
+    for (const element of mutedControls) {
+      element.classList.remove('practice-muted');
+      element.removeAttribute('aria-disabled');
+    }
+    mutedControls.clear();
+  };
+  const nudge = (): void => {
+    if (destroyed || dialogKind) return;
+    const line = coach.querySelector<HTMLElement>('[data-testid="practice-nudge"]');
+    if (!line) return;
+    line.textContent = t('practice.nudge');
+    line.hidden = false;
+    if (nudgeTimer !== undefined) clearTimeout(nudgeTimer);
+    nudgeTimer = setTimeout(() => {
+      line.hidden = true;
+    }, 2500);
+  };
   const emit = (action: string): void => {
     root.dispatchEvent(new CustomEvent(`dice-bandits:practice-${action}`, { bubbles: true }));
   };
@@ -323,6 +356,19 @@ export function mountPracticeUi(
     clearHighlight();
     const allowed = session.allowedActions();
     const action = allowed[0];
+    const control = action
+      ? root.querySelector<HTMLElement>(actionSelector(action, session))
+      : null;
+    clearMuted();
+    if (action) {
+      for (const element of root.querySelectorAll<HTMLElement>(MUTED_SELECTOR)) {
+        if (element === control || (element instanceof HTMLButtonElement && element.disabled))
+          continue;
+        element.classList.add('practice-muted');
+        element.setAttribute('aria-disabled', 'true');
+        mutedControls.add(element);
+      }
+    }
     if (session.error) {
       show('error');
       return;
@@ -356,15 +402,12 @@ export function mountPracticeUi(
     } else if (action.type !== 'roll') lesson = `action.${action.type}`;
     const titleKey = `practice.guide.${lesson}.title`;
     const bodyKey = `practice.guide.${lesson}.body`;
-    const control = action
-      ? root.querySelector<HTMLElement>(actionSelector(action, session))
-      : null;
     const title =
       t(titleKey) === titleKey ? (control?.textContent ?? t('practice.highlight')) : t(titleKey);
     const body = t(bodyKey) === bodyKey ? t('practice.highlight') : t(bodyKey);
     if (instructionKey !== lesson + getLang() + count) {
       instructionKey = lesson + getLang() + count;
-      coach.innerHTML = `<div class="practice-coach-heading">${portrait('point', 116)}<span class="practice-eyebrow">${t('dicey.name')}</span></div><section class="practice-coach-card" id="practice-instruction"><span class="practice-step">${t('practice.lesson')} ${Math.min(count + 1, 8)} / 8</span><h1></h1><p class="practice-line"></p>${action ? `<div class="practice-hint"><span aria-hidden="true">←</span>${t('practice.highlight')}</div>` : ''}<p class="practice-note">${t(lesson === 'roll' && count === 0 ? 'practice.roll.note' : lesson.startsWith('defence.') ? 'practice.defence.note' : lesson.startsWith('attack.') ? 'practice.attack.note' : lesson === 'warp' ? 'practice.warp.note' : 'practice.safe')}</p></section><p class="practice-isolation">${t('practice.partner')}</p>`;
+      coach.innerHTML = `<div class="practice-coach-heading">${portrait('point', 116)}<span class="practice-eyebrow">${t('dicey.name')}</span></div><section class="practice-coach-card" id="practice-instruction"><span class="practice-step">${t('practice.lesson')} ${Math.min(count + 1, 8)} / 8</span><h1></h1><p class="practice-line"></p>${action ? `<div class="practice-hint"><span aria-hidden="true">←</span>${t('practice.highlight')}</div>` : ''}<p class="practice-nudge" data-testid="practice-nudge" aria-live="polite" hidden></p><p class="practice-note">${t(lesson === 'roll' && count === 0 ? 'practice.roll.note' : lesson.startsWith('defence.') ? 'practice.defence.note' : lesson.startsWith('attack.') ? 'practice.attack.note' : lesson === 'warp' ? 'practice.warp.note' : 'practice.safe')}</p></section><p class="practice-isolation">${t('practice.partner')}</p>`;
       coach.querySelector('h1')!.textContent = title;
       coach.querySelector('.practice-line')!.textContent = body;
     }
@@ -403,6 +446,17 @@ export function mountPracticeUi(
       event.stopImmediatePropagation();
     }
   };
+  const mutedTap = (event: Event): void => {
+    if (
+      dialogKind ||
+      !(event.target instanceof Element) ||
+      !event.target.closest('.practice-muted')
+    )
+      return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    nudge();
+  };
   const tipControls = new Map<HTMLButtonElement, boolean>();
   const disableTips = (): void => {
     root
@@ -419,21 +473,26 @@ export function mountPracticeUi(
   disableTips();
   root.addEventListener('dice-bandits:menu-exit', menuExit, true);
   root.addEventListener('click', tipsClick, true);
+  root.addEventListener('click', mutedTap, true);
   document.addEventListener('keydown', key);
   update();
   return {
     update,
+    nudge,
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
       close();
       clearHighlight();
+      if (nudgeTimer !== undefined) clearTimeout(nudgeTimer);
+      clearMuted();
       offLang();
       menuObserver.disconnect();
       for (const [control, disabled] of tipControls) control.disabled = disabled;
       tipControls.clear();
       root.removeEventListener('dice-bandits:menu-exit', menuExit, true);
       root.removeEventListener('click', tipsClick, true);
+      root.removeEventListener('click', mutedTap, true);
       document.removeEventListener('keydown', key);
       header.remove();
       coach.remove();

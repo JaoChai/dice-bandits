@@ -2902,6 +2902,23 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
   background: var(--c-gold) !important;
   color: var(--c-cocoa) !important;
 }
+.practice-root .practice-muted,
+.practice-root .practice-muted:hover,
+.practice-root .practice-muted:focus-visible {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.practice-nudge {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--c-blue);
+}
+.practice-nudge[hidden] {
+  display: none;
+}
 .practice-root .action-button {
   min-width: 112px;
   min-height: 52px;
@@ -3652,5 +3669,183 @@ body:has(.game-shell:not(.battle-mode) ~ .dicey-tip)
     overflow: hidden;
     text-overflow: ellipsis;
     word-break: normal;
+  }
+}
+
+/* Practice portrait (approved mockup A, owner pick 2026-10-17): on a phone
+   held upright the tutor becomes a bottom bar and the board takes the full
+   width above it. Everything here is scoped to #app.practice-root portrait
+   phones; landscape, desktop and the normal (non-practice) game never move.
+   No !important needed: this block is last, and where an existing
+   :lang(en) rule is more specific it is restated at that specificity. */
+@media (orientation: portrait) and (max-width: 700px) {
+  #app.practice-root {
+    --practice-rail: 0px;
+    /* Round-2 review: a grid, not a flex column. A content-sized scrim in
+       the flex column took the shell's space and Phaser EXPAND then resized
+       the board to a degenerate shape (canvas 5 px tall, 51840x720 backing
+       store). Rows header / board / tutor bar: .game-shell and the scrim
+       share the board row, so a dialog overlays the stage and reserves no
+       space — the canvas keeps the roll lesson's size in every lesson. */
+    display: grid;
+    grid-template-columns: 100%;
+    grid-template-rows: var(--practice-header) minmax(0, 1fr) auto;
+    /* #app centers its children (place-items: center); the portrait practice
+       cells must stretch full width instead. */
+    align-items: stretch;
+    justify-items: stretch;
+  }
+  #app.practice-root .practice-topbar {
+    position: relative;
+    inset: auto;
+    grid-row: 1;
+    grid-column: 1;
+    min-width: 0;
+  }
+  #app.practice-root .game-shell {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    grid-row: 2;
+    grid-column: 1;
+  }
+  .practice-topbar {
+    gap: 8px;
+    padding: 6px 10px;
+  }
+  .practice-topbar .practice-brand {
+    display: none;
+  }
+  .practice-topbar .practice-track {
+    width: 64px;
+  }
+  .practice-topbar .practice-progress {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .practice-topbar [data-testid='practice-exit'] {
+    white-space: nowrap;
+    padding: 6px 10px;
+    min-height: 40px;
+    margin-left: auto;
+  }
+  #app.practice-root .practice-coach {
+    position: relative;
+    inset: auto;
+    width: auto;
+    /* Mockup A's 168px resting bar; the wrong-tap nudge may grow it, max 200px. */
+    height: auto;
+    min-height: 168px;
+    max-height: 200px;
+    /* Below the shop/perk scrim in the portrait column (see .dialog-shade). */
+    grid-row: 3;
+    grid-column: 1;
+    border-left: 0;
+    border-top: 3px solid var(--c-cocoa);
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+  }
+  /* Round-1 review: shop/perk dialogs share the board's stage. Round-2
+     review: the scrim overlays the board row (shared grid cell with
+     .game-shell) instead of sitting between the shell and the tutor bar —
+     it covers exactly the stage from the top bar's bottom to the coach top
+     and takes no flow space, so the canvas never resizes under a dialog. */
+  #app.practice-root .dialog-shade {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    grid-row: 2;
+    grid-column: 1;
+  }
+  /* The landscape 232px choice cap scrolls items out of view; their boxes
+     would then reach into the tutor bar's band. Show the whole list instead. */
+  #app.practice-root .dialog-shade .phase-choices {
+    max-height: none;
+  }
+  /* Round-1 review, level-up lesson: three 123px perk cards scroll inside the
+     landscape-sized panel at 360x780, and the scrolled card's box reaches
+     under the tutor bar. Compact the cards (the same pattern the landscape
+     480px rules already use) and widen the panel's bottom so every card stays
+     visible above the bar; the panel top keeps the base 34% so the wrapped
+     TH lesson title above it is never covered. */
+  #app.practice-root .battle-post .post-choice-panel.is-levelup {
+    bottom: 2%;
+  }
+  #app.practice-root .battle-post .post-choice-panel.is-levelup .post-cards {
+    gap: 8px;
+  }
+  #app.practice-root .battle-post .post-choice-panel.is-levelup .post-card {
+    min-height: 96px;
+    padding: 5px;
+    gap: 3px;
+    border-width: 2px;
+  }
+  #app.practice-root .battle-post .post-choice-panel.is-levelup .post-card .post-icon {
+    width: 28px;
+    height: 28px;
+  }
+  /* The end-of-practice overlay replaces the stage entirely. */
+  #app.practice-root:has(.practice-scrim) .dialog-shade {
+    display: none;
+  }
+  .practice-coach-heading {
+    flex: 0 0 76px;
+  }
+  .practice-coach-heading .practice-art {
+    transform: scale(0.62);
+    transform-origin: center;
+    margin: -22px;
+  }
+  .practice-coach-card {
+    position: relative;
+    flex: 1;
+    padding: 10px 12px;
+  }
+  .practice-coach:lang(en) .practice-coach-card {
+    padding-inline: 12px;
+  }
+  .practice-coach-card::before {
+    content: '';
+    position: absolute;
+    left: -11px;
+    top: 50%;
+    margin-top: -10px;
+    border: 10px solid transparent;
+    border-right-color: var(--c-cocoa);
+    border-left: 0;
+  }
+  .practice-coach .practice-isolation,
+  .practice-coach .practice-note,
+  .practice-coach .practice-eyebrow {
+    display: none;
+  }
+  .practice-coach .practice-hint span {
+    display: none;
+  }
+  .practice-coach-card h1 {
+    font-size: 18px;
+    margin: 2px 0;
+    line-height: 1.3;
+  }
+  .practice-coach-card p,
+  .practice-coach-card .practice-hint {
+    font-size: 15px;
+    margin: 2px 0;
+    line-height: 1.4;
+  }
+  .practice-coach:lang(en) .practice-line {
+    font-size: 15px;
+  }
+  .practice-coach-card .practice-step {
+    font-size: 14px;
+  }
+  .practice-root .rotate-hint {
+    display: none;
   }
 }
