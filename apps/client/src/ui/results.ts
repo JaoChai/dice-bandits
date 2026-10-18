@@ -114,7 +114,7 @@ export function renderResults(
       `<span class="results-star" style="left:${left}%;top:${top}%">${STAR_SVG.replace('{color}', color)}</span>`,
   ).join(
     '',
-  )}</div><nav class="results-langs" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></nav><div class="results-layout"><ol class="results-ranking">${lis}</ol><p class="results-scoreline">${t('results.scoreLine')}</p>${
+  )}</div><div class="results-panel" aria-hidden="true"></div><nav class="results-langs" aria-label="${t('title.language')}"><button type="button" data-lang="th" aria-pressed="${getLang() === 'th'}">${t('lang.th')}</button><button type="button" data-lang="en" aria-pressed="${getLang() === 'en'}">${t('lang.en')}</button></nav><div class="results-layout"><ol class="results-ranking">${lis}</ol><p class="results-scoreline">${t('results.scoreLine')}</p>${
     honours.length
       ? `<section class="results-honours" aria-label="${t('results.highlights')}">${honours
           .map((honour) => `<span class="results-honour">${honour}</span>`)

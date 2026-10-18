@@ -172,6 +172,16 @@ describe('results screen', () => {
     expect(document.querySelector('[data-testid="results"]')!.textContent).toContain('wins!');
   });
 
+  it('draws a decorative panel behind the right column like mockup A', () => {
+    const state = makeGame();
+    state.phase = gameOverPhase();
+    setLang('en');
+    render(state);
+    const panel = document.querySelector<HTMLElement>('.results-panel');
+    expect(panel).not.toBeNull();
+    expect(panel!.getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('keeps one ranking li per player in ranking order', () => {
     const state = makeGame();
     state.phase = gameOverPhase([], [1], [1, 0]);

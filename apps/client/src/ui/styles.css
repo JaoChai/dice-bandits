@@ -957,8 +957,24 @@ h1 {
   max-height: 100%;
   display: grid;
   grid-template-columns: 280px 1fr;
+  grid-template-rows: repeat(6, auto);
   align-content: center;
-  gap: 8px 14px;
+  gap: 8px 28px;
+}
+/* Mockup A groups ranks + score line + honours + buttons in one cream panel.
+   Absolutely positioned against its grid area so auto-placement never has to
+   route around it; z-index -1 keeps it behind the content but above the
+   backdrop (the layout creates the stacking context). */
+.results-panel {
+  position: absolute;
+  z-index: -1;
+  grid-area: 1 / 2 / -1 / 3;
+  margin: -10px;
+  background: #fff6e3;
+  border: 4px solid #3b2414;
+  border-radius: 20px;
+  box-shadow: 0 8px 0 rgb(0 0 0 / 25%);
+  pointer-events: none;
 }
 .results-ranking {
   display: contents;
@@ -1156,7 +1172,11 @@ h1 {
 @media (orientation: portrait), (max-width: 640px) {
   .results-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: auto repeat(6, auto);
     gap: 8px;
+  }
+  .results-panel {
+    grid-area: 2 / 1 / -1 / 2;
   }
   .results-ranking li.results-winner {
     grid-column: 1;
