@@ -923,10 +923,13 @@ h1 {
   width: 22px;
   height: 22px;
 }
+/* Language pills live in the layout grid as a full-width header row
+   (grid-row 1), so they keep reserved space and can never overlap the
+   winner card, rank rows, or crown at any viewport. */
 .results-langs {
-  position: absolute;
-  top: 10px;
-  right: 12px;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: end;
   z-index: 2;
   display: flex;
   gap: 4px;
@@ -937,7 +940,7 @@ h1 {
   border: 2px solid #3b2414;
   border-radius: 8px;
   padding: 2px 7px;
-  background: #fff6e3;
+  background: #fff;
   color: #3b2414;
   font-size: 14px;
   font-weight: 800;
@@ -988,7 +991,7 @@ h1 {
 }
 .results-ranking li.results-winner {
   grid-column: 1;
-  grid-row: 1 / span 6;
+  grid-row: 2 / span 6;
   align-self: center;
   position: relative;
   display: flex;
@@ -1200,9 +1203,50 @@ h1 {
     height: 92px;
   }
 }
-/* Mockup A uses one set of sizes at every landscape height (verified: no
-   clipping at 915x412 / 844x390), so there is deliberately no short-landscape
-   compaction here. */
+/* Short landscape (phone heights): the worst legal content — four 18-char
+   names (setup maxlength=18) plus all three honours — must still fit with
+   both buttons fully visible and no inner scroll. Rows and badges compact
+   and long names ellipsize inside their own box instead of growing the
+   rows; the buttons keep their 48px touch target. */
+@media (orientation: landscape) and (max-height: 480px) {
+  .results-layout {
+    gap: 6px 14px;
+  }
+  .results-ranking li.results-rank {
+    gap: 8px;
+    padding: 3px 8px;
+  }
+  .results-rank .results-portrait {
+    width: 30px;
+    height: 30px;
+  }
+  .results-rank-name,
+  .results-rank-value,
+  .results-scoreline,
+  .results-honour-text {
+    white-space: nowrap;
+  }
+  .results-rank-name,
+  .results-scoreline,
+  .results-honour-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .results-honour {
+    max-width: 100%;
+    gap: 6px;
+    padding: 3px 8px;
+    font-size: 14px;
+  }
+  .results-winner {
+    gap: 4px;
+    padding: 20px 10px 10px;
+  }
+  .results-winner-name {
+    font-size: 20px;
+  }
+}
 .pass-device {
   z-index: 20;
 }
