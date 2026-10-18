@@ -115,17 +115,23 @@ async function cardGeometry(page: Page) {
         box.top < postBox.top - 1 ||
         box.bottom > postBox.bottom + 1
       )
-        problems.push(`outside the overlay: .${typeof el.className === 'string' ? el.className : ''}`);
-      if (box.left < -1 || box.top < -1 || box.right > innerWidth + 1 || box.bottom > innerHeight + 1)
-        problems.push(`outside the viewport: .${typeof el.className === 'string' ? el.className : ''}`);
+        problems.push(
+          `outside the overlay: .${typeof el.className === 'string' ? el.className : ''}`,
+        );
+      if (
+        box.left < -1 ||
+        box.top < -1 ||
+        box.right > innerWidth + 1 ||
+        box.bottom > innerHeight + 1
+      )
+        problems.push(
+          `outside the viewport: .${typeof el.className === 'string' ? el.className : ''}`,
+        );
     }
     const perks = [...card.querySelectorAll<HTMLElement>('[data-testid^="perk-"]')];
     const hits = perks.filter((perk) => {
       const box = perk.getBoundingClientRect();
-      const centre = document.elementFromPoint(
-        box.left + box.width / 2,
-        box.top + box.height / 2,
-      );
+      const centre = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
       return centre !== null && (centre === perk || perk.contains(centre));
     }).length;
     const hint = document.querySelector<HTMLElement>('[data-testid="rotate-hint"]');
@@ -137,7 +143,13 @@ async function cardGeometry(page: Page) {
       hits,
       cardOverflow: card.scrollHeight - card.clientHeight,
       postOverflow: post.scrollHeight - post.clientHeight,
-      edges: hintBox ? { cardBottom: card.getBoundingClientRect().bottom, hintTop: hintBox.top, hintHeight: hintBox.height } : null,
+      edges: hintBox
+        ? {
+            cardBottom: card.getBoundingClientRect().bottom,
+            hintTop: hintBox.top,
+            hintHeight: hintBox.height,
+          }
+        : null,
     };
   });
 }
@@ -146,13 +158,19 @@ async function expectOwnerCardFits(page: Page, vp: { width: number; height: numb
   const geo: Geometry = await cardGeometry(page);
   const label = `${vp.width}x${vp.height}`;
   expect(geo.missingCard, `${label}: centred level-up card present`).toBe(false);
-  expect(geo.problems, `${label}: every element inside overlay and viewport, no text below 14px`).toEqual(
-    [],
-  );
+  expect(
+    geo.problems,
+    `${label}: every element inside overlay and viewport, no text below 14px`,
+  ).toEqual([]);
   expect(geo.perkCount, `${label}: 3 perk cards`).toBe(3);
   expect(geo.hits, `${label}: elementFromPoint hits every perk card`).toBe(3);
-  expect(geo.cardOverflow, `${label}: card scrollHeight <= clientHeight + 1`).toBeLessThanOrEqual(1);
-  expect(geo.postOverflow, `${label}: overlay scrollHeight <= clientHeight + 1`).toBeLessThanOrEqual(1);
+  expect(geo.cardOverflow, `${label}: card scrollHeight <= clientHeight + 1`).toBeLessThanOrEqual(
+    1,
+  );
+  expect(
+    geo.postOverflow,
+    `${label}: overlay scrollHeight <= clientHeight + 1`,
+  ).toBeLessThanOrEqual(1);
   if (vp.height > vp.width) {
     expect(geo.edges?.hintHeight, `${label}: rotate hint visible in portrait`).toBeGreaterThan(0);
     expect(
@@ -176,20 +194,21 @@ async function injectWorstLegalContent(page: Page, lang: 'th' | 'en'): Promise<v
     [...DETAIL_KEYS],
   );
   const details = [...LONGEST_DETAILS[lang === 'th' ? 'th' : 'en']];
-  await page.evaluate(({ names, details }) => {
-    document
-      .querySelectorAll<HTMLElement>('[data-testid^="perk-"]')
-      .forEach((card, index) => {
+  await page.evaluate(
+    ({ names, details }) => {
+      document.querySelectorAll<HTMLElement>('[data-testid^="perk-"]').forEach((card, index) => {
         const strong = card.querySelector('strong');
         const detail = card.querySelector('.post-card-detail');
         if (strong) strong.textContent = names[index % names.length];
         if (detail) detail.textContent = details[index % details.length];
       });
-    const gold = document.querySelector('[data-testid="post-gold"] strong');
-    if (gold) gold.textContent = '+99999';
-    const total = document.querySelector('[data-testid="post-gold-total"]');
-    if (total) total.textContent = '999999';
-  }, { names, details });
+      const gold = document.querySelector('[data-testid="post-gold"] strong');
+      if (gold) gold.textContent = '+99999';
+      const total = document.querySelector('[data-testid="post-gold-total"]');
+      if (total) total.textContent = '999999';
+    },
+    { names, details },
+  );
 }
 
 for (const lang of ['th', 'en'] as const) {
@@ -212,7 +231,12 @@ for (const lang of ['th', 'en'] as const) {
     });
     expect(actor).toBeGreaterThanOrEqual(0);
     const engineLevel = await page.evaluate(
-      () => window.__db!.getState().players[window.__db!.getState().phase.kind === 'levelUp' ? (window.__db!.getState().phase as { seat: number }).seat : 0]!.level,
+      () =>
+        window.__db!.getState().players[
+          window.__db!.getState().phase.kind === 'levelUp'
+            ? (window.__db!.getState().phase as { seat: number }).seat
+            : 0
+        ]!.level,
     );
 
     // Owner sweep: real content first (and the evidence screenshots).
@@ -269,7 +293,8 @@ for (const lang of ['th', 'en'] as const) {
     // Read-only viewer (the online viewer of someone else's pick): the same
     // card at every viewport, waiting banner replacing the heading, dimmed
     // non-interactive cards.
-    const readonlyViewer = (actor + 1) % (await page.evaluate(() => window.__db!.getState().players.length));
+    const readonlyViewer =
+      (actor + 1) % (await page.evaluate(() => window.__db!.getState().players.length));
     for (const [index, vp] of VIEWPORTS.entries()) {
       await page.evaluate((viewer) => {
         const state = window.__db!.getState();
@@ -286,23 +311,26 @@ for (const lang of ['th', 'en'] as const) {
         const overlay = document.querySelector('.battle-post')!;
         return {
           isReadonly: overlay.classList.contains('post-readonly'),
-          banner: document.querySelector('.post-title')?.classList.contains('post-waiting-banner') ?? false,
+          banner:
+            document.querySelector('.post-title')?.classList.contains('post-waiting-banner') ??
+            false,
           waiting: document.querySelector('.post-title')?.textContent ?? '',
-          cards: [...overlay.querySelectorAll<HTMLElement>('[data-testid^="perk-"]')].map((card) => {
-            const style = getComputedStyle(card);
-            return {
-              opacity: Number(style.opacity),
-              grey: style.filter.includes('grayscale'),
-              button: card.tagName === 'BUTTON',
-            };
-          }),
+          cards: [...overlay.querySelectorAll<HTMLElement>('[data-testid^="perk-"]')].map(
+            (card) => {
+              const style = getComputedStyle(card);
+              return {
+                opacity: Number(style.opacity),
+                grey: style.filter.includes('grayscale'),
+                button: card.tagName === 'BUTTON',
+              };
+            },
+          ),
         };
       });
       expect(readonly.isReadonly, `${vp.width}x${vp.height}: readonly state`).toBe(true);
-      expect(
-        readonly.banner,
-        `${vp.width}x${vp.height}: waiting banner replaces the heading`,
-      ).toBe(true);
+      expect(readonly.banner, `${vp.width}x${vp.height}: waiting banner replaces the heading`).toBe(
+        true,
+      );
       expect(readonly.waiting, `${vp.width}x${vp.height}: waiting text present`).not.toBe('');
       expect(readonly.cards, `${vp.width}x${vp.height}: 3 dimmed cards`).toHaveLength(3);
       for (const card of readonly.cards) {
@@ -317,7 +345,9 @@ for (const lang of ['th', 'en'] as const) {
         `${vp.width}x${vp.height}: readonly still says the level once`,
       ).toBe(1);
       if (lang === 'th' && index === 0)
-        await page.screenshot({ path: `${SHOT_DIR}/level-readonly-${vp.width}x${vp.height}-${lang}.png` });
+        await page.screenshot({
+          path: `${SHOT_DIR}/level-readonly-${vp.width}x${vp.height}-${lang}.png`,
+        });
     }
 
     // Leave the real owner's choice mounted, untouched.
