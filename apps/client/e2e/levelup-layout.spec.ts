@@ -84,20 +84,22 @@ async function bannerCount(page: Page): Promise<number> {
 
 type Geometry = Awaited<ReturnType<typeof cardGeometry>>;
 
-/** Every visible element inside the centred card: box inside viewport+card, no text below 14px, perk cards hit at their centre, no inner scroll, portrait bottom above the rotate hint. */
+/** Every visible element inside the centred card: box inside viewport+overlay AND the card itself, no text below 14px, perk cards hit at their centre, no inner scroll (either axis), portrait bottom above the rotate hint. */
 async function cardGeometry(page: Page) {
   return page.evaluate(() => {
     const post = document.querySelector<HTMLElement>('.battle-post')!;
     const card = post.querySelector<HTMLElement>('.post-level-card');
     const postBox = post.getBoundingClientRect();
+    const cardBox = card?.getBoundingClientRect();
     const problems: string[] = [];
-    if (!card)
+    if (!card || !cardBox)
       return {
         missingCard: true as const,
         problems,
         perkCount: post.querySelectorAll('[data-testid^="perk-"]').length,
         hits: 0,
         cardOverflow: 0,
+        cardHOverflow: 0,
         postOverflow: 0,
         edges: null,
       };
@@ -118,6 +120,15 @@ async function cardGeometry(page: Page) {
         problems.push(
           `outside the overlay: .${typeof el.className === 'string' ? el.className : ''}`,
         );
+      // The overlay spans the whole stage, so "inside the overlay" is weak:
+      // the acceptance is inside the centred card, whose box is what clips.
+      if (
+        box.left < cardBox.left - 1 ||
+        box.right > cardBox.right + 1 ||
+        box.top < cardBox.top - 1 ||
+        box.bottom > cardBox.bottom + 1
+      )
+        problems.push(`outside the card: .${typeof el.className === 'string' ? el.className : ''}`);
       if (
         box.left < -1 ||
         box.top < -1 ||
@@ -142,6 +153,7 @@ async function cardGeometry(page: Page) {
       perkCount: perks.length,
       hits,
       cardOverflow: card.scrollHeight - card.clientHeight,
+      cardHOverflow: card.scrollWidth - card.clientWidth,
       postOverflow: post.scrollHeight - post.clientHeight,
       edges: hintBox
         ? {
@@ -167,6 +179,7 @@ async function expectOwnerCardFits(page: Page, vp: { width: number; height: numb
   expect(geo.cardOverflow, `${label}: card scrollHeight <= clientHeight + 1`).toBeLessThanOrEqual(
     1,
   );
+  expect(geo.cardHOverflow, `${label}: card scrollWidth <= clientWidth + 1`).toBeLessThanOrEqual(1);
   expect(
     geo.postOverflow,
     `${label}: overlay scrollHeight <= clientHeight + 1`,
