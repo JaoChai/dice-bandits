@@ -452,5 +452,8 @@
   "practice.topic.battle": "Battle",
   "practice.topic.shop": "Shop",
   "practice.topic.town": "Town",
-  "practice.topic.steal": "Steal"
+  "practice.topic.steal": "Steal",
+  "post.pickHeading": "Pick 1 new perk",
+  "post.pickHint": "Tap the card you want",
+  "post.gainTotalPrefix": "total"
 }

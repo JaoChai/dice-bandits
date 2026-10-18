@@ -452,5 +452,8 @@
   "practice.topic.battle": "ต่อสู้",
   "practice.topic.shop": "ร้านค้า",
   "practice.topic.town": "เมือง",
-  "practice.topic.steal": "ขโมย"
+  "practice.topic.steal": "ขโมย",
+  "post.pickHeading": "เลือกพลังใหม่ 1 อย่าง",
+  "post.pickHint": "แตะการ์ดที่อยากได้",
+  "post.gainTotalPrefix": "มีทั้งหมด"
 }

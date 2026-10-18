@@ -148,15 +148,6 @@
   background: var(--c-green);
   transform-origin: left;
 }
-.post-level-badge {
-  visibility: hidden;
-  color: var(--c-cocoa);
-  background: var(--c-gold);
-  border-radius: 6px;
-}
-.has-level-up .post-level-badge {
-  visibility: visible;
-}
 .post-xp[data-xp-stage='flash'] .post-xp-track {
   background: white;
   box-shadow: 0 0 16px var(--c-gold);
@@ -453,4 +444,222 @@ button.post-card:active:not(:disabled),
 .post-static *::after {
   transition: none !important;
   animation: none !important;
+}
+
+/*
+ * Level-up choice, layout A (owner-approved mock 2026-10-18): one centred
+ * card over a dim wash — ribbon banner → level chips → gains → divider →
+ * pick heading/hint → perk cards. The mock palette is the approved design;
+ * every rule here lives after the base rules so it wins on ties.
+ */
+.battle-post.post-levelup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: rgb(40 22 10 / 55%);
+}
+.post-level-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(720px, 100%);
+  max-height: 100%;
+  padding: 14px 16px;
+  border: 4px solid #3b2414;
+  border-radius: 20px;
+  background: #fff6e3;
+  color: #3b2414;
+  box-shadow: 0 8px 0 rgb(0 0 0 / 25%);
+  overflow: hidden;
+}
+.post-ribbon {
+  display: inline-block;
+  padding: 4px 30px;
+  background: #ffb81c;
+  color: #3b2414;
+  font-weight: 900;
+  font-size: clamp(20px, 4.6vh, 26px);
+  line-height: 1.15;
+  clip-path: polygon(0 0, 100% 0, 94% 50%, 100% 100%, 0 100%, 6% 50%);
+  filter: drop-shadow(0 2px 0 #3b2414);
+}
+.post-level-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 900;
+  font-size: max(15px, 2.3vh);
+}
+.post-level-chips b {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #3b2414;
+  color: #fff6e3;
+  white-space: nowrap;
+}
+.post-level-chips .post-chip-new {
+  background: #2f8f4e;
+}
+.post-chip-arrow {
+  font-weight: 900;
+}
+.battle-post.post-levelup .post-rewards {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.battle-post.post-levelup .post-gain {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 6px;
+  padding: 3px 12px;
+  border: 2px solid #c98a1b;
+  border-radius: 999px;
+  background: #ffe9b8;
+  font-weight: 800;
+  font-size: 16px;
+}
+.battle-post.post-levelup .post-gain strong {
+  font-size: 16px;
+}
+.battle-post.post-levelup .post-gain .post-icon {
+  width: 24px;
+  height: 24px;
+}
+.battle-post.post-levelup .post-gain-label {
+  font-size: 16px;
+}
+.battle-post.post-levelup .post-gain-label small {
+  font-size: 14px;
+  font-weight: 700;
+  color: #6b4a2e;
+}
+.post-divider {
+  width: 100%;
+  height: 2px;
+  background: #e8cfa0;
+}
+.battle-post.post-levelup .post-heading {
+  position: static;
+  left: auto;
+  right: auto;
+  top: auto;
+}
+.battle-post.post-levelup .post-kicker {
+  display: none;
+}
+.battle-post.post-levelup .post-title {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: max(18px, 3.4vh);
+  line-height: 1.25;
+}
+.battle-post.post-levelup .post-title.post-waiting-banner {
+  min-height: 0;
+  margin-top: 0;
+  padding: 8px 16px;
+  border: 3px solid var(--c-cocoa);
+  border-radius: 15px;
+  background: var(--c-cream);
+  font-size: clamp(20px, 4.2vh, 30px);
+}
+.battle-post.post-levelup .post-subtitle {
+  margin: 0;
+  color: #6b4a2e;
+  font-weight: 700;
+  font-size: max(15px, 2.1vh);
+}
+.battle-post.post-levelup .post-choice-panel {
+  position: static;
+  left: auto;
+  right: auto;
+  top: auto;
+  bottom: auto;
+  width: 100%;
+  padding: 0;
+  overflow: visible;
+}
+.battle-post.post-levelup .post-cards {
+  width: 100%;
+}
+.battle-post.post-levelup .post-card {
+  min-height: 0;
+  min-width: 0;
+}
+.battle-post.post-levelup .post-card .post-icon {
+  width: 44px;
+  height: 44px;
+}
+.battle-post.post-levelup .post-card strong {
+  font-size: 17px;
+}
+.battle-post.post-levelup .post-card-detail {
+  font-size: 15px;
+  color: #2f6d3a;
+  font-weight: 800;
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .battle-post.post-levelup {
+    padding: 6px;
+  }
+  .post-level-card {
+    gap: 5px;
+    padding: 10px 14px;
+    border-width: 3px;
+  }
+  .post-ribbon {
+    padding: 3px 26px;
+    font-size: max(18px, 4.4vh);
+  }
+  .battle-post.post-levelup .post-card {
+    padding: 6px;
+    gap: 4px;
+  }
+}
+@media (orientation: portrait) {
+  .post-level-card {
+    gap: 10px;
+  }
+  /* Reserve the rotate-hint bar (fixed, z 30) so the card never ends under it. */
+  .battle-post.post-levelup {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+  /* Practice portrait: the overlay lives in the stage row between the top
+     bar and the 168px tutor bar — keep the whole card inside that band. */
+  #app.practice-root .battle-post.post-levelup {
+    padding: 6px;
+  }
+  #app.practice-root .post-level-card {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  #app.practice-root .battle-post.post-levelup .post-ribbon {
+    padding: 2px 22px;
+    font-size: max(16px, 3.4vh);
+  }
+  #app.practice-root .battle-post.post-levelup .post-card {
+    padding: 5px;
+    gap: 3px;
+    border-width: 2px;
+  }
+  #app.practice-root .battle-post.post-levelup .post-card .post-icon {
+    width: 28px;
+    height: 28px;
+  }
 }
