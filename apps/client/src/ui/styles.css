@@ -957,21 +957,23 @@ h1 {
   max-height: 100%;
   display: grid;
   grid-template-columns: 280px 1fr;
-  grid-template-rows: repeat(6, auto);
   align-content: center;
   gap: 8px 14px;
 }
 /* Mockup A groups ranks + score line + honours + buttons in one cream panel.
-   Absolutely positioned against its grid area so auto-placement never has to
-   route around it; z-index -1 keeps it behind the content but above the
-   backdrop (the layout creates the stacking context). The -10px margins pad
-   the panel around the content without changing content geometry (the e2e
-   pins button positions at 844x390), leaving a 4px visual gap to the hero. */
+   The hero column is fixed at 280px + 14px gap, so plain inset offsets hug
+   the right column without any grid-area sizing (Chrome sizes abspos grid
+   children to their static position, not their grid area). z-index -1 keeps
+   the panel behind the content but above the backdrop: the layout creates
+   the stacking context. The ±10px bleed pads the panel around the content
+   without changing content geometry (the e2e pins button positions). */
 .results-panel {
   position: absolute;
   z-index: -1;
-  grid-area: 1 / 2 / -1 / 3;
-  margin: -10px;
+  top: -10px;
+  bottom: -10px;
+  left: 284px;
+  right: -10px;
   background: #fff6e3;
   border: 4px solid #3b2414;
   border-radius: 20px;
@@ -1174,11 +1176,13 @@ h1 {
 @media (orientation: portrait), (max-width: 640px) {
   .results-layout {
     grid-template-columns: 1fr;
-    grid-template-rows: auto repeat(6, auto);
     gap: 8px;
   }
+  /* Portrait stacks the hero on top of the panel; the hero card is opaque,
+     so it reads as a card on a cream board exactly like the mock. */
   .results-panel {
-    grid-area: 2 / 1 / -1 / 2;
+    left: -10px;
+    right: -10px;
   }
   .results-ranking li.results-winner {
     grid-column: 1;
