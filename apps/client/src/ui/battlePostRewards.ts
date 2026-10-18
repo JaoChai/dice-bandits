@@ -12,7 +12,7 @@ export function animatePostRewards(root: HTMLElement, result: PostResult, durati
   const progressAt = (xp: number, min: number, max: number) =>
     Math.min(Math.max(1, max - min), Math.max(0, Math.round(xp - min)));
   const oldGoal = Math.max(1, result.xpGoal - oldMin);
-  root.innerHTML = `<div class="post-gold" data-testid="post-gold"><span class="post-icon" style="${iconStyle('coin')}" aria-hidden="true"></span><strong>+${result.gold}</strong><span>${postText('gold')} · <b data-testid="post-gold-total">${result.fromGold}</b></span></div><div class="post-xp" data-xp-stage="fill"><span>+${result.xp} ${postText('xp')}</span><div class="post-xp-track" ${result.fromLevel >= data.BALANCE.levelCap ? 'hidden' : ''} role="progressbar" aria-label="${postText('xp')}" aria-valuemin="0" aria-valuemax="${oldGoal}" aria-valuenow="${progressAt(result.fromXp, oldMin, result.xpGoal)}"><span style="transform:scaleX(${fill(result.fromXp, oldMin, result.xpGoal)})"></span></div><span class="post-xp-amount">${result.fromLevel >= data.BALANCE.levelCap ? `Lv. ${result.fromLevel}` : `${progressAt(result.fromXp, oldMin, result.xpGoal)} / ${oldGoal} XP · Lv. ${result.fromLevel}`}</span>${up ? '<b class="post-level-badge">LV UP</b>' : ''}</div>`;
+  root.innerHTML = `<div class="post-gold" data-testid="post-gold"><span class="post-icon" style="${iconStyle('coin')}" aria-hidden="true"></span><strong>+${result.gold}</strong><span>${postText('gold')} · <b data-testid="post-gold-total">${result.fromGold}</b></span></div><div class="post-xp" data-xp-stage="fill"><span>+${result.xp} ${postText('xp')}</span><div class="post-xp-track" ${result.fromLevel >= data.BALANCE.levelCap ? 'hidden' : ''} role="progressbar" aria-label="${postText('xp')}" aria-valuemin="0" aria-valuemax="${oldGoal}" aria-valuenow="${progressAt(result.fromXp, oldMin, result.xpGoal)}"><span style="transform:scaleX(${fill(result.fromXp, oldMin, result.xpGoal)})"></span></div><span class="post-xp-amount">${result.fromLevel >= data.BALANCE.levelCap ? `Lv. ${result.fromLevel}` : `${progressAt(result.fromXp, oldMin, result.xpGoal)} / ${oldGoal} XP · Lv. ${result.fromLevel}`}</span></div>`;
   const gold = root.querySelector<HTMLElement>('[data-testid="post-gold-total"]')!;
   const xp = root.querySelector<HTMLElement>('.post-xp')!;
   const track = root.querySelector<HTMLElement>('.post-xp-track')!;
@@ -41,9 +41,10 @@ export function animatePostRewards(root: HTMLElement, result: PostResult, durati
     track.setAttribute('aria-valuemax', String(capacity));
     track.setAttribute('aria-valuenow', String(value));
     track.hidden = (reset ? result.level : result.fromLevel) >= data.BALANCE.levelCap;
+    // The level is said once, old → new, instead of the old "LV UP · Lv. N".
     label.textContent =
       up && progress >= 0.45
-        ? `LV UP · Lv. ${result.level}`
+        ? `Lv. ${result.fromLevel} → Lv. ${result.level}`
         : result.fromLevel >= data.BALANCE.levelCap
           ? `Lv. ${result.fromLevel}`
           : `${value} / ${capacity} XP · Lv. ${result.fromLevel}`;

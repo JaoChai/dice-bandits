@@ -61,9 +61,9 @@ for (const lang of ['th', 'en'] as const) {
     await expect(page.locator('.post-choice-panel')).toBeVisible();
     const postTitle = page.locator('.battle-post .post-title');
     await expect(postTitle).toBeVisible();
-    await expect(postTitle).toHaveText(lang === 'th' ? 'ความสามารถใหม่' : 'New perk');
+    await expect(postTitle).toHaveText(lang === 'th' ? 'เลือกพลังใหม่ 1 อย่าง' : 'Pick 1 new perk');
     await expect(page.getByTestId('post-waiting')).toHaveText(
-      lang === 'th' ? 'เลือกความสามารถใหม่ 1 อย่าง' : 'Choose one new perk',
+      lang === 'th' ? 'แตะการ์ดที่อยากได้' : 'Tap the card you want',
     );
     await expect(banner).toBeHidden();
     await playUntil(

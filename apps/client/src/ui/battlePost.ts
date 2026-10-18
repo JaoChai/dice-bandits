@@ -170,13 +170,15 @@ export function createBattlePost(root: HTMLElement) {
     choiceActor = state.players[actor]!.name;
     const owner = options.viewer === actor && state.players[actor]?.control === 'human';
     node.classList.toggle('post-readonly', !owner);
+    // The centred card owns the level announcement (ribbon banner); a kicker
+    // with the level would say it a second time.
     node.querySelector('.post-kicker')!.textContent = level
-      ? `${postText('level')} · ${state.players[actor]!.level}`
+      ? ''
       : `${postText('bag')} ${state.phase.kind === 'pvpReward' ? state.players[state.phase.loser]!.name : ''}`;
     const heading = node.querySelector<HTMLElement>('.post-title')!;
     heading.textContent = owner
       ? level
-        ? postText('perks')
+        ? t('post.pickHeading')
         : postText('loot')
       : `${postText('waitPrefix')}${choiceActor}${postText('waitSuffix')}`;
     heading.classList.toggle('post-waiting-banner', !owner);
@@ -186,7 +188,11 @@ export function createBattlePost(root: HTMLElement) {
     status.hidden = !owner;
     if (owner) status.dataset.testid = 'post-waiting';
     else delete status.dataset.testid;
-    status.textContent = level ? postText('choose') : `${choiceActor} · ${postText('loot')}`;
+    status.textContent = level
+      ? owner
+        ? t('post.pickHint')
+        : ''
+      : `${choiceActor} · ${postText('loot')}`;
     const panel = node.querySelector<HTMLElement>('.post-choice-panel')!;
     panel.hidden = false;
     panel.classList.toggle('is-levelup', level);
@@ -307,6 +313,54 @@ export function createBattlePost(root: HTMLElement) {
       grid
         .querySelector<HTMLButtonElement>('button:not(:disabled)')
         ?.focus({ preventScroll: true });
+    // Layout A (owner-approved mock): one centred card read top to bottom —
+    // ribbon banner → level chips → gains → divider → pick heading/hint →
+    // perk cards. Gains reuse the real PostResult; the reward beat's corner
+    // panel and its XP track do not appear in the choice state, and the level
+    // is said once by the ribbon alone.
+    if (level) {
+      const nextLevel = state.players[actor]!.level;
+      const rewardPost = result && result.level === nextLevel ? result : null;
+      const oldLevel = rewardPost ? rewardPost.fromLevel : Math.max(1, nextLevel - 1);
+      const rewards = node.querySelector<HTMLElement>('.post-rewards')!;
+      if (rewardPost) {
+        rewards.hidden = false;
+        rewards.innerHTML = `<span class="post-gain" data-testid="post-gold">${icon('coin')}<strong>+${rewardPost.gold}</strong> <span class="post-gain-label">${postText('gold')} <small>(${t('post.gainTotalPrefix')} <b data-testid="post-gold-total">${rewardPost.toGold}</b>)</small></span></span><span class="post-gain">${icon('star')}<strong>+${rewardPost.xp}</strong> <span class="post-gain-label">XP</span></span>`;
+      } else rewards.hidden = true;
+      let card = node.querySelector<HTMLElement>('.post-level-card');
+      if (!card) {
+        card = document.createElement('div');
+        card.className = 'post-level-card';
+        node.prepend(card);
+      }
+      const ribbon = document.createElement('span');
+      ribbon.className = 'post-ribbon';
+      ribbon.textContent = postText('level');
+      const chips = document.createElement('div');
+      chips.className = 'post-level-chips';
+      chips.innerHTML = `<b>Lv. ${oldLevel}</b><span class="post-chip-arrow" aria-hidden="true">→</span><b class="post-chip-new">Lv. ${nextLevel}</b>`;
+      const divider = document.createElement('div');
+      divider.className = 'post-divider';
+      divider.setAttribute('aria-hidden', 'true');
+      card.replaceChildren(
+        ribbon,
+        chips,
+        rewards,
+        divider,
+        node.querySelector('.post-heading')!,
+        panel,
+      );
+      node.classList.add('post-levelup');
+    } else {
+      // Defensive: a non-level choice always un-wraps, so pvpReward keeps its
+      // existing layout even if a card survived from a previous state.
+      const card = node.querySelector<HTMLElement>('.post-level-card');
+      if (card) {
+        for (const child of [...card.children]) node.insertBefore(child, card);
+        card.remove();
+        node.classList.remove('post-levelup');
+      }
+    }
   };
   return {
     get active(): boolean {

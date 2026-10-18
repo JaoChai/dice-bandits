@@ -882,81 +882,415 @@ h1 {
   }
 }
 .results-screen {
-  width: min(100%, 640px);
-  max-height: min(92vh, 560px);
-  overflow-y: auto;
-  border: 3px solid var(--c-gold);
-  border-radius: 12px;
-  padding: clamp(12px, 3vw, 22px);
-  background: var(--t-panel);
-  box-shadow: var(--t-shadow);
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  width: 100%;
+  max-height: none;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  border: 0;
+  outline: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
-.results-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+/* Layout A backdrop: the title art blurred under a cream wash, with a few
+   static star accents (mockup A, approved 2026-10-18). */
+.results-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
-.results-header h1 {
-  margin: 0 0 12px;
-  font-size: clamp(1rem, 3vw, 1.4rem);
+.results-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  background: url('/art/title.webp') center / cover no-repeat;
+  filter: blur(5px);
 }
-.results-header nav {
+.results-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(255 244 222 / 55%);
+}
+.results-star {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+}
+/* Language pills live in the layout grid as a full-width header row
+   (grid-row 1), so they keep reserved space and can never overlap the
+   winner card, rank rows, or crown at any viewport. */
+.results-langs {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: end;
+  z-index: 2;
   display: flex;
   gap: 4px;
 }
-.results-header button {
-  min-width: 38px;
-  min-height: 30px;
-  border: 1px solid var(--c-cocoa);
-  border-radius: 6px;
-  padding: 4px 8px;
-  background: var(--c-gold);
-  color: var(--c-cocoa);
-  font-weight: 700;
-  line-height: 1;
+.results-langs button {
+  min-width: 34px;
+  min-height: 28px;
+  border: 2px solid #3b2414;
+  border-radius: 8px;
+  padding: 2px 7px;
+  background: #fff;
+  color: #3b2414;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
 }
-.results-header button[aria-pressed='true'] {
-  background: #ffe9a8;
-  border-color: var(--t-ink);
-  color: var(--c-cocoa);
+.results-langs button[aria-pressed='true'] {
+  background: #3b2414;
+  color: #fff6e3;
+}
+/* Landscape/desktop: winner card in a ~280px left column, everything else in
+   the right column. The ol itself is display:contents so each li places into
+   the grid directly. */
+.results-layout {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 860px);
+  max-height: 100%;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  align-content: center;
+  gap: 8px 14px;
+}
+/* Mockup A groups ranks + score line + honours + buttons in one cream panel.
+   The hero column is fixed at 280px + 14px gap, so plain inset offsets hug
+   the right column without any grid-area sizing (Chrome sizes abspos grid
+   children to their static position, not their grid area). z-index -1 keeps
+   the panel behind the content but above the backdrop: the layout creates
+   the stacking context. The ±10px bleed pads the panel around the content
+   without changing content geometry (the e2e pins button positions). */
+.results-panel {
+  position: absolute;
+  z-index: -1;
+  top: -10px;
+  bottom: -10px;
+  left: 284px;
+  right: -10px;
+  background: #fff6e3;
+  border: 4px solid #3b2414;
+  border-radius: 20px;
+  box-shadow: 0 8px 0 rgb(0 0 0 / 25%);
+  pointer-events: none;
 }
 .results-ranking {
-  display: grid;
-  gap: 5px;
+  display: contents;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.results-ranking li {
+.results-ranking li.results-winner {
+  grid-column: 1;
+  grid-row: 2 / span 6;
+  align-self: center;
+  position: relative;
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px solid var(--t-outline-soft);
-  border-radius: 6px;
-  padding: 6px 9px;
-  background: var(--t-panel-dim);
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 26px 12px 14px;
+  background: #fff1c9;
+  border: 3px solid #3b2414;
+  border-radius: 16px;
+  box-shadow: 0 5px 0 rgb(59 36 20 / 35%);
+  text-align: center;
+  overflow: visible;
 }
-.results-ranking li.winner {
-  border-color: var(--c-cocoa);
-  background: var(--t-panel-dim);
+.results-crown {
+  position: absolute;
+  left: 50%;
+  top: -24px;
+  transform: translateX(-50%);
+  width: 54px;
+  height: 40px;
 }
-.results-highlights {
-  margin: 12px 0;
+.results-medal {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 3px solid #3b2414;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 900;
+  color: #3b2414;
 }
-.results-highlights h2 {
-  margin: 0 0 5px;
-  color: var(--c-cocoa);
-  font-size: 1rem;
+.results-medal-gold {
+  background: #ffb81c;
 }
-.results-highlights p {
-  margin: 4px 0;
+.results-medal-silver {
+  background: #d9dde3;
 }
-.results-actions {
+.results-medal-bronze {
+  background: #e3a06b;
+}
+.results-medal-plain {
+  background: #fff;
+}
+.results-winner .results-medal {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+}
+.results-portrait {
+  flex: none;
+  border: 3px solid #3b2414;
+  border-radius: 50%;
+  background-color: #fde3b3;
+  background-repeat: no-repeat;
+}
+.results-portrait-hero {
+  width: 84px;
+  height: 84px;
+}
+.results-winner-name {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.15;
+  font-weight: 900;
+  color: #3b2414;
+  overflow-wrap: anywhere;
+}
+.results-winner-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #6b4a2e;
+}
+.results-winner-value {
+  font-size: 30px;
+  font-weight: 900;
+  color: #b5651d;
+}
+.results-tie-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
   justify-content: center;
+  gap: 10px;
+}
+.results-tie {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.results-tie .results-portrait {
+  width: 56px;
+  height: 56px;
+}
+.results-tie-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: #3b2414;
+  overflow-wrap: anywhere;
+}
+.results-ranking li.results-rank {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  background: #fff;
+  border: 2px solid #3b2414;
+  border-radius: 12px;
+}
+.results-rank .results-portrait {
+  width: 36px;
+  height: 36px;
+}
+.results-rank-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #3b2414;
+  overflow-wrap: anywhere;
+}
+.results-rank-value {
+  font-size: 17px;
+  font-weight: 700;
+  color: #3b2414;
+}
+.results-scoreline {
+  grid-column: 2;
+  margin: 0;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #6b4a2e;
+}
+.results-honours {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.results-honour {
+  /* min-width: 0 kills the flex item's automatic minimum so a long nowrap
+     badge name shrinks to the available width and the text ellipsizes,
+     instead of its min-content widening the whole grid track. */
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: #fff;
+  border: 2px solid #3b2414;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #3b2414;
+}
+.results-honour svg {
+  flex: none;
+}
+.results-actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.results-actions button {
+  min-height: 48px;
+  padding: 8px 22px;
+  border: 3px solid #3b2414;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 900;
+  color: #3b2414;
+}
+.results-actions .primary {
+  background: #ff8a1c;
+  box-shadow: 0 5px 0 #3b2414;
+}
+.results-actions .secondary {
+  background: #fff6e3;
+  box-shadow: 0 5px 0 #3b2414;
+}
+/* Portrait phones: the winner card stacks on top. */
+@media (orientation: portrait), (max-width: 640px) {
+  .results-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  /* Portrait stacks the hero on top of the panel; the hero card is opaque,
+     so it reads as a card on a cream board exactly like the mock. */
+  .results-panel {
+    left: -10px;
+    right: -10px;
+  }
+  .results-ranking li.results-winner {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+  }
+  .results-ranking li.results-rank,
+  .results-scoreline,
+  .results-honours,
+  .results-actions {
+    grid-column: 1;
+  }
+  .results-portrait-hero {
+    width: 92px;
+    height: 92px;
+  }
+}
+/* Narrow portrait stacks the same worst legal content (four 18-char names +
+   all three honours) into one column, so the stacked rows compact too: the
+   hero name and rank rows drop a size step and the honour badges ellipsize
+   instead of wrapping. Floors hold: no text under 14px, hero portrait ≥ 84,
+   winner value ≥ 28, score line ≥ 15. */
+@media (orientation: portrait), (max-width: 640px) {
+  .results-layout {
+    gap: 6px;
+  }
+  .results-winner {
+    gap: 4px;
+    padding: 20px 10px 10px;
+  }
+  .results-winner-name {
+    font-size: 20px;
+  }
+  .results-ranking li.results-rank {
+    gap: 8px;
+    padding: 3px 8px;
+  }
+  .results-rank .results-portrait {
+    width: 32px;
+    height: 32px;
+  }
+  .results-rank-name,
+  .results-rank-value {
+    font-size: 15px;
+  }
+  .results-honour {
+    max-width: 100%;
+    gap: 6px;
+    padding: 3px 8px;
+    font-size: 14px;
+  }
+  .results-honour-text {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+/* Short landscape (phone heights): the worst legal content — four 18-char
+   names (setup maxlength=18) plus all three honours — must still fit with
+   both buttons fully visible and no inner scroll. Rows and badges compact
+   and long names ellipsize inside their own box instead of growing the
+   rows; the buttons keep their 48px touch target. */
+@media (orientation: landscape) and (max-height: 480px) {
+  .results-layout {
+    gap: 6px 14px;
+  }
+  .results-ranking li.results-rank {
+    gap: 8px;
+    padding: 3px 8px;
+  }
+  .results-rank .results-portrait {
+    width: 30px;
+    height: 30px;
+  }
+  .results-rank-name,
+  .results-rank-value,
+  .results-scoreline,
+  .results-honour-text {
+    white-space: nowrap;
+  }
+  .results-rank-name,
+  .results-scoreline,
+  .results-honour-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .results-honour {
+    max-width: 100%;
+    gap: 6px;
+    padding: 3px 8px;
+    font-size: 14px;
+  }
+  .results-winner {
+    gap: 4px;
+    padding: 20px 10px 10px;
+  }
+  .results-winner-name {
+    font-size: 20px;
+  }
 }
 .pass-device {
   z-index: 20;

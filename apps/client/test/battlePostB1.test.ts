@@ -86,11 +86,14 @@ describe('B1 reward sequence', () => {
     await vi.advanceTimersByTimeAsync(450);
     expect(await play).toBe(true);
     expect(root.querySelector('[data-testid="post-gold-total"]')?.textContent).toBe('332');
-    expect(root.querySelector('.post-xp-amount')?.textContent).toContain('Lv. 2');
-    expect(root.querySelector('.post-xp-amount')?.textContent).toBe('LV UP · Lv. 2');
+    // Level is said once in the reward beat: "Lv. 1 → Lv. 2" replaces the old
+    // "LV UP · Lv. 2" label (was battlePostB1.test.ts:90) and the "LV UP" badge
+    // text is gone (was battlePostB1.test.ts:93).
+    expect(root.querySelector('.post-xp-amount')?.textContent).toBe('Lv. 1 → Lv. 2');
     expect(root.querySelector('.post-xp-track')?.getAttribute('aria-valuenow')).toBe('1');
     expect(root.querySelector('.post-xp-track')?.getAttribute('aria-valuemax')).toBe('1');
-    expect(root.querySelector('.post-xp')?.textContent).toContain('LV UP');
+    expect(root.querySelector('.post-level-badge')).toBeNull();
+    expect(root.querySelector('.post-xp')?.textContent).not.toContain('LV UP');
     view.destroy();
   });
 });
@@ -221,5 +224,84 @@ describe('B1 bag and ownership', () => {
     expect(sent).toEqual([]);
     view.destroy();
     vi.restoreAllMocks();
+  });
+});
+
+describe('B1 level-up choice card (layout A)', () => {
+  afterEach(() => setLang('th'));
+
+  async function card(lang: 'th' | 'en' = 'th') {
+    setLang(lang);
+    const root = document.createElement('div');
+    const view = createBattlePost(root);
+    const input = reward();
+    await view.play({ ...input, mode: 'human', viewer: 0, speed: 1, reduced: true });
+    view.mountChoices(input.next, { viewer: 0, dispatch() {}, reduced: true });
+    return { root, view, input };
+  }
+
+  it('says the level once: ribbon banner plus old → new chips, no badge text', async () => {
+    const { root, view } = await card();
+    const overlay = root.querySelector<HTMLElement>('.battle-post')!;
+    expect(root.querySelectorAll('.post-ribbon')).toHaveLength(1);
+    expect(root.querySelector('.post-ribbon')?.textContent).toBe('เลเวลอัป!');
+    const levelWords = [...overlay.querySelectorAll('*')].filter(
+      (el) => el.children.length === 0 && /เลเวลอัป|lv up/i.test(el.textContent ?? ''),
+    );
+    expect(levelWords).toHaveLength(1);
+    expect(levelWords[0]).toBe(root.querySelector('.post-ribbon'));
+    expect(root.querySelector('.post-level-badge')).toBeNull();
+    expect(root.querySelector('.post-kicker')?.textContent).toBe('');
+    const chips = root.querySelector('.post-level-chips')!;
+    expect(chips.querySelectorAll('b')).toHaveLength(2);
+    expect(chips.querySelectorAll('b')[0]?.textContent).toBe('Lv. 1');
+    expect(chips.querySelector('.post-chip-new')?.textContent).toBe('Lv. 2');
+    view.destroy();
+  });
+
+  it('keeps the choice state free of the XP track', async () => {
+    const { root, view } = await card();
+    expect(root.querySelector('.post-xp-track')).toBeNull();
+    expect(root.querySelector('.post-xp-amount')).toBeNull();
+    expect(root.querySelector('.post-rewards')?.textContent).not.toContain('XP ·');
+    view.destroy();
+  });
+
+  it('renders gains equal to the PostResult (gold, total, xp)', async () => {
+    const { root, view, input } = await card();
+    expect(postResult(input.previous, input.next, input.events)).toMatchObject({
+      gold: 32,
+      toGold: 332,
+      xp: 20,
+      fromLevel: 1,
+      level: 2,
+    });
+    const gold = root.querySelector('[data-testid="post-gold"]');
+    expect(gold?.textContent).toContain('+32');
+    expect(gold?.textContent).toContain('ทอง');
+    expect(gold?.textContent).toContain('มีทั้งหมด');
+    expect(root.querySelector('[data-testid="post-gold-total"]')?.textContent).toBe('332');
+    expect(root.querySelector('.post-rewards')?.textContent).toContain('+20 XP');
+    expect(root.querySelectorAll('.post-gain')).toHaveLength(2);
+    view.destroy();
+  });
+
+  it('shows the TH heading and hint', async () => {
+    const { root, view } = await card('th');
+    expect(root.querySelector('.post-title')?.textContent).toBe('เลือกพลังใหม่ 1 อย่าง');
+    const hint = root.querySelector('.post-subtitle');
+    expect(hint?.textContent).toBe('แตะการ์ดที่อยากได้');
+    expect(hint?.getAttribute('data-testid')).toBe('post-waiting');
+    view.destroy();
+  });
+
+  it('shows the EN ribbon, heading and hint', async () => {
+    const { root, view } = await card('en');
+    expect(root.querySelector('.post-ribbon')?.textContent).toBe('Level up!');
+    expect(root.querySelector('.post-title')?.textContent).toBe('Pick 1 new perk');
+    expect(root.querySelector('.post-subtitle')?.textContent).toBe('Tap the card you want');
+    expect(root.querySelector('[data-testid="post-gold"]')?.textContent).toContain('gold');
+    expect(root.querySelector('[data-testid="post-gold"]')?.textContent).toContain('total');
+    view.destroy();
   });
 });
