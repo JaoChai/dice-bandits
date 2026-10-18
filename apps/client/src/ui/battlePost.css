@@ -501,7 +501,9 @@ button.post-card:active:not(:disabled),
   white-space: nowrap;
 }
 .post-level-chips .post-chip-new {
-  background: #2f8f4e;
+  /* Same green family as the approved mock (#2f8f4e), darkened so the white
+     label passes WCAG AA 4.5:1 at the 15-18px chip size (axe: serious). */
+  background: #247a3e;
 }
 .post-chip-arrow {
   font-weight: 900;
