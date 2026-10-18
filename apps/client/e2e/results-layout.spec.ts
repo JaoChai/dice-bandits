@@ -55,9 +55,9 @@ async function expectResultsLayoutFits(page: Page, label: string): Promise<void>
         rect.top >= cardBox.top - 0.5 &&
         rect.right <= cardBox.right + 0.5 &&
         rect.bottom <= cardBox.bottom + 0.5;
-      if (!insideViewport) violations.push(`${id} not fully inside the viewport ${box}`);
+      if (!insideViewport) problems.push(`${id} not fully inside the viewport ${box}`);
       if (!insideCard) {
-        violations.push(
+        problems.push(
           `${id} not fully inside the card box ${box} vs ${JSON.stringify({
             left: cardBox.left,
             top: cardBox.top,
@@ -67,11 +67,11 @@ async function expectResultsLayoutFits(page: Page, label: string): Promise<void>
         );
       }
       if (!hit || !(hit === button || button.contains(hit))) {
-        violations.push(`${id} centre hit-test resolved to ${hit ? hit.tagName : 'null'}`);
+        problems.push(`${id} centre hit-test resolved to ${hit ? hit.tagName : 'null'}`);
       }
     }
     if (card.scrollHeight > card.clientHeight + 1) {
-      violations.push(`card scrolls internally (${card.scrollHeight} > ${card.clientHeight})`);
+      problems.push(`card scrolls internally (${card.scrollHeight} > ${card.clientHeight})`);
     }
 
     // 2. The winner card and the rank rows never intersect.

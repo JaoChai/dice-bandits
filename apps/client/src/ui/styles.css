@@ -1203,6 +1203,47 @@ h1 {
     height: 92px;
   }
 }
+/* Narrow portrait stacks the same worst legal content (four 18-char names +
+   all three honours) into one column, so the stacked rows compact too: the
+   hero name and rank rows drop a size step and the honour badges ellipsize
+   instead of wrapping. Floors hold: no text under 14px, hero portrait ≥ 84,
+   winner value ≥ 28, score line ≥ 15. */
+@media (orientation: portrait), (max-width: 640px) {
+  .results-layout {
+    gap: 6px;
+  }
+  .results-winner {
+    gap: 4px;
+    padding: 20px 10px 10px;
+  }
+  .results-winner-name {
+    font-size: 20px;
+  }
+  .results-ranking li.results-rank {
+    gap: 8px;
+    padding: 3px 8px;
+  }
+  .results-rank .results-portrait {
+    width: 32px;
+    height: 32px;
+  }
+  .results-rank-name,
+  .results-rank-value {
+    font-size: 15px;
+  }
+  .results-honour {
+    max-width: 100%;
+    gap: 6px;
+    padding: 3px 8px;
+    font-size: 14px;
+  }
+  .results-honour-text {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
 /* Short landscape (phone heights): the worst legal content — four 18-char
    names (setup maxlength=18) plus all three honours — must still fit with
    both buttons fully visible and no inner scroll. Rows and badges compact
