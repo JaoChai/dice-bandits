@@ -959,12 +959,14 @@ h1 {
   grid-template-columns: 280px 1fr;
   grid-template-rows: repeat(6, auto);
   align-content: center;
-  gap: 8px 28px;
+  gap: 8px 14px;
 }
 /* Mockup A groups ranks + score line + honours + buttons in one cream panel.
    Absolutely positioned against its grid area so auto-placement never has to
    route around it; z-index -1 keeps it behind the content but above the
-   backdrop (the layout creates the stacking context). */
+   backdrop (the layout creates the stacking context). The -10px margins pad
+   the panel around the content without changing content geometry (the e2e
+   pins button positions at 844x390), leaving a 4px visual gap to the hero. */
 .results-panel {
   position: absolute;
   z-index: -1;
