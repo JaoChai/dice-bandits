@@ -473,7 +473,8 @@ button.post-card:active:not(:disabled),
   background: #fff6e3;
   color: #3b2414;
   box-shadow: 0 8px 0 rgb(0 0 0 / 25%);
-  overflow: hidden;
+  /* No overflow clipping: a layout that no longer fits must stay visible so
+     the geometry specs catch it instead of the card silently truncating. */
 }
 .post-ribbon {
   display: inline-block;
@@ -680,5 +681,14 @@ button.post-card:active:not(:disabled),
   #app.practice-root .battle-post.post-levelup .post-card .post-icon {
     width: 28px;
     height: 28px;
+  }
+  /* The stage above the tutor bar is only ~548px tall at 360x780, and a
+     1-column stack of 3 cards plus the header measures 1.6px over it (the
+     last card's box reached into the tutor bar, practice-portrait.spec.ts).
+     Keep the released practice pattern instead: the 3 perk cards share one
+     row, which leaves >100px of slack for the worst legal perk copy. Needs
+     !important to out-rank the portrait 1-column rule above. */
+  #app.practice-root .battle-post.post-levelup .post-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 }
