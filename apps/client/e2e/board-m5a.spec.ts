@@ -119,13 +119,16 @@ type Geometry = Awaited<ReturnType<typeof renderedBoardGeometry>>;
 async function renderedPlayfield(page: Page) {
   return page.evaluate(() => {
     const game = (window as Window & { __m5aGame: Phaser.Game }).__m5aGame;
-    const camera = game.scene.getScene('BoardScene').cameras.main;
+    const scene = game.scene.getScene('BoardScene') as Phaser.Scene & {
+      safePlayfield(): { x: number; y: number; width: number; height: number };
+    };
+    const safe = scene.safePlayfield();
     const rect = game.canvas.getBoundingClientRect();
     return {
-      left: rect.left + (camera.x * rect.width) / game.canvas.width,
-      right: rect.left + ((camera.x + camera.width) * rect.width) / game.canvas.width,
-      top: rect.top + (camera.y * rect.height) / game.canvas.height,
-      bottom: rect.top + ((camera.y + camera.height) * rect.height) / game.canvas.height,
+      left: rect.left + (safe.x * rect.width) / game.canvas.width,
+      right: rect.left + ((safe.x + safe.width) * rect.width) / game.canvas.width,
+      top: rect.top + (safe.y * rect.height) / game.canvas.height,
+      bottom: rect.top + ((safe.y + safe.height) * rect.height) / game.canvas.height,
     };
   });
 }

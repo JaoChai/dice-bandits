@@ -190,9 +190,16 @@ for (const viewport of [
           const cameraBottom = await page.evaluate(async () => {
             const game = (window as ProbeWindow).__m5aGame!;
             await new Promise<void>((resolve) => game.events.once('postrender', resolve));
-            const camera = game.scene.getScene('BoardScene').cameras.main;
+            // Owner choice A: the camera keeps the FULL canvas (the map renders
+            // under the tray on purpose), so the playfield bound is the measured
+            // HUD-free safe rectangle — the same rect the camera viewport used
+            // to be before the one-camera design.
+            const scene = game.scene.getScene('BoardScene') as Phaser.Scene & {
+              safePlayfield(): { x: number; y: number; width: number; height: number };
+            };
+            const safe = scene.safePlayfield();
             const canvas = game.canvas.getBoundingClientRect();
-            return canvas.top + ((camera.y + camera.height) / game.canvas.height) * canvas.height;
+            return canvas.top + ((safe.y + safe.height) / game.canvas.height) * canvas.height;
           });
           const geometry = await clearGeometry(page);
           if (viewport.width === 915) expect(geometry.coverage).toBeLessThanOrEqual(22);
