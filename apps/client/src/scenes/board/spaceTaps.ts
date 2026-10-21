@@ -9,6 +9,10 @@ const TAP_RADIUS = 64;
 export interface SpaceTapContext {
   state: GameState;
   wholeMap: boolean;
+  /** HUD-free safe rectangle in logical canvas px (owner choice A): the one
+   * full-canvas camera renders the board under the HUD lanes too, so taps
+   * outside this rect sit on HUD lanes and never reach the board. */
+  safe: { x: number; y: number; width: number; height: number };
 }
 
 /** Live unbind for the currently bound pointerdown handler (Review 6a). */
@@ -29,23 +33,24 @@ export function bindSpaceTaps(
   // re-renders pile up stale listeners.
   unbind?.();
   const handler = (pointer: Phaser.Input.Pointer): void => {
-    const camera = scene.cameras.main;
-    // Scene-level pointerdown also fires over decorative canvas lanes. Phaser
-    // inverse projection does not clip them, so reject logical coordinates
-    // before either whole-map exit or selecting a potentially invisible tile.
+    // The canvas under the HUD lanes renders the same continuous map, but it
+    // belongs to the HUD lanes: reject pointers outside the safe rectangle
+    // before either whole-map exit or selecting a space that is painted
+    // there (owner choice A). The camera keeps the full canvas, so its own
+    // viewport no longer separates gameplay from the lanes.
+    const { state, wholeMap, safe } = contextOf();
     if (
-      pointer.x < camera.x ||
-      pointer.y < camera.y ||
-      pointer.x >= camera.x + camera.width ||
-      pointer.y >= camera.y + camera.height
+      pointer.x < safe.x ||
+      pointer.y < safe.y ||
+      pointer.x >= safe.x + safe.width ||
+      pointer.y >= safe.y + safe.height
     )
       return;
-    const { state, wholeMap } = contextOf();
     if (wholeMap) {
       onWholeMapExit();
       return;
     }
-    const worldPoint = camera.getWorldPoint(pointer.x, pointer.y);
+    const worldPoint = scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
     let nearest: { id: number; distance: number } | null = null;
     for (const space of state.board.spaces) {
       const distance = Math.hypot(space.x - worldPoint.x, space.y - worldPoint.y);

@@ -16,7 +16,16 @@ import { createDiePop } from './board/diePop';
 import { drawRoad } from './board/road';
 import { drawTiles } from './board/tiles';
 import { drawBuildings } from './board/buildings';
-import { boardViewport, cameraBounds, cameraTarget, gameplayZoom, WORLD } from './board/camera';
+import {
+  boardViewport,
+  cameraTarget,
+  followCentre,
+  followScroll,
+  gameplayZoom,
+  paintedBounds,
+  wholeMapZoom,
+  WORLD,
+} from './board/camera';
 import { drawMapLayer, roadSegments, validate } from './board/mapLayer';
 import { clearForkArrows, drawForkArrows } from './board/forkArrows';
 import { drawAmbients } from './board/ambient';
@@ -56,7 +65,10 @@ export default class BoardScene extends Phaser.Scene {
   private localWaits = new Set<() => void>();
   private cameraMovement?: Phaser.Tweens.Tween;
   private latestMovementGeneration: number | undefined;
-  private backdropCamera: Phaser.Cameras.Scene2D.Camera | null = null;
+  /** HUD-free safe rectangle in logical canvas px, measured on redraw/resize
+   * (owner choice A). Not a camera viewport: the single camera keeps the full
+   * canvas so the map renders under the HUD lanes too. */
+  private safeRect: { x: number; y: number; width: number; height: number } | null = null;
 
   /** HUD geometry is read only on redraw/resize, never on an animation frame.
    * DOM lane bounds also carry the CSS env(safe-area-inset-*) offsets. */
@@ -88,35 +100,42 @@ export default class BoardScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Owner choice A (one continuous map): ONE camera — the original
+   * full-canvas one — renders the map AND every foreground object at one
+   * zoom everywhere. The measured safe rectangle never clips it; it only
+   * frames the action (`followScroll` offset) and gates canvas taps.
+   */
   private applyViewports(): void {
-    if (!this.backdropCamera) return;
-    const safe = this.playfieldViewport();
-    this.cameras.main.setViewport(safe.x, safe.y, safe.width, safe.height);
+    this.safeRect = this.playfieldViewport();
     const canvas = this.game.canvas;
-    this.backdropCamera.setViewport(0, 0, canvas?.width ?? 1280, canvas?.height ?? 720);
-    const bounds = cameraBounds(this.backdropCamera, true);
-    this.backdropCamera.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
-    this.backdropCamera.setZoom(
-      Math.min(this.backdropCamera.width / WORLD.width, this.backdropCamera.height / WORLD.height),
-    );
-    this.backdropCamera.centerOn(WORLD.width / 2, WORLD.height / 2);
+    this.cameras.main.setViewport(0, 0, canvas?.width ?? 1280, canvas?.height ?? 720);
+  }
+
+  /** The HUD-free safe rectangle in logical canvas px. Frames the action and
+   * gates canvas taps; the camera keeps the full canvas. Falls back to the
+   * full canvas before the first measurement (create() measures
+   * immediately). */
+  safePlayfield(): { x: number; y: number; width: number; height: number } {
+    const main = this.cameras.main;
+    return this.safeRect ?? { x: 0, y: 0, width: main.width, height: main.height };
   }
 
   private drawPaintedMap(): void {
-    // Both passes share native map textures and the existing culling gate.
-    // Paint the union of their whole-map gutters, not just the safe viewport.
-    const a = cameraBounds(this.cameras.main, true);
-    const b = cameraBounds(this.backdropCamera ?? this.cameras.main, true);
-    const x = Math.min(a.x, b.x),
-      y = Math.min(a.y, b.y);
-    this.mapImages = drawMapLayer(this, {
-      x,
-      y,
-      width: Math.max(a.x + a.width, b.x + b.width) - x,
-      height: Math.max(a.y + a.height, b.y + b.height) - y,
-    });
-    if (this.backdropCamera)
-      for (const image of this.mapImages) image.cameraFilter &= ~this.backdropCamera.id;
+    // One map, one scale: paint the authored map plus mirrored gutters over
+    // the full canvas at the smaller of the follow/whole-map zooms, so every
+    // HUD-lane pixel stays painted through whole-map toggles and tweens.
+    const safe = this.safePlayfield();
+    // A transient HUD read (action tray mid-mount reports a 0×0 rect) clamps
+    // the safe rect to 1 px, whose whole-map zoom would explode the gutter
+    // envelope to millions of tiles. Keep the previous paint; the next
+    // redraw/resize with real geometry repaints correctly.
+    if (!(safe.width >= 2) || !(safe.height >= 2)) return;
+    const zoom = Math.min(gameplayZoom(), wholeMapZoom(safe));
+    if (!Number.isFinite(zoom) || zoom <= 0) return;
+    const canvas = this.game.canvas;
+    const view = canvas ? { width: canvas.width, height: canvas.height } : this.cameras.main;
+    this.mapImages = drawMapLayer(this, paintedBounds(view, zoom));
   }
 
   constructor() {
@@ -124,29 +143,11 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Keep the zoomed viewport on the painted map, including during follow
-    // tweens and whole-map transitions. Otherwise a start near the left edge
-    // centres on negative world coordinates and reveals the renderer background.
-    this.backdropCamera = this.cameras.main;
-    this.backdropCamera.inputEnabled = false;
-    const safe = this.playfieldViewport();
-    const gameplayCamera = this.cameras.add(
-      safe.x,
-      safe.y,
-      safe.width,
-      safe.height,
-      true,
-      'board-playfield',
-    );
-    // Fail closed: late dust/coin effects and interactive zones are foreground
-    // too. Only explicitly identified painted-map objects enter the backdrop.
-    const onAdded = (object: Phaser.GameObjects.GameObject): void => {
-      this.backdropCamera?.ignore(object);
-    };
-    this.events.on('addedtoscene', onAdded);
+    // Owner choice A (one continuous map): ONE camera — the original
+    // full-canvas one — renders the map AND every foreground object at one
+    // zoom everywhere. The safe rectangle frames the action and gates taps;
+    // it is not a viewport.
     this.applyViewports();
-    this.cameras.main.setBounds(0, 0, WORLD.width, WORLD.height);
-    this.cameras.main.setScroll(0, 0);
     const onState = (state: GameState): void => this.renderBoard(state);
     const onResize = (): void => {
       this.cancelLocalMovement();
@@ -155,7 +156,7 @@ export default class BoardScene extends Phaser.Scene {
       if (!this.latestState) return;
       for (const image of this.mapImages) image.destroy();
       this.drawPaintedMap();
-      const target = cameraTarget(this.latestState, this.wholeMap, this.cameras.main);
+      const target = cameraTarget(this.latestState, this.wholeMap, this.safePlayfield());
       this.applyCamera({ ...target, duration: 0 });
     };
     this.scale.on('resize', onResize);
@@ -180,11 +181,6 @@ export default class BoardScene extends Phaser.Scene {
       destroyReadout();
       this.cancelOnlineMovement();
       this.scale.off('resize', onResize);
-      this.events.off('addedtoscene', onAdded);
-      this.tweens.killTweensOf(gameplayCamera);
-      this.cameras.remove(gameplayCamera);
-      if (this.backdropCamera) this.cameras.main = this.backdropCamera;
-      this.backdropCamera = null;
       this.game.events.off('game-state', onState);
       clearForkArrows(this);
       closeSpaceInfo();
@@ -427,27 +423,29 @@ export default class BoardScene extends Phaser.Scene {
   /** Whole-map button (DOM `map-toggle`) asks the scene to zoom out/in. */
   toggleWholeMap(state: GameState, whole: boolean): void {
     this.wholeMap = whole;
-    this.applyCamera(cameraTarget(state, whole, this.cameras.main));
+    this.applyCamera(cameraTarget(state, whole, this.safePlayfield()));
   }
 
   private applyCamera(target: ReturnType<typeof cameraTarget>): void {
     const camera = this.cameras.main;
     this.tweens.killTweensOf(camera);
-    const bounds = cameraBounds(camera, this.wholeMap);
-    camera.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+    // One full-canvas camera (owner choice A): followScroll places the target
+    // world point at the SAFE-rect centre — no per-camera bounds, and the
+    // painted envelope covers every gutter the wider canvas view can reach.
     // Review 7a: honour the target's duration — the camera eases to the
     // active seat at turn start (spec §7); duration 0 snaps (?speed=0 or
     // reduced motion).
+    const scroll = followScroll(target, camera, this.safePlayfield(), target.zoom);
     if (target.duration <= 0) {
       camera.setZoom(target.zoom);
-      camera.centerOn(target.x, target.y);
+      camera.setScroll(scroll.scrollX, scroll.scrollY);
       return;
     }
     this.tweens.add({
       targets: camera,
       zoom: target.zoom,
-      scrollX: target.x - camera.width * 0.5,
-      scrollY: target.y - camera.height * 0.5,
+      scrollX: scroll.scrollX,
+      scrollY: scroll.scrollY,
       duration: target.duration,
       ease: 'Sine.easeInOut',
     });
@@ -457,18 +455,20 @@ export default class BoardScene extends Phaser.Scene {
     const camera = this.cameras.main;
     if (this.wholeMap) return;
     this.cameraMovement?.remove();
-    // Review 7b: Phaser's centerOn is scrollX = x - width*0.5 (zoom is
-    // applied about the camera centre). Tween to exactly that — the old
-    // width/(2*zoom) formula landed ~71 px off-centre, and the fake
-    // GameState built here was dead code.
+    // Review 7b: walks run at the gameplay zoom; followCentre keeps the whole
+    // safe view over the authored map and followScroll lands the target at
+    // the safe-rect centre, so tweening scroll never recentres the canvas.
+    const zoom = gameplayZoom();
+    const safe = this.safePlayfield();
+    const scroll = followScroll(followCentre({ x, y }, safe, zoom), camera, safe, zoom);
     if (motionScale() <= 0 || reducedMotion()) {
-      camera.centerOn(x, y);
+      camera.setScroll(scroll.scrollX, scroll.scrollY);
       return;
     }
     this.cameraMovement = this.tweens.add({
       targets: camera,
-      scrollX: x - camera.width * 0.5,
-      scrollY: y - camera.height * 0.5,
+      scrollX: scroll.scrollX,
+      scrollY: scroll.scrollY,
       duration: duration ?? 200 * motionScale(),
       ease: duration === undefined ? 'Sine.easeOut' : 'Sine.easeInOut',
     });
@@ -493,7 +493,6 @@ export default class BoardScene extends Phaser.Scene {
     // Do this before the signature guard: entering/leaving battle may change
     // no board geometry, but must still hide/restore the board camera.
     this.cameras.main.setVisible(state.phase.kind !== 'battle');
-    this.backdropCamera?.setVisible(state.phase.kind !== 'battle');
     this.applyViewports();
     // Combat picks and other nonvisual updates can arrive several times per
     // second. Recreating the entire tiled board for each one overwhelms
@@ -694,11 +693,15 @@ export default class BoardScene extends Phaser.Scene {
     this.latestState = state;
     bindSpaceTaps(
       this,
-      () => ({ state: this.latestState as GameState, wholeMap: this.wholeMap }),
+      () => ({
+        state: this.latestState as GameState,
+        wholeMap: this.wholeMap,
+        safe: this.safePlayfield(),
+      }),
       () => this.toggleWholeMap(this.latestState as GameState, false),
     );
 
-    this.applyCamera(cameraTarget(state, this.wholeMap, this.cameras.main));
+    this.applyCamera(cameraTarget(state, this.wholeMap, this.safePlayfield()));
   }
 
   /** Shares the existing roll pause; its reset is owned alongside local waits. */

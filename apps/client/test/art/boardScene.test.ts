@@ -27,6 +27,7 @@ vi.mock('../../src/art/motion', async (importOriginal) => ({
 }));
 
 const { default: BoardScene } = await import('../../src/scenes/BoardScene');
+const { cameraTarget, followScroll } = await import('../../src/scenes/board/camera');
 
 interface Rec {
   text?: string;
@@ -289,8 +290,9 @@ function makeScene() {
         objects.push(made.rec);
         return made.proxy;
       }),
-      rectangle: vi.fn(() => {
+      rectangle: vi.fn((x: number, y: number) => {
         const made = gameObject('rectangle');
+        Object.assign(made.rec, { x, y });
         objects.push(made.rec);
         return made.proxy;
       }),
@@ -309,10 +311,6 @@ function makeScene() {
     cameras: { main: TestCamera; add: ReturnType<typeof vi.fn> };
     tweens: { add: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> };
   };
-  scene.cameras.add.mockImplementation((x: number, y: number, width: number, height: number) => {
-    scene.cameras.main = { ...scene.cameras.main, id: 2, x, y, width, height };
-    return scene.cameras.main;
-  });
   return { scene, objects, handlers };
 }
 
@@ -696,7 +694,14 @@ describe('BoardScene layering', () => {
     const tokens = objects.filter((o) => o.texture === '__WHITE');
     const rings = objects.filter((o) => o.name?.startsWith('seat-oval-'));
 
-    expect(mapTiles.length).toBe(15); // 5x3 painted background tiles
+    // One map, one scale: the 5x3 authored tiles stay, mirrored gutters now
+    // also paint every lane pixel the full-canvas backdrop can reach.
+    const inWorld = mapTiles.filter(
+      (tile) =>
+        (tile.x ?? 0) >= 0 && (tile.x ?? 0) <= 3200 && (tile.y ?? 0) >= 0 && (tile.y ?? 0) <= 1800,
+    );
+    expect(inWorld).toHaveLength(15); // 5x3 painted background tiles
+    expect(mapTiles.length).toBeGreaterThan(15); // mirrored gutters outside the world
     expect(road.length).toBe(1); // one graphics pass for the whole road
     expect(tiles.length).toBe(state.board.spaces.length); // one marker per space
     expect(tokens).toHaveLength(4);
@@ -751,16 +756,36 @@ describe('BoardScene layering', () => {
     expect(scene.input.on).toHaveBeenCalledWith('pointerdown', expect.any(Function));
     const player = state.players[state.turnSeat]!;
     const space = state.board.spaces.find((candidate) => candidate.id === player.pos)!;
+    // One map, one scale (owner choice A): ONE full-canvas camera. The follow
+    // centre clamps with the SAFE view (1088×602 at this fixture; seed 'a'
+    // starts the hero at x=470, inside the western clamp zone) and
+    // followScroll offsets the scroll so the hero lands at the safe-rect
+    // centre, not the canvas centre.
+    const safe = { x: 8, y: 58, width: 1088, height: 602 };
+    const zoom = cameraTarget(state).zoom;
+    const halfWidth = safe.width / (2 * zoom);
+    const centreX = Math.min(3200 - halfWidth, Math.max(halfWidth, space.x));
+    const scroll = followScroll(
+      { x: centreX, y: space.y },
+      { width: 1280, height: 720 },
+      safe,
+      zoom,
+    );
     expect(scene.tweens.add).toHaveBeenCalledWith(
       expect.objectContaining({
         targets: scene.cameras.main,
         zoom: expect.any(Number),
-        scrollX: space.x - 640,
-        scrollY: space.y - 360,
+        scrollX: scroll.scrollX,
+        scrollY: scroll.scrollY,
         duration: 600,
         ease: 'Sine.easeInOut',
       }),
     );
+    // The hero's world point projects at the safe-rect centre (552, 359):
+    const project = (world: number, sc: number, span: number): number =>
+      (world - sc - span / 2) * zoom + span / 2;
+    expect(project(centreX, scroll.scrollX, 1280)).toBeCloseTo(safe.x + safe.width / 2, 6);
+    expect(project(space.y, scroll.scrollY, 720)).toBeCloseTo(safe.y + safe.height / 2, 6);
     expect(scene.cameras.main.setZoom).not.toHaveBeenCalled();
   });
 
@@ -772,24 +797,43 @@ describe('BoardScene layering', () => {
     (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(state);
     const player = state.players[state.turnSeat]!;
     const space = state.board.spaces.find((candidate) => candidate.id === player.pos)!;
-    expect(scene.cameras.main.setZoom).toHaveBeenCalled();
-    expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(space.x, space.y);
+    const safe = { x: 8, y: 58, width: 1088, height: 602 };
+    const zoom = cameraTarget(state).zoom;
+    const halfWidth = safe.width / (2 * zoom);
+    const centreX = Math.min(3200 - halfWidth, Math.max(halfWidth, space.x));
+    const scroll = followScroll(
+      { x: centreX, y: space.y },
+      { width: 1280, height: 720 },
+      safe,
+      zoom,
+    );
+    expect(scene.cameras.main.setZoom).toHaveBeenCalledWith(zoom);
+    expect(scene.cameras.main.setScroll).toHaveBeenCalledWith(scroll.scrollX, scroll.scrollY);
     expect(scene.tweens.add).not.toHaveBeenCalled();
   });
 
   it('pans to the exact centre-on offset while walking (Review 7b)', () => {
     window.diceBanditsSpeed = 1;
     const { scene } = makeScene();
-    (scene as unknown as { panCameraTo(x: number, y: number): void }).panCameraTo(470, 1150);
+    (scene as unknown as { panCameraTo(x: number, y: number): void }).panCameraTo(1600, 900);
     expect(scene.tweens.add).toHaveBeenCalledWith(
       expect.objectContaining({
         targets: scene.cameras.main,
-        scrollX: 470 - 640,
-        scrollY: 1150 - 360,
+        scrollX: 1600 - 640,
+        scrollY: 900 - 360,
         ease: 'Sine.easeOut',
       }),
     );
     expect(scene.cameras.main.centerOn).not.toHaveBeenCalled();
+  });
+
+  it('clamps a walk pan so the safe view stays over the authored map', () => {
+    window.diceBanditsSpeed = 1;
+    const { scene } = makeScene();
+    (scene as unknown as { panCameraTo(x: number, y: number): void }).panCameraTo(0, 900);
+    const tween = scene.tweens.add.mock.calls[0]?.[0] as { scrollX: number; scrollY: number };
+    const zoom = cameraTarget(gameFor('pan-clamp')).zoom;
+    expect(tween.scrollX).toBeCloseTo(640 / zoom - 640, 6); // half safe view inside the world
   });
 
   it('names a fork-arrow hit zone per option while chooseBranch is pending', async () => {
@@ -860,61 +904,82 @@ describe('BoardScene safe playfield lifecycle', () => {
       scale: { on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn> };
       game: { canvas: HTMLCanvasElement };
       mapImages: Array<{ cameraFilter: number }>;
+      safePlayfield(): { x: number; y: number; width: number; height: number };
     };
-    const backdrop = live.cameras.main;
-    const main = { ...backdrop, id: 2, setViewport: vi.fn(), ignore: vi.fn() };
-    live.cameras.add.mockImplementation(() => (live.cameras.main = main));
+    const main = live.cameras.main;
     const canvas = document.createElement('canvas');
     canvas.width = 1280;
     canvas.height = 720;
     canvas.getBoundingClientRect = () => new DOMRect(0, 0, 1280, 720);
     live.game.canvas = canvas;
     scene.create();
-    return { scene, live, backdrop, main, handlers, canvas };
+    return { scene, live, main, handlers, canvas };
   }
 
-  it('makes only the safe camera main and leaves the full-bleed backdrop noninteractive', () => {
-    const { live, backdrop, main } = setup();
-    expect(live.cameras.main).not.toBe(backdrop);
+  it('keeps the one original full-canvas camera and measures the safe rect', () => {
+    const { live, main } = setup();
+    expect(
+      live.cameras.add,
+      'no second camera: the map is one continuous render',
+    ).not.toHaveBeenCalled();
     expect(live.cameras.main).toBe(main);
-    expect(backdrop.inputEnabled).toBe(false);
-    expect(live.cameras.add).toHaveBeenCalledWith(8, 58, 1088, 602, true, 'board-playfield');
+    expect(main.inputEnabled).toBe(true);
+    expect(main.setViewport).toHaveBeenCalledWith(0, 0, 1280, 720);
+    expect(live.safePlayfield()).toEqual({ x: 8, y: 58, width: 1088, height: 602 });
   });
 
-  it('excludes every newly added foreground object including late effects from the backdrop', () => {
-    const { live, backdrop } = setup();
-    const added = live.events.on.mock.calls.find(([name]) => name === 'addedtoscene')?.[1];
-    expect(added).toBeTypeOf('function');
-    for (const kind of ['token', 'building', 'road', 'flag', 'ring', 'fork-zone', 'effect']) {
-      const object = { name: kind, cameraFilter: 0 };
-      added?.(object);
-      expect(backdrop.ignore).toHaveBeenCalledWith(object);
-    }
-  });
-
-  it('reapplies safe and full viewports on resize and removes the extra camera/listeners on shutdown', () => {
-    const { live, scene, main, backdrop, handlers, canvas } = setup();
+  it('reapplies the full-canvas viewport and safe rect on resize and unbinds on shutdown', () => {
+    const { live, main, handlers, canvas } = setup();
     handlers.get('game-state')!(gameFor('resize-safe'));
     expect(live.mapImages.length).toBeGreaterThan(0);
-    for (const image of live.mapImages) expect(image.cameraFilter & backdrop.id).toBe(0);
     canvas.width = 1599;
     canvas.getBoundingClientRect = () => new DOMRect(0, 0, 915, 412);
     const resize = live.scale.on.mock.calls.find(([name]) => name === 'resize')![1];
     resize();
-    expect(main.setViewport).toHaveBeenLastCalledWith(
-      expect.closeTo((8 * 1599) / 915, 4),
-      expect.closeTo((58 * 720) / 412, 4),
-      expect.closeTo((771 * 1599) / 915, 4),
-      expect.closeTo((294 * 720) / 412, 4),
-    );
-    expect(backdrop.setViewport).toHaveBeenLastCalledWith(0, 0, 1599, 720);
+    expect(main.setViewport).toHaveBeenLastCalledWith(0, 0, 1599, 720);
+    const safe = live.safePlayfield();
+    expect(safe.x).toBeCloseTo((8 * 1599) / 915, 4);
+    expect(safe.y).toBeCloseTo((58 * 720) / 412, 4);
+    expect(safe.width).toBeCloseTo((771 * 1599) / 915, 4);
+    expect(safe.height).toBeCloseTo((294 * 720) / 412, 4);
     const shutdown = live.events.once.mock.calls.find(([name]) => name === 'shutdown')![1];
     shutdown();
-    expect(live.cameras.remove).toHaveBeenCalledWith(main);
-    expect(live.cameras.main).toBe(backdrop);
+    expect(live.cameras.remove, 'the one camera is Phaser-owned').not.toHaveBeenCalled();
+    expect(live.cameras.main).toBe(main);
     expect(live.scale.off).toHaveBeenCalledWith('resize', resize);
-    expect(live.events.off).toHaveBeenCalledWith('addedtoscene', expect.any(Function));
-    expect(scene).toBeDefined();
+    expect(live.events.off, 'no prerender mirror hook remains').not.toHaveBeenCalledWith(
+      'prerender',
+      expect.any(Function),
+    );
+    expect(live.events.off, 'no addedtoscene exclusion hook remains').not.toHaveBeenCalledWith(
+      'addedtoscene',
+      expect.any(Function),
+    );
+  });
+
+  it('skips the gutter repaint while the safe rect is degenerate (tray mid-mount)', () => {
+    // Measured regression: right after a page navigation the action tray can
+    // report a 0×0 rect mid-mount, which clamps the safe rect to 1 px; painting
+    // gutter tiles at that whole-map zoom exploded to millions of images and
+    // killed the browser renderer. Keep the previous paint until real geometry
+    // arrives.
+    const shell = document.createElement('div');
+    shell.className = 'game-shell';
+    const tray = document.createElement('div');
+    tray.className = 'action-tray';
+    shell.appendChild(tray);
+    document.body.appendChild(shell);
+    try {
+      const { live, handlers, canvas } = setup();
+      // A 1×1 canvas keeps the hypothetical gutter explosion small in-process
+      // while the degenerate safe rect (height 1) is what the guard tests.
+      canvas.width = 1;
+      canvas.height = 1;
+      handlers.get('game-state')!(gameFor('resize-safe'));
+      expect(live.mapImages?.length ?? 0, 'no gutter repaint under degenerate geometry').toBe(0);
+    } finally {
+      shell.remove();
+    }
   });
 });
 

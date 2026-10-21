@@ -354,7 +354,24 @@ async function startGoldWalk(page: Page, lang: 'th' | 'en', speed = 1, reduced =
           p.x - width / 2 < rect.right &&
           p.y > rect.top &&
           p.y - height < rect.bottom,
-        clamped: world.left >= -1 && world.top >= -1 && world.right <= 3201 && world.bottom <= 1801,
+        clamped: (() => {
+          // Owner choice A: the ONE full-canvas camera may extend past the
+          // authored world into the mirrored gutters at edge walks — that is
+          // what they are painted for (paintedBounds covers world + a full
+          // canvas of gutters). The invariant is that the view never leaves
+          // the painted envelope: world plus one half-canvas of gutters at the
+          // live zoom. On main the safe playfield camera WAS cameras.main, so
+          // worldView ⊆ world was the same guarantee there.
+          const main = scene.cameras.main;
+          const gutterX = main.width / (2 * main.zoom) + 1;
+          const gutterY = main.height / (2 * main.zoom) + 1;
+          return (
+            world.left >= -gutterX &&
+            world.top >= -gutterY &&
+            world.right <= 3200 + gutterX &&
+            world.bottom <= 1800 + gutterY
+          );
+        })(),
       });
     };
     game.events.on('postrender', record);

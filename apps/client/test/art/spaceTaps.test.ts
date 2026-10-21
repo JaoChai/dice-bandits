@@ -5,10 +5,12 @@ import { bindSpaceTaps } from '../../src/scenes/board/spaceTaps';
 
 vi.mock('phaser', () => ({ default: { Scene: class Scene {} } }));
 
-// Removing the viewport guard must expose real popups or exit whole-map.
-// The camera double maps each test point near a real space deliberately:
-// inverse projection itself does not reject coordinates outside its viewport.
-describe('space taps respect the logical gameplay viewport', () => {
+// Taps on canvas outside the HUD-free safe rectangle must never select a
+// space or exit whole-map (owner choice A): the one full-canvas camera now
+// renders the board under the HUD lanes too, so the safe rect — not a camera
+// viewport — gates input. Each test point near a real space deliberately:
+// inverse projection itself does not reject coordinates outside the rect.
+describe('space taps respect the safe playfield rectangle', () => {
   afterEach(closeSpaceInfo);
   for (const wholeMap of [false, true]) {
     it.each([
@@ -19,7 +21,7 @@ describe('space taps respect the logical gameplay viewport', () => {
       { x: 8, y: 58, inside: true },
       { x: 778, y: 339, inside: true },
     ])(
-      `handles ($x, $y) only inside the main viewport, wholeMap=${wholeMap}`,
+      `handles ($x, $y) only inside the safe playfield rect, wholeMap=${wholeMap}`,
       ({ x, y, inside }) => {
         const state = createGame({
           seed: 'viewport-taps',
@@ -35,10 +37,6 @@ describe('space taps respect the logical gameplay viewport', () => {
         const scene = {
           cameras: {
             main: {
-              x: 8,
-              y: 58,
-              width: 771,
-              height: 282,
               getWorldPoint: () => ({ x: space.x, y: space.y }),
             },
           },
@@ -51,7 +49,7 @@ describe('space taps respect the logical gameplay viewport', () => {
         };
         const dispose = bindSpaceTaps(
           scene as never,
-          () => ({ state, wholeMap }),
+          () => ({ state, wholeMap, safe: { x: 8, y: 58, width: 771, height: 282 } }),
           () => {
             exited = true;
           },
@@ -97,7 +95,11 @@ describe('Review 6a: bindSpaceTaps registers exactly one pointerdown handler', (
       }),
     };
     const scene = { input, cameras: { main: {} } };
-    const contextOf = () => ({ state, wholeMap: false });
+    const contextOf = () => ({
+      state,
+      wholeMap: false,
+      safe: { x: 8, y: 58, width: 771, height: 282 },
+    });
 
     // Simulate three renders; every bind unbinds the previous handler so the
     // scene keeps exactly one live listener while binding.

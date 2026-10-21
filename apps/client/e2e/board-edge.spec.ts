@@ -1,8 +1,50 @@
 import type Phaser from 'phaser';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { observeBoardGame, renderedBoardGeometry, startJourney } from './helpers';
 
 type ProbeWindow = Window & { __m5aGame?: Phaser.Game };
+
+/** Read the live WebGL framebuffer at logical canvas points inside a render
+ * hook (y flipped for GL), like the whole-map corner sampler. */
+async function pixelsAt(page: Page, points: Array<[number, number]>) {
+  return page.evaluate(
+    async (probes) =>
+      new Promise<Array<[number, number, number]>>((resolve) => {
+        const game = (window as ProbeWindow).__m5aGame!;
+        const scene = game.scene.getScene('BoardScene');
+        scene.events.once('render', () => {
+          const canvas = game.canvas;
+          // CI Chromium runs Phaser's Canvas renderer (no WebGL), so sample
+          // getImageData there — same fallback as the whole-map sampler.
+          const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+          const ctx = gl ? null : canvas.getContext('2d');
+          if (!gl && !ctx) {
+            resolve(probes.map(() => [0, 0, 0] as [number, number, number]));
+            return;
+          }
+          const out = probes.map(([logicalX, logicalY]) => {
+            if (gl) {
+              const pixel = new Uint8Array(4);
+              gl.readPixels(
+                Math.round(logicalX),
+                canvas.height - 1 - Math.round(logicalY),
+                1,
+                1,
+                gl.RGBA,
+                gl.UNSIGNED_BYTE,
+                pixel,
+              );
+              return [pixel[0]!, pixel[1]!, pixel[2]!] as [number, number, number];
+            }
+            const data = ctx!.getImageData(Math.round(logicalX), Math.round(logicalY), 1, 1).data;
+            return [data[0]!, data[1]!, data[2]!] as [number, number, number];
+          });
+          resolve(out);
+        });
+      }),
+    points,
+  );
+}
 
 for (const viewport of [
   { width: 915, height: 412 },
@@ -30,22 +72,28 @@ for (const viewport of [
         await renderedBoardGeometry(page);
         const probe = await page.evaluate((needNearbySpace) => {
           const game = (window as ProbeWindow).__m5aGame!;
-          const scene = game.scene.getScene('BoardScene');
+          const scene = game.scene.getScene('BoardScene') as Phaser.Scene & {
+            safePlayfield(): { x: number; y: number; width: number; height: number };
+          };
           const camera = scene.cameras.main;
+          const safe = scene.safePlayfield();
           const canvas = game.canvas.getBoundingClientRect();
           const state = window.__db!.getState();
-          // Find an unobstructed REAL canvas point outside the actual viewport.
-          // In follow mode it must inverse-project near a tile, reproducing the
-          // invisible-space bug rather than tapping a harmless blank area.
+          // Find an unobstructed REAL canvas point outside the HUD-free safe
+          // rectangle (owner choice A: the one full-canvas camera paints the
+          // board there too, but the rect — not a camera viewport — gates
+          // input). In follow mode it must inverse-project near a tile,
+          // reproducing the invisible-space bug rather than tapping a harmless
+          // blank area.
           for (let y = canvas.top + 2; y < canvas.bottom; y += 4) {
             for (let x = canvas.left + 2; x < canvas.right; x += 4) {
               const logicalX = ((x - canvas.left) * game.canvas.width) / canvas.width;
               const logicalY = ((y - canvas.top) * game.canvas.height) / canvas.height;
               if (
-                logicalX >= camera.x &&
-                logicalX < camera.x + camera.width &&
-                logicalY >= camera.y &&
-                logicalY < camera.y + camera.height
+                logicalX >= safe.x &&
+                logicalX < safe.x + safe.width &&
+                logicalY >= safe.y &&
+                logicalY < safe.y + safe.height
               )
                 continue;
               if (document.elementFromPoint(x, y) !== game.canvas) continue;
@@ -69,11 +117,11 @@ for (const viewport of [
                 logicalY,
                 nearest,
                 zoom: camera.zoom,
-                viewport: { x: camera.x, y: camera.y, width: camera.width, height: camera.height },
+                safe: { ...safe },
               };
             }
           }
-          throw new Error('No unobstructed outside-camera canvas point found');
+          throw new Error('No unobstructed outside-safe-rect canvas point found');
         }, mode === 'follow');
         await info.attach(`${mode}-outside-tap`, {
           body: JSON.stringify(probe),
@@ -96,16 +144,19 @@ for (const viewport of [
         expect(await page.evaluate(() => window.__db!.getState())).toEqual(stateBefore);
         await page.screenshot({ path: info.outputPath(`${mode}-outside-tap.png`) });
       }
-      // A genuine inside-camera tap must still leave whole-map mode.
+      // A genuine inside-safe-rect tap must still leave whole-map mode.
       if (behavior === 'select spaces') await page.getByTestId('map-toggle').click();
       await renderedBoardGeometry(page);
       const inside = await page.evaluate(() => {
         const game = (window as ProbeWindow).__m5aGame!;
-        const camera = game.scene.getScene('BoardScene').cameras.main;
+        const scene = game.scene.getScene('BoardScene') as Phaser.Scene & {
+          safePlayfield(): { x: number; y: number; width: number; height: number };
+        };
+        const safe = scene.safePlayfield();
         const rect = game.canvas.getBoundingClientRect();
         return {
-          x: rect.left + ((camera.x + camera.width / 2) * rect.width) / game.canvas.width,
-          y: rect.top + ((camera.y + camera.height / 2) * rect.height) / game.canvas.height,
+          x: rect.left + ((safe.x + safe.width / 2) * rect.width) / game.canvas.width,
+          y: rect.top + ((safe.y + safe.height / 2) * rect.height) / game.canvas.height,
         };
       });
       const whole = await renderedBoardGeometry(page);
@@ -129,10 +180,11 @@ for (const viewport of [
 for (const viewport of [
   { width: 915, height: 412 },
   { width: 932, height: 388 },
+  { width: 390, height: 844 },
   { width: 1280, height: 720 },
 ]) {
   for (const lang of ['th', 'en'] as const) {
-    test(`safe playfield isolates gameplay from decorative backdrop (${viewport.width}, ${lang})`, async ({
+    test(`one continuous map keeps gameplay inside the safe playfield (${viewport.width}, ${lang})`, async ({
       page,
     }, info) => {
       await page.setViewportSize(viewport);
@@ -144,15 +196,18 @@ for (const viewport of [
       const geometry = await renderedBoardGeometry(page);
       const measurement = await page.evaluate(() => {
         const game = (window as ProbeWindow).__m5aGame!;
-        const scene = game.scene.getScene('BoardScene');
+        const scene = game.scene.getScene('BoardScene') as Phaser.Scene & {
+          safePlayfield(): { x: number; y: number; width: number; height: number };
+        };
         const main = scene.cameras.main;
-        const backdrop = scene.cameras.cameras.find((camera) => camera !== main);
         const rect = game.canvas.getBoundingClientRect();
+        const safeLogical = scene.safePlayfield();
         const safe = {
-          left: rect.left + (main.x * rect.width) / game.canvas.width,
-          top: rect.top + (main.y * rect.height) / game.canvas.height,
-          right: rect.left + ((main.x + main.width) * rect.width) / game.canvas.width,
-          bottom: rect.top + ((main.y + main.height) * rect.height) / game.canvas.height,
+          left: rect.left + (safeLogical.x * rect.width) / game.canvas.width,
+          top: rect.top + (safeLogical.y * rect.height) / game.canvas.height,
+          right: rect.left + ((safeLogical.x + safeLogical.width) * rect.width) / game.canvas.width,
+          bottom:
+            rect.top + ((safeLogical.y + safeLogical.height) * rect.height) / game.canvas.height,
         };
         const foreground = scene.children
           .getChildren()
@@ -161,13 +216,19 @@ for (const viewport of [
         const origin = state.board.spaces.find(
           (space) => space.id === state.players[state.turnSeat]!.pos,
         )!;
+        // One map, one scale (owner choice A): exactly ONE camera, covering
+        // the full canvas, renders every foreground object — the map is
+        // continuous under the HUD lanes instead of stopping at a seam.
         return {
           safe,
-          name: main.name,
           cameras: scene.cameras.cameras.length,
-          backdropInteractive: backdrop?.inputEnabled,
-          leaked: foreground.filter((child) => !backdrop || !(child.cameraFilter & backdrop.id))
-            .length,
+          fullCanvas:
+            main.x === 0 &&
+            main.y === 0 &&
+            main.width === game.canvas.width &&
+            main.height === game.canvas.height,
+          unrendered: foreground.filter((child) => child.cameraFilter & main.id).length,
+          zooms: [main.zoom],
           origin,
           neighbours: origin.next.map((id) => state.board.spaces.find((space) => space.id === id)!),
           chrome: [
@@ -183,10 +244,70 @@ for (const viewport of [
         contentType: 'application/json',
       });
       await page.screenshot({ path: info.outputPath('safe-playfield.png') });
-      expect(measurement.name).toBe('board-playfield');
-      expect(measurement.cameras).toBe(2);
-      expect(measurement.backdropInteractive).toBe(false);
-      expect(measurement.leaked, 'foreground duplicated outside safe camera').toBe(0);
+      expect(measurement.cameras, 'exactly one camera renders the continuous map').toBe(1);
+      expect(measurement.fullCanvas, 'the one camera covers the full canvas').toBe(true);
+      // Old design asserted `leaked === 0` (foreground hidden from a second
+      // backdrop camera). Owner choice A inverts it: the ONE full-canvas
+      // camera must render EVERY foreground object, lanes included.
+      expect(
+        measurement.unrendered,
+        'every foreground object renders through the full-canvas camera',
+      ).toBe(0);
+      expect(new Set(measurement.zooms).size, 'one zoom across all cameras').toBe(1);
+      // Review round 1: with one full-canvas camera the board FOREGROUND must
+      // reach the lanes too. Sample spaces that project outside the safe rect
+      // onto canvas no HUD element covers — each must be painted, not the bare
+      // renderer background (#273449), and no HUD covers the sample point.
+      const hiddenSpots = await page.evaluate(() => {
+        const game = (window as ProbeWindow).__m5aGame!;
+        const scene = game.scene.getScene('BoardScene') as Phaser.Scene & {
+          safePlayfield(): { x: number; y: number; width: number; height: number };
+        };
+        const camera = scene.cameras.main;
+        const safe = scene.safePlayfield();
+        const rect = game.canvas.getBoundingClientRect();
+        const state = window.__db!.getState();
+        const spots = state.board.spaces
+          .map((space) => {
+            const point = camera.getViewMatrix().transformPoint(space.x, space.y);
+            const logicalX = Math.round(point.x);
+            const logicalY = Math.round(point.y);
+            return {
+              id: space.id,
+              logicalX,
+              logicalY,
+              cssX: rect.left + (point.x / game.canvas.width) * rect.width,
+              cssY: rect.top + (point.y / game.canvas.height) * rect.height,
+            };
+          })
+          .filter(
+            (spot) =>
+              spot.logicalX >= 0 &&
+              spot.logicalY >= 0 &&
+              spot.logicalX < game.canvas.width &&
+              spot.logicalY < game.canvas.height &&
+              (spot.logicalX < safe.x ||
+                spot.logicalY < safe.y ||
+                spot.logicalX >= safe.x + safe.width ||
+                spot.logicalY >= safe.y + safe.height) &&
+              document.elementFromPoint(spot.cssX, spot.cssY) === game.canvas,
+          );
+        if (!spots.length)
+          throw new Error('No out-of-safe space on uncovered canvas to assert rendering for');
+        return spots.slice(0, 4);
+      });
+      const hiddenPixels = await pixelsAt(
+        page,
+        hiddenSpots.map((spot) => [spot.logicalX, spot.logicalY] as [number, number]),
+      );
+      hiddenSpots.forEach((spot, index) => {
+        const [r, g, b] = hiddenPixels[index]!;
+        const distance = Math.hypot(r - 39, g - 52, b - 73);
+        expect(
+          distance,
+          `space ${spot.id} renders outside the safe rect at (${spot.logicalX}, ${spot.logicalY})`,
+        ).toBeGreaterThan(6);
+      });
       expect(measurement.safe.left).toBeGreaterThanOrEqual(8);
       expect(measurement.safe.top).toBeGreaterThanOrEqual(58);
       const intersects = (
@@ -216,7 +337,28 @@ for (const viewport of [
         expect(object.bottom).toBeLessThanOrEqual(measurement.safe.bottom + 0.5);
         for (const chrome of measurement.chrome) expect(intersects(object, chrome)).toBe(false);
       }
-      for (const tile of tiles) expect(tile.width).toBeGreaterThanOrEqual(48);
+      // The active hero sits at the centre of the free area, never under the
+      // right rail or the action tray. Shared-space offsets move sprites off
+      // the raw space coords, so match by proximity like the actors above.
+      const activeTokens = geometry.tokens.filter(
+        (token) =>
+          token.visible &&
+          Math.hypot(token.world.x - measurement.origin.x, token.world.y - measurement.origin.y) <
+            70,
+      );
+      expect(activeTokens.length, 'active token is rendered').toBeGreaterThan(0);
+      for (const token of activeTokens) {
+        expect(token.centre.x).toBeGreaterThanOrEqual(measurement.safe.left - 0.5);
+        expect(token.centre.x).toBeLessThanOrEqual(measurement.safe.right + 0.5);
+        expect(token.centre.y).toBeGreaterThanOrEqual(measurement.safe.top - 0.5);
+        expect(token.centre.y).toBeLessThanOrEqual(measurement.safe.bottom + 0.5);
+      }
+      // Review 7c's ≥48 CSS px floor is a landscape-canvas constant (915×412
+      // scales 1280 logical px 1:1.4). Portrait fits the 1280-wide logical
+      // canvas into 390 CSS px, so the same tile is 96 × 0.9727 × 390/1280
+      // ≈ 28.45 px on base too — the floor scales with the orientation.
+      for (const tile of tiles)
+        expect(tile.width).toBeGreaterThanOrEqual(viewport.width < viewport.height ? 28 : 48);
       const cadence = await page.evaluate(
         () =>
           new Promise<{ fps: number; frames: number; canvasRenderer: boolean }>((resolve) => {
@@ -325,6 +467,125 @@ for (const viewport of [undefined, { width: 932, height: 388 }]) {
           'camera exposes background below painted map',
         ).toBeLessThanOrEqual(measurement.map.bottom + 0.5);
       }
+    });
+  }
+}
+
+// One continuous map (owner choice A): in whole-map view the whole authored
+// world projects INSIDE the safe rectangle, and every canvas corner/edge
+// midpoint is painted mirrored terrain — never the bare renderer background.
+for (const viewport of [
+  { width: 915, height: 412 },
+  { width: 932, height: 388 },
+  { width: 390, height: 844 },
+  { width: 1280, height: 720 },
+]) {
+  for (const lang of ['th', 'en'] as const) {
+    test(`whole-map fits the safe rect and paints every canvas edge (${viewport.width}, ${lang})`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize(viewport);
+      await page.addInitScript((locale) => localStorage.setItem('lang', locale), lang);
+      await observeBoardGame(page);
+      await startJourney(page);
+      await page.waitForFunction(() => window.__db?.art.boardReady);
+      await page.getByTestId('map-toggle').click();
+      await renderedBoardGeometry(page);
+      const measurement = await page.evaluate(() => {
+        const game = (window as ProbeWindow).__m5aGame!;
+        const scene = game.scene.getScene('BoardScene') as Phaser.Scene & {
+          safePlayfield(): { x: number; y: number; width: number; height: number };
+        };
+        const main = scene.cameras.main;
+        const rect = game.canvas.getBoundingClientRect();
+        const project = (x: number, y: number) => {
+          const point = main.getViewMatrix().transformPoint(x, y);
+          return {
+            x: rect.left + (point.x / game.canvas.width) * rect.width,
+            y: rect.top + (point.y / game.canvas.height) * rect.height,
+          };
+        };
+        const corners = [project(0, 0), project(3200, 0), project(3200, 1800), project(0, 1800)];
+        // Owner choice A: the safe rect is scene-measured HUD geometry — the
+        // camera keeps the FULL canvas, so the main viewport is no longer the
+        // safe rect.
+        const safe = scene.safePlayfield();
+        return {
+          safe: {
+            left: rect.left + (safe.x * rect.width) / game.canvas.width,
+            top: rect.top + (safe.y * rect.height) / game.canvas.height,
+            right: rect.left + ((safe.x + safe.width) * rect.width) / game.canvas.width,
+            bottom: rect.top + ((safe.y + safe.height) * rect.height) / game.canvas.height,
+          },
+          world: {
+            left: Math.min(...corners.map((point) => point.x)),
+            right: Math.max(...corners.map((point) => point.x)),
+            top: Math.min(...corners.map((point) => point.y)),
+            bottom: Math.max(...corners.map((point) => point.y)),
+          },
+        };
+      });
+      await info.attach('whole-map-geometry', {
+        body: JSON.stringify(measurement, null, 2),
+        contentType: 'application/json',
+      });
+      expect(measurement.world.left).toBeGreaterThanOrEqual(measurement.safe.left - 0.5);
+      expect(measurement.world.right).toBeLessThanOrEqual(measurement.safe.right + 0.5);
+      expect(measurement.world.top).toBeGreaterThanOrEqual(measurement.safe.top - 0.5);
+      expect(measurement.world.bottom).toBeLessThanOrEqual(measurement.safe.bottom + 0.5);
+      // Sample the real canvas: 4 corners + 4 edge midpoints. WebGL canvases
+      // are read inside the render task; CANVAS canvases via getImageData.
+      const samples = await page.evaluate(
+        () =>
+          new Promise<Array<[number, number, number]>>((resolve) => {
+            const game = (window as ProbeWindow).__m5aGame!;
+            const scene = game.scene.getScene('BoardScene');
+            scene.events.once('render', () => {
+              const canvas = game.canvas;
+              const points: Array<[number, number]> = [
+                [2, 2],
+                [canvas.width / 2, 2],
+                [canvas.width - 3, 2],
+                [2, canvas.height / 2],
+                [canvas.width - 3, canvas.height / 2],
+                [2, canvas.height - 3],
+                [canvas.width / 2, canvas.height - 3],
+                [canvas.width - 3, canvas.height - 3],
+              ];
+              const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+              const out = points.map(([logicalX, logicalY]) => {
+                if (gl) {
+                  const pixel = new Uint8Array(4);
+                  gl.readPixels(
+                    logicalX,
+                    canvas.height - 1 - logicalY,
+                    1,
+                    1,
+                    gl.RGBA,
+                    gl.UNSIGNED_BYTE,
+                    pixel,
+                  );
+                  return [pixel[0]!, pixel[1]!, pixel[2]!] as [number, number, number];
+                }
+                const data = canvas.getContext('2d')!.getImageData(logicalX, logicalY, 1, 1).data;
+                return [data[0]!, data[1]!, data[2]!] as [number, number, number];
+              });
+              resolve(out);
+            });
+          }),
+      );
+      await info.attach('edge-pixels', {
+        body: JSON.stringify(samples),
+        contentType: 'application/json',
+      });
+      await page.screenshot({ path: info.outputPath('whole-map-edges.png') });
+      expect(samples).toHaveLength(8);
+      // #273449 = rgb(39, 52, 73) — the bare renderer background.
+      for (const [r, g, b] of samples)
+        expect(
+          Math.abs(r - 39) + Math.abs(g - 52) + Math.abs(b - 73),
+          'canvas edge is painted, not the renderer background',
+        ).toBeGreaterThan(6);
     });
   }
 }
