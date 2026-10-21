@@ -16,7 +16,15 @@ import { createDiePop } from './board/diePop';
 import { drawRoad } from './board/road';
 import { drawTiles } from './board/tiles';
 import { drawBuildings } from './board/buildings';
-import { boardViewport, cameraBounds, cameraTarget, gameplayZoom, WORLD } from './board/camera';
+import {
+  boardViewport,
+  cameraTarget,
+  followCentre,
+  gameplayZoom,
+  paintedBounds,
+  wholeMapZoom,
+  WORLD,
+} from './board/camera';
 import { drawMapLayer, roadSegments, validate } from './board/mapLayer';
 import { clearForkArrows, drawForkArrows } from './board/forkArrows';
 import { drawAmbients } from './board/ambient';
@@ -94,27 +102,47 @@ export default class BoardScene extends Phaser.Scene {
     this.cameras.main.setViewport(safe.x, safe.y, safe.width, safe.height);
     const canvas = this.game.canvas;
     this.backdropCamera.setViewport(0, 0, canvas?.width ?? 1280, canvas?.height ?? 720);
-    const bounds = cameraBounds(this.backdropCamera, true);
-    this.backdropCamera.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
-    this.backdropCamera.setZoom(
-      Math.min(this.backdropCamera.width / WORLD.width, this.backdropCamera.height / WORLD.height),
+    // Owner choice A (one continuous map): the backdrop no longer runs its own
+    // fit-world zoom — that drew the island a second time at another scale.
+    // It mirrors the gameplay camera every frame instead; the world point at
+    // the safe-rect centre lands on the same canvas pixel on both cameras.
+    this.safeAnchor = { x: safe.x + safe.width / 2, y: safe.y + safe.height / 2 };
+    this.syncBackdropCamera();
+  }
+
+  /** Canvas point that must show the same world pixel on every camera. */
+  private safeAnchor = { x: 640, y: 360 };
+
+  /**
+   * One map, one scale: the full-canvas backdrop copies the gameplay camera's
+   * zoom and is offset so both cameras share one world→screen mapping. Runs
+   * on 'prerender' — before any camera renders — so follow tweens and
+   * whole-map transitions stay seamless frame by frame.
+   */
+  private syncBackdropCamera(): void {
+    const backdrop = this.backdropCamera;
+    if (!backdrop || backdrop === this.cameras.main) return;
+    const main = this.cameras.main;
+    const zoom = main.zoom;
+    backdrop.setZoom(zoom);
+    backdrop.setScroll(
+      main.scrollX +
+        (main.width - backdrop.width) / 2 +
+        (backdrop.width / 2 - this.safeAnchor.x) / zoom,
+      main.scrollY +
+        (main.height - backdrop.height) / 2 +
+        (backdrop.height / 2 - this.safeAnchor.y) / zoom,
     );
-    this.backdropCamera.centerOn(WORLD.width / 2, WORLD.height / 2);
   }
 
   private drawPaintedMap(): void {
-    // Both passes share native map textures and the existing culling gate.
-    // Paint the union of their whole-map gutters, not just the safe viewport.
-    const a = cameraBounds(this.cameras.main, true);
-    const b = cameraBounds(this.backdropCamera ?? this.cameras.main, true);
-    const x = Math.min(a.x, b.x),
-      y = Math.min(a.y, b.y);
-    this.mapImages = drawMapLayer(this, {
-      x,
-      y,
-      width: Math.max(a.x + a.width, b.x + b.width) - x,
-      height: Math.max(a.y + a.height, b.y + b.height) - y,
-    });
+    // One map, one scale: paint the authored map plus mirrored gutters over
+    // the full canvas at the smaller of the follow/whole-map zooms, so every
+    // HUD-lane pixel stays painted through whole-map toggles and tweens.
+    const canvas = this.game.canvas;
+    const view = canvas ? { width: canvas.width, height: canvas.height } : this.cameras.main;
+    const zoom = Math.min(gameplayZoom(), wholeMapZoom(this.cameras.main));
+    this.mapImages = drawMapLayer(this, paintedBounds(view, zoom));
     if (this.backdropCamera)
       for (const image of this.mapImages) image.cameraFilter &= ~this.backdropCamera.id;
   }
@@ -124,9 +152,9 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Keep the zoomed viewport on the painted map, including during follow
-    // tweens and whole-map transitions. Otherwise a start near the left edge
-    // centres on negative world coordinates and reveals the renderer background.
+    // The original full-canvas camera becomes a non-interactive backdrop that
+    // mirrors the gameplay camera (one map, one scale, owner choice A); the
+    // safe playfield camera renders the interactive board inside the HUD.
     this.backdropCamera = this.cameras.main;
     this.backdropCamera.inputEnabled = false;
     const safe = this.playfieldViewport();
@@ -144,8 +172,9 @@ export default class BoardScene extends Phaser.Scene {
       this.backdropCamera?.ignore(object);
     };
     this.events.on('addedtoscene', onAdded);
+    const syncBackdrop = (): void => this.syncBackdropCamera();
+    this.events.on('prerender', syncBackdrop);
     this.applyViewports();
-    this.cameras.main.setBounds(0, 0, WORLD.width, WORLD.height);
     this.cameras.main.setScroll(0, 0);
     const onState = (state: GameState): void => this.renderBoard(state);
     const onResize = (): void => {
@@ -181,6 +210,7 @@ export default class BoardScene extends Phaser.Scene {
       this.cancelOnlineMovement();
       this.scale.off('resize', onResize);
       this.events.off('addedtoscene', onAdded);
+      this.events.off('prerender', syncBackdrop);
       this.tweens.killTweensOf(gameplayCamera);
       this.cameras.remove(gameplayCamera);
       if (this.backdropCamera) this.cameras.main = this.backdropCamera;
@@ -433,8 +463,10 @@ export default class BoardScene extends Phaser.Scene {
   private applyCamera(target: ReturnType<typeof cameraTarget>): void {
     const camera = this.cameras.main;
     this.tweens.killTweensOf(camera);
-    const bounds = cameraBounds(camera, this.wholeMap);
-    camera.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+    // No Phaser camera bounds: per-camera bounds clamp by camera width, which
+    // would tear the mirrored full-canvas backdrop off the gameplay camera at
+    // world edges. cameraTarget already clamps the shared follow centre, and
+    // the painted envelope covers any gutter the unclamped lanes can reach.
     // Review 7a: honour the target's duration — the camera eases to the
     // active seat at turn start (spec §7); duration 0 snaps (?speed=0 or
     // reduced motion).
@@ -460,15 +492,17 @@ export default class BoardScene extends Phaser.Scene {
     // Review 7b: Phaser's centerOn is scrollX = x - width*0.5 (zoom is
     // applied about the camera centre). Tween to exactly that — the old
     // width/(2*zoom) formula landed ~71 px off-centre, and the fake
-    // GameState built here was dead code.
+    // GameState built here was dead code. Walks run at the gameplay zoom;
+    // followCentre keeps the whole safe view over the authored map.
+    const target = followCentre({ x, y }, camera, gameplayZoom());
     if (motionScale() <= 0 || reducedMotion()) {
-      camera.centerOn(x, y);
+      camera.centerOn(target.x, target.y);
       return;
     }
     this.cameraMovement = this.tweens.add({
       targets: camera,
-      scrollX: x - camera.width * 0.5,
-      scrollY: y - camera.height * 0.5,
+      scrollX: target.x - camera.width * 0.5,
+      scrollY: target.y - camera.height * 0.5,
       duration: duration ?? 200 * motionScale(),
       ease: duration === undefined ? 'Sine.easeOut' : 'Sine.easeInOut',
     });

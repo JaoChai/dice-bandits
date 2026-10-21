@@ -9,7 +9,8 @@ vi.mock('../../src/art/motion', async (importOriginal) => ({
   reducedMotion: vi.fn(() => reducedMotion()),
 }));
 
-const { cameraTarget, WORLD, zoomForSpan } = await import('../../src/scenes/board/camera');
+const { cameraTarget, WORLD, VIEW, zoomForSpan, followCentre, paintedBounds } =
+  await import('../../src/scenes/board/camera');
 
 function gameFor(seed: string): GameState {
   return createGame({
@@ -94,16 +95,61 @@ describe('boardViewport', () => {
     expect(view.height / target.zoom).toBeGreaterThanOrEqual(1800);
     expect(target.zoom).toBeCloseTo(514 / 1800, 8);
   });
+
+  it('fits the world inside the 1280x720 safe rect with room to spare', () => {
+    const view = { width: 1088, height: 602 };
+    const target = cameraTarget(gameFor('safe-720'), true, view);
+    expect(view.width / target.zoom).toBeGreaterThanOrEqual(3200 - 1e-8);
+    expect(view.height / target.zoom).toBeGreaterThanOrEqual(1800 - 1e-8);
+    expect(target.zoom).toBeCloseTo(602 / 1800, 8);
+  });
 });
 
 describe('cameraTarget', () => {
-  it('centres on the active seat token position', () => {
+  it('places the active seat centre, clamped inward at the world edge', () => {
     const state = gameFor('camera-centre');
     const player = state.players[state.turnSeat]!;
     const space = state.board.spaces.find((candidate) => candidate.id === player.pos)!;
     const target = cameraTarget(state);
-    expect(target.x).toBe(space.x);
+    // One map, one scale: no Phaser bounds, the shared centre clamps so the
+    // whole safe view stays over the authored map (seed 'camera-centre' starts
+    // the hero at the western edge, x=470).
+    const halfWidth = VIEW.width / (2 * target.zoom);
+    expect(target.x).toBe(Math.min(WORLD.width - halfWidth, Math.max(halfWidth, space.x)));
     expect(target.y).toBe(space.y);
+  });
+
+  it('clamps the follow centre so the safe view stays inside the authored map', () => {
+    const state = gameFor('camera-clamp');
+    const corner = state.board.spaces.reduce((west, space) => (space.x < west.x ? space : west));
+    state.players[state.turnSeat]!.pos = corner.id;
+    const view = { width: 1088, height: 602 };
+    const target = cameraTarget(state, false, view);
+    const halfWidth = view.width / (2 * target.zoom);
+    expect(target.x, 'western clamp keeps the safe view over painted map').toBe(
+      Math.min(WORLD.width - halfWidth, Math.max(halfWidth, corner.x)),
+    );
+    expect(target.x).toBeGreaterThan(corner.x);
+    expect(target.y).toBe(
+      Math.min(
+        WORLD.height - view.height / (2 * target.zoom),
+        Math.max(view.height / (2 * target.zoom), corner.y),
+      ),
+    );
+  });
+
+  it('leaves a hero away from the edges exactly at the safe-rect centre', () => {
+    const state = gameFor('camera-centre-safe');
+    const centre = state.board.spaces.reduce((best, space) =>
+      Math.hypot(space.x - WORLD.width / 2, space.y - WORLD.height / 2) <
+      Math.hypot(best.x - WORLD.width / 2, best.y - WORLD.height / 2)
+        ? space
+        : best,
+    );
+    state.players[state.turnSeat]!.pos = centre.id;
+    const target = cameraTarget(state, false, { width: 1088, height: 602 });
+    expect(target.x).toBe(centre.x);
+    expect(target.y).toBe(centre.y);
   });
 
   it('zooms so about seven spaces span the 1280 px logical canvas', () => {
@@ -168,5 +214,26 @@ describe('cameraTarget', () => {
     const target = cameraTarget(gameFor('camera-ease'));
     expect(target.duration).toBeGreaterThan(0);
     expect(target.duration).toBe(Math.round(600 * 0.5));
+  });
+});
+
+describe('paintedBounds', () => {
+  it('covers the authored world plus a full canvas of mirrored gutters', () => {
+    const view = { width: 1280, height: 720 };
+    const zoom = cameraTarget(gameFor('painted-envelope'), true, { width: 1088, height: 602 }).zoom;
+    const bounds = paintedBounds(view, zoom);
+    expect(bounds.width).toBeGreaterThanOrEqual(WORLD.width + view.width / zoom - 1e-6);
+    expect(bounds.height).toBeGreaterThanOrEqual(WORLD.height + view.height / zoom - 1e-6);
+    expect(bounds.x).toBeCloseTo((WORLD.width - bounds.width) / 2, 6);
+    expect(bounds.y).toBeCloseTo((WORLD.height - bounds.height) / 2, 6);
+  });
+
+  it('covers a follow view clamped to the western edge', () => {
+    const view = { width: 1088, height: 602 };
+    const zoom = cameraTarget(gameFor('painted-follow')).zoom;
+    const bounds = paintedBounds(view, zoom);
+    const centre = followCentre({ x: 0, y: WORLD.height / 2 }, view, zoom);
+    expect(centre.x - view.width / (2 * zoom)).toBeGreaterThanOrEqual(bounds.x - 1e-6);
+    expect(bounds.x).toBeLessThanOrEqual(0);
   });
 });

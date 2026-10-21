@@ -27,6 +27,7 @@ vi.mock('../../src/art/motion', async (importOriginal) => ({
 }));
 
 const { default: BoardScene } = await import('../../src/scenes/BoardScene');
+const { cameraTarget } = await import('../../src/scenes/board/camera');
 
 interface Rec {
   text?: string;
@@ -289,8 +290,9 @@ function makeScene() {
         objects.push(made.rec);
         return made.proxy;
       }),
-      rectangle: vi.fn(() => {
+      rectangle: vi.fn((x: number, y: number) => {
         const made = gameObject('rectangle');
+        Object.assign(made.rec, { x, y });
         objects.push(made.rec);
         return made.proxy;
       }),
@@ -696,7 +698,14 @@ describe('BoardScene layering', () => {
     const tokens = objects.filter((o) => o.texture === '__WHITE');
     const rings = objects.filter((o) => o.name?.startsWith('seat-oval-'));
 
-    expect(mapTiles.length).toBe(15); // 5x3 painted background tiles
+    // One map, one scale: the 5x3 authored tiles stay, mirrored gutters now
+    // also paint every lane pixel the full-canvas backdrop can reach.
+    const inWorld = mapTiles.filter(
+      (tile) =>
+        (tile.x ?? 0) >= 0 && (tile.x ?? 0) <= 3200 && (tile.y ?? 0) >= 0 && (tile.y ?? 0) <= 1800,
+    );
+    expect(inWorld).toHaveLength(15); // 5x3 painted background tiles
+    expect(mapTiles.length).toBeGreaterThan(15); // mirrored gutters outside the world
     expect(road.length).toBe(1); // one graphics pass for the whole road
     expect(tiles.length).toBe(state.board.spaces.length); // one marker per space
     expect(tokens).toHaveLength(4);
@@ -751,11 +760,16 @@ describe('BoardScene layering', () => {
     expect(scene.input.on).toHaveBeenCalledWith('pointerdown', expect.any(Function));
     const player = state.players[state.turnSeat]!;
     const space = state.board.spaces.find((candidate) => candidate.id === player.pos)!;
+    // One map, one scale: the shared follow centre clamps inward at the world
+    // edge (seed 'a' starts the hero at x=470, inside the western clamp zone).
+    const zoom = cameraTarget(state).zoom;
+    const halfWidth = 1280 / (2 * zoom);
+    const centreX = Math.min(3200 - halfWidth, Math.max(halfWidth, space.x));
     expect(scene.tweens.add).toHaveBeenCalledWith(
       expect.objectContaining({
         targets: scene.cameras.main,
         zoom: expect.any(Number),
-        scrollX: space.x - 640,
+        scrollX: centreX - 640,
         scrollY: space.y - 360,
         duration: 600,
         ease: 'Sine.easeInOut',
@@ -772,24 +786,36 @@ describe('BoardScene layering', () => {
     (scene as unknown as { renderBoard(state: GameState): void }).renderBoard(state);
     const player = state.players[state.turnSeat]!;
     const space = state.board.spaces.find((candidate) => candidate.id === player.pos)!;
+    const zoom = cameraTarget(state).zoom;
+    const halfWidth = 1280 / (2 * zoom);
+    const centreX = Math.min(3200 - halfWidth, Math.max(halfWidth, space.x));
     expect(scene.cameras.main.setZoom).toHaveBeenCalled();
-    expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(space.x, space.y);
+    expect(scene.cameras.main.centerOn).toHaveBeenCalledWith(centreX, space.y);
     expect(scene.tweens.add).not.toHaveBeenCalled();
   });
 
   it('pans to the exact centre-on offset while walking (Review 7b)', () => {
     window.diceBanditsSpeed = 1;
     const { scene } = makeScene();
-    (scene as unknown as { panCameraTo(x: number, y: number): void }).panCameraTo(470, 1150);
+    (scene as unknown as { panCameraTo(x: number, y: number): void }).panCameraTo(1600, 900);
     expect(scene.tweens.add).toHaveBeenCalledWith(
       expect.objectContaining({
         targets: scene.cameras.main,
-        scrollX: 470 - 640,
-        scrollY: 1150 - 360,
+        scrollX: 1600 - 640,
+        scrollY: 900 - 360,
         ease: 'Sine.easeOut',
       }),
     );
     expect(scene.cameras.main.centerOn).not.toHaveBeenCalled();
+  });
+
+  it('clamps a walk pan so the safe view stays over the authored map', () => {
+    window.diceBanditsSpeed = 1;
+    const { scene } = makeScene();
+    (scene as unknown as { panCameraTo(x: number, y: number): void }).panCameraTo(0, 900);
+    const tween = scene.tweens.add.mock.calls[0]?.[0] as { scrollX: number; scrollY: number };
+    const zoom = cameraTarget(gameFor('pan-clamp')).zoom;
+    expect(tween.scrollX).toBeCloseTo(640 / zoom - 640, 6); // half safe view inside the world
   });
 
   it('names a fork-arrow hit zone per option while chooseBranch is pending', async () => {
@@ -862,8 +888,23 @@ describe('BoardScene safe playfield lifecycle', () => {
       mapImages: Array<{ cameraFilter: number }>;
     };
     const backdrop = live.cameras.main;
-    const main = { ...backdrop, id: 2, setViewport: vi.fn(), ignore: vi.fn() };
-    live.cameras.add.mockImplementation(() => (live.cameras.main = main));
+    const main = {
+      ...backdrop,
+      id: 2,
+      zoom: 0.4,
+      scrollX: 0,
+      scrollY: 0,
+      setViewport: vi.fn(),
+      ignore: vi.fn(),
+      setZoom: vi.fn(),
+      setScroll: vi.fn(),
+      centerOn: vi.fn(),
+    };
+    live.cameras.add.mockImplementation((x: number, y: number, width: number, height: number) => {
+      Object.assign(main, { x, y, width, height });
+      live.cameras.main = main;
+      return main;
+    });
     const canvas = document.createElement('canvas');
     canvas.width = 1280;
     canvas.height = 720;
@@ -879,6 +920,22 @@ describe('BoardScene safe playfield lifecycle', () => {
     expect(live.cameras.main).toBe(main);
     expect(backdrop.inputEnabled).toBe(false);
     expect(live.cameras.add).toHaveBeenCalledWith(8, 58, 1088, 602, true, 'board-playfield');
+  });
+
+  it('mirrors the gameplay transform onto the full-canvas backdrop at the safe anchor', () => {
+    const { live, backdrop, main } = setup();
+    const sync = live.events.on.mock.calls.find(([name]) => name === 'prerender')?.[1];
+    expect(sync, 'a per-frame prerender mirror exists').toBeTypeOf('function');
+    const pose = main as unknown as { zoom: number; scrollX: number; scrollY: number };
+    pose.zoom = 0.5;
+    pose.scrollX = 100;
+    pose.scrollY = 200;
+    sync?.();
+    expect(backdrop.setZoom).toHaveBeenLastCalledWith(0.5);
+    // Safe anchor (552, 359); main centre (644, 501). The backdrop centres the
+    // same world point on the same canvas pixel: centre_bd = (644, 501) +
+    // ((640, 360) - anchor)/0.5 = (644 + 176, 501 + 2) → scroll (180, 143).
+    expect(backdrop.setScroll).toHaveBeenLastCalledWith(180, 143);
   });
 
   it('excludes every newly added foreground object including late effects from the backdrop', () => {
@@ -914,6 +971,10 @@ describe('BoardScene safe playfield lifecycle', () => {
     expect(live.cameras.main).toBe(backdrop);
     expect(live.scale.off).toHaveBeenCalledWith('resize', resize);
     expect(live.events.off).toHaveBeenCalledWith('addedtoscene', expect.any(Function));
+    expect(live.events.off, 'the prerender mirror unbinds with the scene').toHaveBeenCalledWith(
+      'prerender',
+      expect.any(Function),
+    );
     expect(scene).toBeDefined();
   });
 });

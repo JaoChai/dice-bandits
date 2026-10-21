@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLang } from '../../src/i18n';
 import BoardScene from '../../src/scenes/BoardScene';
+import { gameplayZoom } from '../../src/scenes/board/camera';
 
 vi.mock('phaser', () => ({ default: { Scene: class {} } }));
 vi.mock('../../src/fx', () => ({
@@ -345,10 +346,13 @@ describe('real local BoardScene playback', () => {
     const { scene, token, tweenConfigs } = setup(previous);
     Object.assign(scene, { wholeMap: false });
     const promise = scene.playEvents(events.filter((e) => e.type === 'Moved'));
+    // One map, one scale: walk pans share the followCentre clamp (the source
+    // token sits near the southern edge), so the pan centres as close as the
+    // whole safe view staying over the authored map allows.
     expect(tweenConfigs[0]).toMatchObject({
       duration: 300,
       scrollX: token.x - 640,
-      scrollY: token.y - 360,
+      scrollY: 1800 - 720 / (2 * gameplayZoom()) - 360,
     });
     await vi.advanceTimersByTimeAsync(299);
     expect(tweenConfigs).toHaveLength(1);
