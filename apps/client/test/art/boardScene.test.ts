@@ -918,8 +918,10 @@ describe('BoardScene safe playfield lifecycle', () => {
 
   it('keeps the one original full-canvas camera and measures the safe rect', () => {
     const { live, main } = setup();
-    expect(live.cameras.add, 'no second camera: the map is one continuous render').not
-      .toHaveBeenCalled();
+    expect(
+      live.cameras.add,
+      'no second camera: the map is one continuous render',
+    ).not.toHaveBeenCalled();
     expect(live.cameras.main).toBe(main);
     expect(main.inputEnabled).toBe(true);
     expect(main.setViewport).toHaveBeenCalledWith(0, 0, 1280, 720);

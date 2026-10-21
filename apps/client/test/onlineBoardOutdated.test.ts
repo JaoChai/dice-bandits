@@ -144,6 +144,9 @@ function realSceneOn(gameMock: {
     children: { removeAll: vi.fn() },
     cameras: {
       main: {
+        // Owner choice A: applyViewports always re-frames the one full-canvas
+        // camera on every render, so the double carries setViewport too.
+        setViewport: vi.fn(),
         setScroll: vi.fn(),
         setZoom: vi.fn(),
         setVisible: vi.fn(),

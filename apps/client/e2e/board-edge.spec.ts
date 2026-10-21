@@ -205,8 +205,7 @@ for (const viewport of [
         const safe = {
           left: rect.left + (safeLogical.x * rect.width) / game.canvas.width,
           top: rect.top + (safeLogical.y * rect.height) / game.canvas.height,
-          right:
-            rect.left + ((safeLogical.x + safeLogical.width) * rect.width) / game.canvas.width,
+          right: rect.left + ((safeLogical.x + safeLogical.width) * rect.width) / game.canvas.width,
           bottom:
             rect.top + ((safeLogical.y + safeLogical.height) * rect.height) / game.canvas.height,
         };
