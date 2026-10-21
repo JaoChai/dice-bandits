@@ -9,8 +9,17 @@ vi.mock('../../src/art/motion', async (importOriginal) => ({
   reducedMotion: vi.fn(() => reducedMotion()),
 }));
 
-const { cameraTarget, WORLD, VIEW, zoomForSpan, followCentre, paintedBounds } =
-  await import('../../src/scenes/board/camera');
+const {
+  cameraTarget,
+  WORLD,
+  VIEW,
+  zoomForSpan,
+  followCentre,
+  followScroll,
+  gameplayZoom,
+  wholeMapZoom,
+  paintedBounds,
+} = await import('../../src/scenes/board/camera');
 
 function gameFor(seed: string): GameState {
   return createGame({
@@ -214,6 +223,41 @@ describe('cameraTarget', () => {
     const target = cameraTarget(gameFor('camera-ease'));
     expect(target.duration).toBeGreaterThan(0);
     expect(target.duration).toBe(Math.round(600 * 0.5));
+  });
+});
+
+describe('followScroll (owner choice A: one full-canvas camera)', () => {
+  const safe = { x: 8, y: 58, width: 1088, height: 602 };
+  const canvas = { width: 1280, height: 720 };
+  /** Logical-screen x of world `point` for a full-canvas camera at `zoom`. */
+  const project = (point: number, scroll: number, span: number, zoom: number): number =>
+    (point - scroll - span / 2) * zoom + span / 2;
+
+  it('lands the followed world point at the safe-rect centre, not the canvas centre', () => {
+    const zoom = gameplayZoom();
+    const scroll = followScroll({ x: 1600, y: 900 }, canvas, safe, zoom);
+    expect(project(1600, scroll.scrollX, canvas.width, zoom)).toBeCloseTo(
+      safe.x + safe.width / 2,
+      6,
+    );
+    expect(project(900, scroll.scrollY, canvas.height, zoom)).toBeCloseTo(
+      safe.y + safe.height / 2,
+      6,
+    );
+  });
+
+  it('projects the whole world inside the safe rectangle in whole-map view', () => {
+    const zoom = wholeMapZoom(safe);
+    const scroll = followScroll({ x: WORLD.width / 2, y: WORLD.height / 2 }, canvas, safe, zoom);
+    for (const wx of [0, WORLD.width])
+      for (const wy of [0, WORLD.height]) {
+        const x = project(wx, scroll.scrollX, canvas.width, zoom);
+        const y = project(wy, scroll.scrollY, canvas.height, zoom);
+        expect(x).toBeGreaterThanOrEqual(safe.x);
+        expect(x).toBeLessThanOrEqual(safe.x + safe.width);
+        expect(y).toBeGreaterThanOrEqual(safe.y);
+        expect(y).toBeLessThanOrEqual(safe.y + safe.height);
+      }
   });
 });
 

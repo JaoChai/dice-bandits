@@ -93,7 +93,9 @@ export interface CameraTarget {
 
 /**
  * Where the board camera should be: centred on the active seat's token at
- * gameplay zoom, or the whole 3200×1800 map for the whole-map view.
+ * gameplay zoom, or the whole 3200×1800 map for the whole-map view. `view` is
+ * the HUD-free safe rectangle (owner choice A): the world must fit inside it,
+ * never under the HUD lanes.
  */
 export function cameraTarget(
   state: GameState,
@@ -126,6 +128,26 @@ export function cameraTarget(
 /** Zoom that fits the whole authored map inside `view` (whole-map view). */
 export function wholeMapZoom(view: { width: number; height: number }): number {
   return Math.min(view.width / WORLD.width, view.height / WORLD.height);
+}
+
+/**
+ * Scroll for the ONE full-canvas camera (owner choice A) so the world point
+ * `target` lands at the safe-rectangle centre, not the canvas centre — the
+ * right rail and action tray must never cover the action. `target` has
+ * already been clamped by `followCentre`, so the whole safe view stays over
+ * the authored map; the painted envelope covers every lane pixel the wider
+ * unclamped canvas view can reach.
+ */
+export function followScroll(
+  target: { x: number; y: number },
+  canvas: { width: number; height: number },
+  safe: { x: number; y: number; width: number; height: number },
+  zoom: number,
+): { scrollX: number; scrollY: number } {
+  return {
+    scrollX: target.x - canvas.width / 2 - (safe.x + safe.width / 2 - canvas.width / 2) / zoom,
+    scrollY: target.y - canvas.height / 2 - (safe.y + safe.height / 2 - canvas.height / 2) / zoom,
+  };
 }
 
 /**
