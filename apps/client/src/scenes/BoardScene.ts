@@ -122,6 +122,7 @@ export default class BoardScene extends Phaser.Scene {
   private syncBackdropCamera(): void {
     const backdrop = this.backdropCamera;
     if (!backdrop || backdrop === this.cameras.main) return;
+    if ((window as { __oneviewNoSync?: boolean }).__oneviewNoSync) return; // BISECT
     const main = this.cameras.main;
     const zoom = main.zoom;
     backdrop.setZoom(zoom);
@@ -139,9 +140,16 @@ export default class BoardScene extends Phaser.Scene {
     // One map, one scale: paint the authored map plus mirrored gutters over
     // the full canvas at the smaller of the follow/whole-map zooms, so every
     // HUD-lane pixel stays painted through whole-map toggles and tweens.
+    const main = this.cameras.main;
+    // A transient HUD read (action tray mid-mount reports a 0×0 rect) clamps
+    // the safe rect to 1 px, whose whole-map zoom would explode the gutter
+    // envelope to millions of tiles. Keep the previous paint; the next
+    // redraw/resize with real geometry repaints correctly.
+    if (!(main.width >= 2) || !(main.height >= 2)) return;
+    const zoom = Math.min(gameplayZoom(), wholeMapZoom(main));
+    if (!Number.isFinite(zoom) || zoom <= 0) return;
     const canvas = this.game.canvas;
-    const view = canvas ? { width: canvas.width, height: canvas.height } : this.cameras.main;
-    const zoom = Math.min(gameplayZoom(), wholeMapZoom(this.cameras.main));
+    const view = canvas ? { width: canvas.width, height: canvas.height } : main;
     this.mapImages = drawMapLayer(this, paintedBounds(view, zoom));
     if (this.backdropCamera)
       for (const image of this.mapImages) image.cameraFilter &= ~this.backdropCamera.id;

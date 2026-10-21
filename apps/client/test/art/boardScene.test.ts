@@ -977,6 +977,31 @@ describe('BoardScene safe playfield lifecycle', () => {
     );
     expect(scene).toBeDefined();
   });
+
+  it('skips the gutter repaint while the safe rect is degenerate (tray mid-mount)', () => {
+    // Measured regression: right after a page navigation the action tray can
+    // report a 0×0 rect mid-mount, which clamps the safe rect to 1 px; painting
+    // gutter tiles at that whole-map zoom exploded to millions of images and
+    // killed the browser renderer. Keep the previous paint until real geometry
+    // arrives.
+    const shell = document.createElement('div');
+    shell.className = 'game-shell';
+    const tray = document.createElement('div');
+    tray.className = 'action-tray';
+    shell.appendChild(tray);
+    document.body.appendChild(shell);
+    try {
+      const { live, handlers, canvas } = setup();
+      // A 1×1 canvas keeps the hypothetical gutter explosion small in-process
+      // while the degenerate safe rect (height 1) is what the guard tests.
+      canvas.width = 1;
+      canvas.height = 1;
+      handlers.get('game-state')!(gameFor('resize-safe'));
+      expect(live.mapImages?.length ?? 0, 'no gutter repaint under degenerate geometry').toBe(0);
+    } finally {
+      shell.remove();
+    }
+  });
 });
 
 describe('BoardScene boot', () => {
