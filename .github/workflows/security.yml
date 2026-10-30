@@ -6,7 +6,7 @@ on:
     branches: [main]
   schedule:
     # Weekly, Mondays 03:00 UTC
-    - cron: "0 3 * * 1"
+    - cron: '0 3 * * 1'
   workflow_dispatch:
 
 permissions:
