@@ -1,0 +1,57 @@
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly, Mondays 03:00 UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: gitleaks (full history)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks v8.30.1 (checksum-verified)
+        run: |
+          GITLEAKS_VERSION=8.30.1
+          EXPECTED_SHA256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          cd "$RUNNER_TEMP"
+          curl --fail --silent --show-error --location \
+            -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${EXPECTED_SHA256}  gitleaks.tar.gz" > gitleaks.sha256
+          sha256sum --check gitleaks.sha256
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf gitleaks.tar.gz -C "$HOME/.local/bin" gitleaks
+          "$HOME/.local/bin/gitleaks" version
+
+      - name: Scan full git history for secrets
+        run: >-
+          "$HOME/.local/bin/gitleaks" detect
+          --redact
+          --exit-code 1
+          --verbose
+
+  deps:
+    name: npm audit (runtime deps, high+)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install dependencies (scripts disabled)
+        run: npm ci --ignore-scripts
+
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
